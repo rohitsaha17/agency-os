@@ -1,0 +1,848 @@
+// ============================================================
+// Agency Management Platform — Prisma Schema
+// PostgreSQL · Prisma ORM
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================================
+// ENUMS
+// ============================================================
+
+enum UserRole {
+  ADMIN   // Full system access
+  MANAGER // Can manage projects, tasks, quotations
+  MEMBER  // Can only work on assigned tasks
+}
+
+enum ClientStatus {
+  PROSPECT  // Not yet a paying client
+  ACTIVE    // Current client
+  INACTIVE  // No ongoing work
+  ARCHIVED  // Soft-deleted
+}
+
+enum ProjectType {
+  ONE_TIME  // Fixed scope project
+  RETAINER  // Ongoing recurring engagement
+}
+
+enum ProjectStatus {
+  DRAFT
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  IN_REVIEW
+  DONE
+  BLOCKED
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum QuotationStatus {
+  DRAFT
+  SENT
+  APPROVED
+  REJECTED
+  EXPIRED
+  CONVERTED
+}
+
+enum PricingType {
+  FIXED      // Lump-sum price for the whole line item
+  RETAINER   // Monthly recurring fee
+  PER_ITEM   // quantity × unit price
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum FileStatus {
+  DRAFT
+  IN_REVIEW
+  APPROVED
+  CHANGES_REQUIRED
+}
+
+enum FileCommentStatus {
+  OPEN
+  RESOLVED
+}
+
+enum StakeholderType {
+  FREELANCER
+  AGENCY
+  VENDOR
+  INTERNAL_TEAM
+}
+
+enum StakeholderRole {
+  OWNER
+  ADMIN
+  EXECUTIVE
+  MANAGER
+  MEMBER
+}
+
+enum ExpenseCategory {
+  SOFTWARE_TOOLS
+  FREELANCER_PAYMENT
+  VENDOR_PAYMENT
+  STOCK_ASSETS
+  PRINTING
+  TRAVEL
+  ADVERTISING
+  OFFICE
+  EQUIPMENT
+  OTHER
+}
+
+enum ExpenseStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PAID
+}
+
+enum ContractType {
+  NDA
+  SERVICE_AGREEMENT
+  EMPLOYMENT
+  FREELANCE
+  PARTNERSHIP
+  OTHER
+}
+
+enum ContractStatus {
+  DRAFT
+  SENT
+  PARTIALLY_SIGNED
+  FULLY_SIGNED
+  EXPIRED
+  TERMINATED
+}
+
+enum ContractPartyType {
+  CLIENT
+  STAKEHOLDER
+  USER
+}
+
+// ============================================================
+// USERS — Agency team members
+// ============================================================
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  avatarUrl String?
+  role      UserRole @default(MEMBER)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  managedTasks      Task[]         @relation("TaskManager")
+  taskAssignments   TaskAssignee[]
+  createdProjects   Project[]      @relation("ProjectCreator")
+  createdQuotations Quotation[]    @relation("QuotationCreator")
+  uploadedFiles     File[]         @relation("UploadedFiles")
+  comments          Comment[]
+  timeEntries       TimeEntry[]
+  fileComments      FileComment[]
+  expenses          Expense[]
+  contractParties   ContractParty[]
+  channelMemberships ChannelMember[]
+  sentMessages      ChatMessage[]  @relation("SentMessages")
+
+  @@map("users")
+}
+
+// ============================================================
+// CLIENTS — Companies or individuals the agency works for
+// ============================================================
+
+model Client {
+  id               String       @id @default(cuid())
+  name             String
+  companyName      String?
+  email            String?      @unique
+  phone            String?
+  website          String?
+  industry         String?
+  address          String?
+  logoUrl          String?
+  links            Json?        // [{ id, label, url, type }]
+  brandColors      Json?        // [{ id, hex, name, tag }]
+  brandAssets      Json?        // [{ id, name, type, variant, url, format, notes }]
+  taxRegistrations Json?        // [{ id, type, number, country }]
+  notes            String?
+  status           ClientStatus @default(ACTIVE)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  contacts        ClientContact[]
+  projects        Project[]
+  quotations      Quotation[]
+  files           File[]
+  contracts       Contract[]
+  contractParties ContractParty[]
+  channels        Channel[]
+
+  @@map("clients")
+}
+
+model ClientContact {
+  id        String   @id @default(cuid())
+  clientId  String
+  name      String
+  email     String?
+  phone     String?
+  jobTitle  String?
+  isPrimary Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@map("client_contacts")
+}
+
+// ============================================================
+// PROJECTS — Work engagements per client
+// ============================================================
+
+model Project {
+  id          String        @id @default(cuid())
+  clientId    String
+  createdById String?
+  quotationId String?       @unique
+  name        String
+  description String?
+  type               ProjectType   @default(ONE_TIME)
+  serviceType        String?
+  recurringFrequency String?
+  status             ProjectStatus @default(DRAFT)
+  startDate          DateTime?
+  endDate     DateTime?
+  budget      Decimal?      @db.Decimal(12, 2)
+  currency    String        @default("USD")
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  client    Client     @relation(fields: [clientId], references: [id])
+  createdBy User?      @relation("ProjectCreator", fields: [createdById], references: [id])
+  quotation Quotation? @relation(fields: [quotationId], references: [id])
+  tasks     Task[]
+  files     File[]
+  invoices  Invoice[]
+  expenses  Expense[]
+  contracts Contract[]
+  channels  Channel[]
+
+  @@map("projects")
+}
+
+// ============================================================
+// TASKS — Hierarchical work items within a project
+// ============================================================
+
+model Task {
+  id                   String     @id @default(cuid())
+  projectId            String
+  parentId             String?
+  managerId            String?
+  title                String
+  description          String?
+  status               TaskStatus @default(TODO)
+  priority             Priority   @default(MEDIUM)
+  dueDate              DateTime?
+  order                Int        @default(0)
+  progress             Int        @default(0)   // Cached 0-100, recomputed on subtask change
+  estimatedHours       Float?                   // Time estimate in hours
+  loggedHours          Float      @default(0)   // Total logged hours (sum of TimeEntry)
+  isClientVisible      Boolean    @default(false) // Show this task in client portal
+  showSubtasksToClient Boolean    @default(false) // Also show subtasks to client
+  deletedAt            DateTime?               // Soft delete
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
+
+  // Self-referencing hierarchy
+  parent   Task?  @relation("TaskHierarchy", fields: [parentId], references: [id])
+  children Task[] @relation("TaskHierarchy")
+
+  // Relations
+  project      Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  manager      User?            @relation("TaskManager", fields: [managerId], references: [id])
+  assignees    TaskAssignee[]
+  files        File[]
+  comments     Comment[]
+  timeEntries  TimeEntry[]
+  // Dependencies: tasks this task depends on (must be done before this task)
+  dependsOn    TaskDependency[] @relation("dependant")
+  // Dependencies: tasks that depend on this task (this task blocks them)
+  blockedBy    TaskDependency[] @relation("dependency")
+  fileComments FileComment[]
+  chatMessages ChatMessage[]
+
+  @@map("tasks")
+}
+
+model TaskAssignee {
+  taskId     String
+  userId     String
+  assignedAt DateTime @default(now())
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, userId])
+  @@map("task_assignees")
+}
+
+// Task dependency: taskId depends on dependsOnId (cannot start until dependsOnId is DONE)
+model TaskDependency {
+  taskId      String
+  dependsOnId String
+
+  task      Task @relation("dependant",  fields: [taskId],      references: [id], onDelete: Cascade)
+  dependsOn Task @relation("dependency", fields: [dependsOnId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, dependsOnId])
+  @@map("task_dependencies")
+}
+
+// Time tracking entries per task per user
+model TimeEntry {
+  id        String   @id @default(cuid())
+  taskId    String
+  userId    String?
+  hours     Float
+  date      DateTime @default(now())
+  notes     String?
+  createdAt DateTime @default(now())
+
+  task Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User? @relation(fields: [userId], references: [id])
+
+  @@map("time_entries")
+}
+
+// ============================================================
+// TASK TEMPLATES — Reusable task structures
+// ============================================================
+
+model TaskTemplate {
+  id          String       @id @default(cuid())
+  name        String
+  description String?
+  projectType ProjectType?
+  isActive    Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+
+  items TaskTemplateItem[]
+
+  @@map("task_templates")
+}
+
+model TaskTemplateItem {
+  id          String   @id @default(cuid())
+  templateId  String
+  title       String
+  description String?
+  priority    Priority @default(MEDIUM)
+  order       Int      @default(0)
+  offsetDays  Int?     // Days from project start date for auto due-date
+  parentOrder Int?     // order of the parent item (null = top-level)
+
+  template TaskTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@map("task_template_items")
+}
+
+// ============================================================
+// RATE CARDS — Predefined pricing catalog
+// ============================================================
+
+model RateCard {
+  id          String      @id @default(cuid())
+  name        String
+  description String?
+  category    String?     // e.g. "Design", "Development", "Strategy"
+  pricingType PricingType @default(PER_ITEM)
+  unit        String      @default("hour") // hour, day, month, piece, word, etc.
+  unitPrice   Decimal     @db.Decimal(10, 2)
+  currency    String      @default("USD")
+  isActive    Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  quotationLineItems QuotationLineItem[]
+
+  @@map("rate_cards")
+}
+
+// ============================================================
+// QUOTATIONS
+// ============================================================
+
+model Quotation {
+  id            String          @id @default(cuid())
+  number        String          @unique  // e.g. QUO-2025-001
+  clientId      String
+  createdById   String?                  // Nullable until auth is wired up
+  title         String
+  description   String?
+  status        QuotationStatus @default(DRAFT)
+  pricingType   PricingType     @default(FIXED)
+  validUntil    DateTime?
+  currency      String          @default("USD")
+  subtotal      Decimal         @default(0) @db.Decimal(12, 2)
+  discountType  String?                  // "PERCENT" or "AMOUNT"
+  discountValue Decimal?        @default(0) @db.Decimal(10, 2)
+  taxRate       Decimal?        @default(0) @db.Decimal(5, 2)
+  total         Decimal         @default(0) @db.Decimal(12, 2)
+  notes         String?
+  terms         String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  client    Client              @relation(fields: [clientId], references: [id])
+  createdBy User?               @relation("QuotationCreator", fields: [createdById], references: [id])
+  lineItems QuotationLineItem[]
+  project   Project?
+  invoice   Invoice?            @relation("QuotationInvoice")
+
+  @@map("quotations")
+}
+
+model QuotationLineItem {
+  id          String      @id @default(cuid())
+  quotationId String
+  rateCardId  String?
+  title       String
+  description String?
+  pricingType PricingType @default(PER_ITEM)
+  quantity    Decimal     @db.Decimal(10, 2) @default(1)
+  unitPrice   Decimal     @db.Decimal(10, 2)
+  unit        String?                        // hour, day, month, piece, etc.
+  subtotal    Decimal     @db.Decimal(12, 2) @default(0)  // quantity × unitPrice
+  order       Int         @default(0)
+  createdAt   DateTime    @default(now())
+
+  quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  rateCard  RateCard? @relation(fields: [rateCardId], references: [id])
+
+  @@map("quotation_line_items")
+}
+
+// ============================================================
+// INVOICES
+// ============================================================
+
+model Invoice {
+  id            String        @id @default(cuid())
+  projectId     String?
+  quotationId   String?       @unique
+  clientId      String
+  invoiceNumber String        @unique
+  status        InvoiceStatus @default(DRAFT)
+  dueDate       DateTime?
+  currency      String        @default("USD")
+  discountPct   Decimal?      @db.Decimal(5, 2)
+  taxPct        Decimal?      @db.Decimal(5, 2)
+  notes         String?
+  paidAt        DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  project   Project?          @relation(fields: [projectId], references: [id])
+  quotation Quotation?        @relation("QuotationInvoice", fields: [quotationId], references: [id])
+  lineItems InvoiceLineItem[]
+
+  @@map("invoices")
+}
+
+model InvoiceLineItem {
+  id          String   @id @default(cuid())
+  invoiceId   String
+  description String
+  quantity    Decimal  @db.Decimal(10, 2)
+  unitPrice   Decimal  @db.Decimal(10, 2)
+  unit        String?
+  order       Int      @default(0)
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@map("invoice_line_items")
+}
+
+// ============================================================
+// STAKEHOLDERS — Freelancers, agencies, vendors, internal team
+// ============================================================
+
+model Stakeholder {
+  id          String           @id @default(cuid())
+  name        String
+  type        StakeholderType  @default(FREELANCER)
+  role        StakeholderRole?
+  email       String?          @unique
+  phone       String?
+  website     String?
+  address     String?
+  skills      String[]         @default([])
+  currency    String           @default("USD")
+  defaultRate Decimal?         @db.Decimal(10, 2)
+  notes       String?
+  isActive    Boolean          @default(true)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  expenses  Expense[]
+  contracts ContractParty[]
+
+  @@map("stakeholders")
+}
+
+// ============================================================
+// EXPENSES — Outgoing costs linked to projects / vendors
+// ============================================================
+
+model Expense {
+  id            String          @id @default(cuid())
+  title         String
+  description   String?
+  category      ExpenseCategory @default(OTHER)
+  amount        Decimal         @db.Decimal(12, 2)
+  currency      String          @default("USD")
+  date          DateTime        @default(now())
+  status        ExpenseStatus   @default(PENDING)
+  projectId       String?
+  stakeholderId   String?
+  userId          String?
+  isReimbursable  Boolean         @default(false)
+  receiptUrl      String?
+  notes           String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  project     Project?     @relation(fields: [projectId],     references: [id], onDelete: SetNull)
+  stakeholder Stakeholder? @relation(fields: [stakeholderId], references: [id], onDelete: SetNull)
+  user        User?        @relation(fields: [userId],        references: [id], onDelete: SetNull)
+
+  @@map("expenses")
+}
+
+// ============================================================
+// CONTRACTS & NDAs
+// ============================================================
+
+model Contract {
+  id        String         @id @default(cuid())
+  title     String
+  type      ContractType   @default(NDA)
+  status    ContractStatus @default(DRAFT)
+  projectId String?
+  clientId  String?
+  fileId    String?        // attached contract PDF (link to File)
+  startDate DateTime?
+  endDate   DateTime?
+  value     Decimal?       @db.Decimal(12, 2)
+  currency  String         @default("USD")
+  notes     String?
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  project Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  client  Client?        @relation(fields: [clientId],  references: [id], onDelete: SetNull)
+  parties ContractParty[]
+
+  @@map("contracts")
+}
+
+model ContractParty {
+  id             String            @id @default(cuid())
+  contractId     String
+  partyType      ContractPartyType
+  clientId       String?
+  stakeholderId  String?
+  userId         String?
+  name           String
+  email          String?
+  signedAt       DateTime?
+  signatureNote  String?
+  createdAt      DateTime          @default(now())
+
+  contract    Contract     @relation(fields: [contractId],    references: [id], onDelete: Cascade)
+  client      Client?      @relation(fields: [clientId],      references: [id], onDelete: SetNull)
+  stakeholder Stakeholder? @relation(fields: [stakeholderId], references: [id], onDelete: SetNull)
+  user        User?        @relation(fields: [userId],        references: [id], onDelete: SetNull)
+
+  @@map("contract_parties")
+}
+
+// ============================================================
+// FILES
+// ============================================================
+
+model File {
+  id           String     @id @default(cuid())
+  name         String
+  mimeType     String
+  mimeCategory String     @default("other")
+  size         Int
+  s3Key        String
+  s3Bucket     String     @default("local")
+  url          String?
+  thumbnailUrl String?
+  description  String?
+  status       FileStatus @default(DRAFT)
+  isShared     Boolean    @default(false)
+  clientId     String?
+  projectId    String?
+  taskId       String?
+  uploadedById String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  client     Client?       @relation(fields: [clientId],     references: [id], onDelete: SetNull)
+  project    Project?      @relation(fields: [projectId],    references: [id], onDelete: SetNull)
+  task       Task?         @relation(fields: [taskId],       references: [id], onDelete: SetNull)
+  uploadedBy User?         @relation("UploadedFiles", fields: [uploadedById], references: [id])
+  versions            FileVersion[]
+  fileTags            FileTag[]
+  comments            FileComment[]
+  messageAttachments  MessageAttachment[]
+
+  @@map("files")
+}
+
+model FileVersion {
+  id           String   @id @default(cuid())
+  fileId       String
+  version      Int
+  s3Key        String
+  url          String?
+  thumbnailUrl String?
+  size         Int
+  notes        String?
+  uploadedById String?
+  createdAt    DateTime @default(now())
+
+  file File @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@unique([fileId, version])
+  @@map("file_versions")
+}
+
+model Tag {
+  id    String    @id @default(cuid())
+  name  String    @unique
+  color String?
+
+  fileTags FileTag[]
+
+  @@map("tags")
+}
+
+model FileTag {
+  fileId String
+  tagId  String
+
+  file File @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  tag  Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([fileId, tagId])
+  @@map("file_tags")
+}
+
+model FileComment {
+  id         String            @id @default(cuid())
+  fileId     String
+  versionId  String?
+  authorId   String?
+  authorName String            @default("Anonymous")
+  body       String
+  posX       Float?
+  posY       Float?
+  timestamp  Float?
+  page       Int?
+  status     FileCommentStatus @default(OPEN)
+  parentId   String?
+  taskId     String?
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  file    File          @relation(fields: [fileId],   references: [id], onDelete: Cascade)
+  author  User?         @relation(fields: [authorId], references: [id])
+  parent  FileComment?  @relation("FileCommentThread", fields: [parentId], references: [id])
+  replies FileComment[] @relation("FileCommentThread")
+  task    Task?         @relation(fields: [taskId],   references: [id])
+
+  @@map("file_comments")
+}
+
+// ============================================================
+// COMMENTS — Threaded comments on tasks
+// ============================================================
+
+model Comment {
+  id         String      @id @default(cuid())
+  taskId     String
+  authorId   String?                          // Nullable until auth is wired up
+  authorName String      @default("Anonymous")   // Display name fallback
+  body       String
+  type       CommentType @default(COMMENT)     // COMMENT = discussion, UPDATE = activity log entry
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  task   Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  author User? @relation(fields: [authorId], references: [id])
+
+  @@map("comments")
+}
+
+enum CommentType {
+  COMMENT
+  UPDATE
+}
+
+// ============================================================
+// MESSAGING — Slack-like channels + messages
+// ============================================================
+
+model Channel {
+  id          String      @id @default(cuid())
+  name        String
+  description String?
+  type        ChannelType @default(GENERAL)
+  projectId   String?     // set for PROJECT_INTERNAL / PROJECT_CLIENT
+  clientId    String?     // set for CLIENT channels
+  isArchived  Boolean     @default(false)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  project  Project?        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  client   Client?         @relation(fields: [clientId],  references: [id], onDelete: Cascade)
+  members  ChannelMember[]
+  messages ChatMessage[]
+
+  @@map("channels")
+}
+
+enum ChannelType {
+  GENERAL          // Company-wide channels (e.g. #general, #announcements)
+  PROJECT_INTERNAL // Team-only channel per project
+  PROJECT_CLIENT   // Team + client per project
+  CLIENT           // Per-client general channel
+  DIRECT           // DM between two users (future)
+}
+
+model ChannelMember {
+  channelId  String
+  userId     String
+  role       ChannelMemberRole @default(MEMBER)
+  lastReadAt DateTime?
+  joinedAt   DateTime @default(now())
+
+  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId],    references: [id], onDelete: Cascade)
+
+  @@id([channelId, userId])
+  @@map("channel_members")
+}
+
+enum ChannelMemberRole {
+  ADMIN
+  MEMBER
+}
+
+model ChatMessage {
+  id         String    @id @default(cuid())
+  channelId  String
+  authorId   String?
+  authorName String    @default("Team")
+  body       String
+  taskId     String?   // optional linked task
+  parentId   String?   // for thread replies (future)
+  editedAt   DateTime?
+  deletedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  channel     Channel              @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  author      User?                @relation("SentMessages", fields: [authorId], references: [id])
+  task        Task?                @relation(fields: [taskId],    references: [id], onDelete: SetNull)
+  parent      ChatMessage?         @relation("MessageThread", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  replies     ChatMessage[]        @relation("MessageThread")
+  attachments MessageAttachment[]
+
+  @@map("chat_messages")
+}
+
+model MessageAttachment {
+  id        String @id @default(cuid())
+  messageId String
+  fileId    String
+
+  message ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  file    File        @relation(fields: [fileId],    references: [id], onDelete: Cascade)
+
+  @@unique([messageId, fileId])
+  @@map("message_attachments")
+}
+
+// ─── Company Settings ────────────────────────────────────────────────────────
+model CompanySettings {
+  id              String   @id @default("singleton")
+  name            String   @default("My Agency")
+  email           String?
+  phone           String?
+  website         String?
+  address         String?
+  city            String?
+  country         String?
+  logoUrl         String?
+  currency        String   @default("USD")
+  timezone        String   @default("UTC")
+  dateFormat      String   @default("MMM D, YYYY")
+
+  // Letterhead / PDF template
+  letterheadLogoUrl   String?
+  letterheadHeader    String?   // e.g. "Vibrnd Creative Studio"
+  letterheadFooter    String?   // e.g. "Thank you for your business"
+  letterheadAddress   String?   // full address block for PDFs
+  letterheadPhone     String?
+  letterheadEmail     String?
+  letterheadWebsite   String?
+  letterheadColor     String   @default("#6366f1")  // accent color on PDFs
+  letterheadTemplate  String   @default("CLASSIC")  // CLASSIC | MODERN | MINIMAL
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("company_settings")
+}

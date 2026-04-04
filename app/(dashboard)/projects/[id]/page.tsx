@@ -1,0 +1,1213 @@
+"use client";
+
+import { useEffect, useState, useCallback } from "react";
+import { useParams } from "next/navigation";
+import Link from "next/link";
+import {
+  ChevronRight, Plus, Calendar, DollarSign, CheckSquare,
+  LayoutGrid, List, Edit3, RefreshCw, Zap, Wand2, FileText,
+  TrendingDown, Scroll, Clock, CheckCircle2, XCircle, Paperclip,
+  Upload, Download, Image, Film, File as FileIcon, Grid3X3,
+} from "lucide-react";
+import { Button } from "@/components/ui/Button";
+import { StatusBadge } from "@/components/ui/Badge";
+import { Modal } from "@/components/ui/Modal";
+import { ProjectForm } from "@/components/projects/ProjectForm";
+import { TaskBoard } from "@/components/tasks/TaskBoard";
+import { TaskList } from "@/components/tasks/TaskList";
+import { TaskModal } from "@/components/tasks/TaskModal";
+import { TaskPanel } from "@/components/tasks/TaskPanel";
+import type {
+  Project, Task, TaskStatus, ProjectFormData, TaskTemplate, QuotationStatus,
+  Expense, Contract, ExpenseCategory, ExpenseStatus,
+  ContractType, ContractPartyType, AssetFile, MimeCategory,
+} from "@/types";
+import { SERVICE_TYPES, RECURRING_FREQUENCIES } from "@/components/projects/ProjectForm";
+
+type QuotationStub = { id: string; number: string; title: string; total: number; status: QuotationStatus };
+type PageTab = "tasks" | "files" | "expenses" | "contracts";
+type ViewMode = "kanban" | "list";
+
+function formatFileSize(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function FileMimeIcon({ mimeType, className = "w-5 h-5" }: { mimeType: string; className?: string }) {
+  if (mimeType.startsWith("image/")) return <Image className={`${className} text-violet-500`} />;
+  if (mimeType.startsWith("video/")) return <Film className={`${className} text-pink-500`} />;
+  if (mimeType === "application/pdf") return <FileText className={`${className} text-red-500`} />;
+  return <FileIcon className={`${className} text-gray-400`} />;
+}
+
+const CURRENCIES = ["USD", "EUR", "GBP", "INR", "AUD", "CAD", "SGD", "AED"];
+
+const CONTRACT_TYPES: { value: ContractType; label: string }[] = [
+  { value: "NDA",               label: "NDA" },
+  { value: "SERVICE_AGREEMENT", label: "Service Agreement" },
+  { value: "EMPLOYMENT",        label: "Employment Agreement" },
+  { value: "FREELANCE",         label: "Freelance Contract" },
+  { value: "PARTNERSHIP",       label: "Partnership Agreement" },
+  { value: "OTHER",             label: "Other" },
+];
+
+const EMPTY_EXPENSE_FORM = {
+  title: "", category: "OTHER" as ExpenseCategory,
+  amount: "", currency: "USD", date: new Date().toISOString().slice(0, 10),
+  status: "PENDING" as ExpenseStatus, stakeholderId: "", isReimbursable: false, notes: "",
+};
+
+const EMPTY_CONTRACT_FORM = {
+  title: "", type: "NDA" as ContractType,
+  startDate: "", endDate: "", value: "", currency: "USD", notes: "",
+};
+
+type PartyDraft = {
+  partyType: ContractPartyType; clientId: string; stakeholderId: string;
+  userId: string; name: string; email: string;
+};
+const EMPTY_PARTY: PartyDraft = {
+  partyType: "CLIENT", clientId: "", stakeholderId: "", userId: "", name: "", email: "",
+};
+
+const CATEGORY_LABELS: Record<ExpenseCategory, string> = {
+  SOFTWARE_TOOLS: "Software & Tools", FREELANCER_PAYMENT: "Freelancer Payment",
+  VENDOR_PAYMENT: "Vendor Payment", STOCK_ASSETS: "Stock Assets",
+  PRINTING: "Printing", TRAVEL: "Travel", ADVERTISING: "Advertising",
+  OFFICE: "Office & Overhead", EQUIPMENT: "Equipment", OTHER: "Other",
+};
+
+const EXPENSE_STATUS_COLORS: Record<ExpenseStatus, string> = {
+  PENDING: "bg-amber-50 text-amber-700", APPROVED: "bg-blue-50 text-blue-700",
+  REJECTED: "bg-red-50 text-red-700", PAID: "bg-emerald-50 text-emerald-700",
+};
+
+function formatCurrency(amount: number, currency: string) {
+  return new Intl.NumberFormat("en-US", { style: "currency", currency, maximumFractionDigits: 0 }).format(amount);
+}
+
+function flattenTasks(tasks: Task[]): Task[] {
+  return tasks.flatMap((t) => [t, ...flattenTasks(t.children ?? [])]);
+}
+
+function formatDate(d: string | null) {
+  if (!d) return "—";
+  return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function formatBudget(budget: number | null, currency: string) {
+  if (!budget) return null;
+  return new Intl.NumberFormat("en-US", { style: "currency", currency, maximumFractionDigits: 0 }).format(budget);
+}
+
+function ProgressRing({ progress }: { progress: number }) {
+  const r = 20, circ = 2 * Math.PI * r;
+  const offset = circ - (progress / 100) * circ;
+  const color = progress >= 75 ? "#10b981" : progress >= 40 ? "#6366f1" : "#d1d5db";
+  return (
+    <svg width="52" height="52" viewBox="0 0 52 52" className="-rotate-90">
+      <circle cx="26" cy="26" r={r} fill="none" stroke="#f3f4f6" strokeWidth="5" />
+      <circle cx="26" cy="26" r={r} fill="none" stroke={color} strokeWidth="5"
+        strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round"
+        style={{ transition: "stroke-dashoffset 0.4s ease" }}
+      />
+      <text x="26" y="26" textAnchor="middle" dominantBaseline="middle"
+        style={{ transform: "rotate(90deg)", transformOrigin: "26px 26px" }}
+        fontSize="10" fontWeight="600" fill={color}
+      >
+        {progress}%
+      </text>
+    </svg>
+  );
+}
+
+export default function ProjectDetailPage() {
+  const params = useParams();
+  const id = params.id as string;
+
+  const [pdfLoading, setPdfLoading] = useState(false);
+
+  const [project, setProject] = useState<(Project & { progress: number; quotation?: QuotationStub | null }) | null>(null);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [templates, setTemplates] = useState<TaskTemplate[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [tasksLoading, setTasksLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [view, setView] = useState<ViewMode>("list");
+  const [pageTab, setPageTab] = useState<PageTab>("tasks");
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [expenseSummary, setExpenseSummary] = useState<{ total: number; budget: number | null; remaining: number | null; reimbursable: number; currency: string } | null>(null);
+  const [contracts, setContracts] = useState<Contract[]>([]);
+  const [projectFiles, setProjectFiles] = useState<AssetFile[]>([]);
+  const [filesLoading, setFilesLoading] = useState(false);
+  const [filesLoaded, setFilesLoaded] = useState(false);
+  const [fileUploading, setFileUploading] = useState(false);
+
+  // Modals
+  const [editProjectOpen, setEditProjectOpen] = useState(false);
+  const [templateOpen, setTemplateOpen] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState("");
+  const [applyingTemplate, setApplyingTemplate] = useState(false);
+  const [taskModal, setTaskModal] = useState<{
+    open: boolean; defaultStatus?: TaskStatus; parentTask?: Task | null;
+  }>({ open: false });
+  const [taskPanel, setTaskPanel] = useState<{ open: boolean; task?: Task }>({ open: false });
+
+  // Inline expense modal
+  const [expenseModalOpen, setExpenseModalOpen] = useState(false);
+  const [expenseForm, setExpenseForm] = useState(EMPTY_EXPENSE_FORM);
+  const [expenseSaving, setExpenseSaving] = useState(false);
+  const [expenseStakeholders, setExpenseStakeholders] = useState<{ id: string; name: string }[]>([]);
+
+  // Inline contract modal
+  const [contractModalOpen, setContractModalOpen] = useState(false);
+  const [contractForm, setContractForm] = useState(EMPTY_CONTRACT_FORM);
+  const [contractSaving, setContractSaving] = useState(false);
+  const [contractError, setContractError] = useState<string | null>(null);
+  const [contractParties, setContractParties] = useState<PartyDraft[]>([{ ...EMPTY_PARTY }]);
+  const [contractClients, setContractClients] = useState<{ id: string; name: string; companyName: string | null }[]>([]);
+  const [contractStakeholders, setContractStakeholders] = useState<{ id: string; name: string }[]>([]);
+  const [contractUsers, setContractUsers] = useState<{ id: string; name: string; email: string }[]>([]);
+
+  const fetchProject = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/projects/${id}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to load project");
+      setProject(data);
+    } catch (e) { setError(e instanceof Error ? e.message : "Unknown error"); }
+    finally { setLoading(false); }
+  }, [id]);
+
+  const fetchExpenses = useCallback(async () => {
+    const res = await fetch(`/api/projects/${id}/expenses`);
+    if (res.ok) {
+      const data = await res.json();
+      setExpenses(data.expenses);
+      setExpenseSummary(data.summary);
+    }
+  }, [id]);
+
+  const fetchContracts = useCallback(async () => {
+    const res = await fetch(`/api/contracts?projectId=${id}`);
+    if (res.ok) setContracts(await res.json());
+  }, [id]);
+
+  const fetchFiles = useCallback(async () => {
+    setFilesLoading(true);
+    try {
+      const res = await fetch(`/api/files?projectId=${id}`);
+      if (res.ok) setProjectFiles(await res.json());
+      setFilesLoaded(true);
+    } finally { setFilesLoading(false); }
+  }, [id]);
+
+  const fetchTasks = useCallback(async () => {
+    setTasksLoading(true);
+    try {
+      const res = await fetch(`/api/projects/${id}/tasks`);
+      if (res.ok) setTasks(await res.json());
+    } catch { /* silently fail */ }
+    finally { setTasksLoading(false); }
+  }, [id]);
+
+  useEffect(() => {
+    fetchProject();
+    fetchTasks();
+    fetchExpenses();
+    fetchContracts();
+    fetch("/api/task-templates")
+      .then((r) => r.json())
+      .then((d) => { if (Array.isArray(d)) setTemplates(d); });
+  }, [fetchProject, fetchTasks, fetchExpenses, fetchContracts]);
+
+  const handleStatusChange = async (taskId: string, status: TaskStatus) => {
+    const updateStatus = (list: Task[]): Task[] =>
+      list.map((t) => ({ ...t, status: t.id === taskId ? status : t.status, children: t.children ? updateStatus(t.children) : [] }));
+    setTasks((prev) => updateStatus(prev));
+    await fetch(`/api/tasks/${taskId}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    });
+    fetchTasks(); fetchProject();
+  };
+
+  const handleTaskSaved = () => {
+    setTaskModal({ open: false });
+    fetchTasks(); fetchProject();
+  };
+
+  const handleTaskPanelUpdated = (updatedTask: Task) => {
+    fetchTasks(); fetchProject();
+    setTaskPanel((p) => ({ ...p, task: updatedTask }));
+  };
+
+  const handleTaskPanelDeleted = () => {
+    setTaskPanel({ open: false });
+    fetchTasks(); fetchProject();
+  };
+
+  const handleReorder = async (taskIds: string[]) => {
+    await fetch("/api/tasks/reorder", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ taskIds }),
+    });
+    fetchTasks();
+  };
+
+  const handleApplyTemplate = async () => {
+    if (!selectedTemplate) return;
+    setApplyingTemplate(true);
+    try {
+      await fetch(`/api/task-templates/${selectedTemplate}/apply`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId: id, startDate: project?.startDate }),
+      });
+      fetchTasks();
+      setTemplateOpen(false);
+      setSelectedTemplate("");
+    } finally { setApplyingTemplate(false); }
+  };
+
+  const handleDownloadPdf = async () => {
+    if (!project) return;
+    setPdfLoading(true);
+    try {
+      const [{ fetchSettings, openPrintPdf }, { buildProjectHtml }] = await Promise.all([
+        import("@/lib/pdf"),
+        import("@/lib/pdfTemplates"),
+      ]);
+      const settings = await fetchSettings();
+      const html = buildProjectHtml({
+        name:        project.name,
+        status:      project.status,
+        type:        project.type,
+        description: project.description,
+        budget:      project.budget != null ? Number(project.budget) : null,
+        currency:    project.currency ?? "USD",
+        startDate:   project.startDate,
+        endDate:     project.endDate,
+        progress:    project.progress,
+        client:      project.client ?? null,
+        tasks:       tasks.map((t) => ({
+          title:    t.title,
+          status:   t.status,
+          priority: t.priority,
+          dueDate:  t.dueDate,
+          assignee: t.assignees?.[0]?.user ?? null,
+        })),
+      }, settings);
+      await openPrintPdf(html);
+    } finally {
+      setPdfLoading(false);
+    }
+  };
+
+  // Lazy-load files tab
+  useEffect(() => {
+    if (pageTab === "files" && !filesLoaded) fetchFiles();
+  }, [pageTab, filesLoaded, fetchFiles]);
+
+  // Load stakeholders when expense modal opens
+  useEffect(() => {
+    if (expenseModalOpen && expenseStakeholders.length === 0) {
+      fetch("/api/stakeholders").then((r) => r.json())
+        .then((d) => setExpenseStakeholders(Array.isArray(d) ? d : []));
+    }
+  }, [expenseModalOpen]);
+
+  // Load parties data when contract modal opens
+  useEffect(() => {
+    if (contractModalOpen && contractClients.length === 0) {
+      Promise.all([
+        fetch("/api/clients").then((r) => r.json()),
+        fetch("/api/stakeholders").then((r) => r.json()),
+        fetch("/api/users").then((r) => r.json()),
+      ]).then(([c, s, u]) => {
+        setContractClients(Array.isArray(c) ? c : c.clients ?? []);
+        setContractStakeholders(Array.isArray(s) ? s : []);
+        setContractUsers(Array.isArray(u) ? u : []);
+      });
+    }
+  }, [contractModalOpen]);
+
+  const handleAddExpense = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setExpenseSaving(true);
+    const res = await fetch("/api/expenses", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...expenseForm, projectId: id }),
+    });
+    setExpenseSaving(false);
+    if (res.ok) {
+      setExpenseModalOpen(false);
+      setExpenseForm(EMPTY_EXPENSE_FORM);
+      fetchExpenses();
+      fetchProject();
+    }
+  };
+
+  const updateContractParty = (i: number, k: string, v: string) => {
+    setContractParties((prev) => prev.map((p, idx) => {
+      if (idx !== i) return p;
+      const updated = { ...p, [k]: v };
+      if (k === "clientId" && v) {
+        const c = contractClients.find((c) => c.id === v);
+        if (c) updated.name = c.companyName || c.name;
+      }
+      if (k === "stakeholderId" && v) {
+        const s = contractStakeholders.find((s) => s.id === v);
+        if (s) updated.name = s.name;
+      }
+      if (k === "userId" && v) {
+        const u = contractUsers.find((u) => u.id === v);
+        if (u) { updated.name = u.name; updated.email = u.email; }
+      }
+      if (k === "partyType") {
+        updated.clientId = ""; updated.stakeholderId = ""; updated.userId = "";
+        updated.name = ""; updated.email = "";
+      }
+      return updated;
+    }));
+  };
+
+  const handleAddContract = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!contractForm.title.trim()) { setContractError("Title is required"); return; }
+    if (contractParties.some((p) => !p.name.trim())) { setContractError("All parties need a name"); return; }
+    setContractSaving(true); setContractError(null);
+    const res = await fetch("/api/contracts", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...contractForm, projectId: id, parties: contractParties }),
+    });
+    setContractSaving(false);
+    if (res.ok) {
+      setContractModalOpen(false);
+      setContractForm(EMPTY_CONTRACT_FORM);
+      setContractParties([{ ...EMPTY_PARTY }]);
+      fetchContracts();
+    }
+  };
+
+  const allFlat = flattenTasks(tasks);
+  const taskCounts = {
+    total: allFlat.length,
+    done: allFlat.filter((t) => t.status === "DONE").length,
+    inProgress: allFlat.filter((t) => t.status === "IN_PROGRESS").length,
+  };
+
+  const relevantTemplates = project
+    ? templates.filter((t) => !t.projectType || t.projectType === project.type)
+    : templates;
+
+  if (loading) {
+    return (
+      <div className="flex flex-col h-full">
+        <div className="bg-white border-b border-gray-200 px-4 sm:px-6 lg:px-8 py-4 sm:py-5 animate-pulse">
+          <div className="h-4 bg-gray-200 rounded w-48 mb-3" />
+          <div className="h-7 bg-gray-200 rounded w-72" />
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !project) {
+    return (
+      <div className="px-4 sm:px-6 lg:px-8 py-12 text-center">
+        <p className="text-sm text-gray-500">{error ?? "Project not found"}</p>
+        <Link href="/projects" className="mt-4 inline-block text-sm text-indigo-600 hover:underline">
+          Back to Projects
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Header */}
+      <div className="bg-white border-b border-gray-200 px-4 sm:px-6 lg:px-8 py-4 sm:py-5 flex-shrink-0">
+        <nav className="flex items-center gap-2 text-sm text-gray-500 mb-2">
+          <Link href="/projects" className="hover:text-gray-800 transition-colors">Projects</Link>
+          <ChevronRight className="w-3.5 h-3.5" />
+          {project.client && (
+            <>
+              <Link href={`/clients/${project.client.id}`} className="hover:text-gray-800 transition-colors">
+                {project.client.name}
+              </Link>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </>
+          )}
+          <span className="text-gray-900 font-medium truncate">{project.name}</span>
+        </nav>
+
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <ProgressRing progress={project.progress} />
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                <h1 className="text-xl font-semibold text-gray-900" title={project.name}>{project.name}</h1>
+                <StatusBadge status={project.status} />
+                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                  project.type === "RETAINER"
+                    ? "bg-purple-50 text-purple-700 ring-1 ring-purple-200"
+                    : "bg-sky-50 text-sky-700 ring-1 ring-sky-200"
+                }`}>
+                  {project.type === "RETAINER" ? <RefreshCw className="w-3 h-3" /> : <Zap className="w-3 h-3" />}
+                  {project.type === "RETAINER"
+                    ? `Retainer${project.recurringFrequency ? ` · ${RECURRING_FREQUENCIES.find(f => f.value === project.recurringFrequency)?.label ?? project.recurringFrequency}` : ""}`
+                    : "One-Time"}
+                </span>
+                {project.serviceType && (() => {
+                  const svc = SERVICE_TYPES.find((s) => s.value === project.serviceType);
+                  const label = svc ? svc.label : project.serviceType;
+                  return (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">
+                      {label}
+                    </span>
+                  );
+                })()}
+              </div>
+              {project.description && (
+                <p className="text-sm text-gray-500 line-clamp-1">{project.description}</p>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {relevantTemplates.length > 0 && (
+              <Button variant="ghost" size="sm" icon={<Wand2 className="w-3.5 h-3.5" />} onClick={() => setTemplateOpen(true)}>
+                Auto-generate Tasks
+              </Button>
+            )}
+            <Button
+              variant="secondary" size="sm"
+              icon={pdfLoading ? undefined : <Download className="w-3.5 h-3.5" />}
+              loading={pdfLoading}
+              onClick={handleDownloadPdf}
+            >
+              {pdfLoading ? "Generating…" : "PDF"}
+            </Button>
+            <Button variant="secondary" size="sm" icon={<Edit3 className="w-3.5 h-3.5" />} onClick={() => setEditProjectOpen(true)}>
+              Edit
+            </Button>
+            <Button size="sm" icon={<Plus className="w-3.5 h-3.5" />} onClick={() => setTaskModal({ open: true })}>
+              Add Task
+            </Button>
+          </div>
+        </div>
+
+        {/* Meta bar */}
+        <div className="flex items-center gap-6 mt-4 pt-4 border-t border-gray-100 text-xs text-gray-500 flex-wrap">
+          {project.startDate && (
+            <span className="flex items-center gap-1.5">
+              <Calendar className="w-3.5 h-3.5 text-gray-400" />
+              {formatDate(project.startDate)}{project.endDate && <> → {formatDate(project.endDate)}</>}
+            </span>
+          )}
+          {project.budget && (
+            <span className="flex items-center gap-1.5">
+              <DollarSign className="w-3.5 h-3.5 text-gray-400" />
+              {formatBudget(project.budget, project.currency)}
+            </span>
+          )}
+          <span className="flex items-center gap-1.5">
+            <CheckSquare className="w-3.5 h-3.5 text-gray-400" />
+            {taskCounts.done}/{taskCounts.total} done
+            {taskCounts.inProgress > 0 && ` · ${taskCounts.inProgress} in progress`}
+          </span>
+          {project.quotation && (
+            <Link
+              href={`/quotations/${project.quotation.id}`}
+              className="flex items-center gap-1.5 text-indigo-600 hover:text-indigo-800 transition-colors"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              {project.quotation.number}
+            </Link>
+          )}
+        </div>
+      </div>
+
+      {/* Page tabs */}
+      <div className="bg-white border-b border-gray-200 px-4 sm:px-6 lg:px-8">
+        <div className="overflow-x-auto -mb-px">
+        <div className="flex items-center gap-1 whitespace-nowrap">
+          {([
+            { id: "tasks", label: "Tasks", icon: <CheckSquare className="w-3.5 h-3.5" /> },
+            { id: "files", label: `Files${projectFiles.length > 0 ? ` (${projectFiles.length})` : ""}`, icon: <Paperclip className="w-3.5 h-3.5" /> },
+            { id: "expenses", label: `Expenses${expenses.length > 0 ? ` (${expenses.length})` : ""}`, icon: <TrendingDown className="w-3.5 h-3.5" /> },
+            { id: "contracts", label: `Contracts${contracts.length > 0 ? ` (${contracts.length})` : ""}`, icon: <Scroll className="w-3.5 h-3.5" /> },
+          ] as { id: PageTab; label: string; icon: React.ReactNode }[]).map((tab) => (
+            <button
+              key={tab.id} onClick={() => setPageTab(tab.id)}
+              className={`flex items-center gap-1.5 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                pageTab === tab.id
+                  ? "border-indigo-600 text-indigo-700"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              }`}
+            >
+              {tab.icon}{tab.label}
+            </button>
+          ))}
+        </div>
+        </div>
+      </div>
+
+      {/* Content area */}
+      <div className="flex-1 px-4 sm:px-6 lg:px-8 py-4 sm:py-6 overflow-auto">
+        {/* ── TASKS TAB ── */}
+        {pageTab === "tasks" && (<>
+        <div className="flex items-center mb-5">
+          <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1">
+            {(["list", "kanban"] as ViewMode[]).map((v) => (
+              <button
+                key={v} onClick={() => setView(v)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                  view === v ? "bg-indigo-600 text-white" : "text-gray-600 hover:bg-gray-100"
+                }`}
+              >
+                {v === "kanban" ? <><LayoutGrid className="w-3.5 h-3.5" /> Kanban</> : <><List className="w-3.5 h-3.5" /> List</>}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {!tasksLoading && allFlat.length === 0 && relevantTemplates.length > 0 && (
+          <div className="mb-5 p-5 rounded-xl border-2 border-dashed border-indigo-200 bg-indigo-50/50 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-indigo-100 flex items-center justify-center flex-shrink-0">
+                <Wand2 className="w-4 h-4 text-indigo-600" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-indigo-900">Auto-generate tasks</p>
+                <p className="text-xs text-indigo-600 mt-0.5">
+                  Use a template to instantly create a full task structure for this project.
+                </p>
+              </div>
+            </div>
+            <Button size="sm" icon={<Wand2 className="w-3.5 h-3.5" />} onClick={() => setTemplateOpen(true)}>
+              Use Template
+            </Button>
+          </div>
+        )}
+
+        {tasksLoading ? (
+          <div className="space-y-2">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="bg-white border border-gray-200 rounded-xl p-4 animate-pulse">
+                <div className="h-4 bg-gray-200 rounded w-1/2" />
+              </div>
+            ))}
+          </div>
+        ) : view === "kanban" ? (
+          <TaskBoard
+            tasks={tasks}
+            onOpen={(task) => setTaskPanel({ open: true, task })}
+            onStatusChange={handleStatusChange}
+            onAddTask={(status) => setTaskModal({ open: true, defaultStatus: status })}
+            onAddSubtask={(parent) => setTaskModal({ open: true, parentTask: parent })}
+            onReorder={handleReorder}
+          />
+        ) : (
+          <TaskList
+            tasks={tasks}
+            onOpen={(task) => setTaskPanel({ open: true, task })}
+            onStatusChange={handleStatusChange}
+            onAddTask={() => setTaskModal({ open: true })}
+            onAddSubtask={(parent) => setTaskModal({ open: true, parentTask: parent })}
+            onReorder={handleReorder}
+          />
+        )}
+        </>)}
+
+        {/* ── FILES TAB ── */}
+        {pageTab === "files" && (
+          <div>
+            {/* Upload zone */}
+            <div className="mb-5">
+              <label className={`flex flex-col items-center justify-center p-6 border-2 border-dashed rounded-xl cursor-pointer transition-colors ${
+                fileUploading ? "border-indigo-300 bg-indigo-50/50" : "border-gray-200 hover:border-indigo-300 hover:bg-gray-50"
+              }`}>
+                <input type="file" multiple className="hidden" disabled={fileUploading} onChange={async (e) => {
+                  const files = Array.from(e.target.files ?? []);
+                  if (!files.length) return;
+                  e.target.value = "";
+                  setFileUploading(true);
+                  try {
+                    for (const f of files) {
+                      const fd = new FormData();
+                      fd.append("file", f);
+                      fd.append("projectId", id);
+                      await fetch("/api/files", { method: "POST", body: fd });
+                    }
+                    fetchFiles();
+                  } finally { setFileUploading(false); }
+                }} />
+                <Upload className={`w-7 h-7 mb-2 ${fileUploading ? "text-indigo-400 animate-bounce" : "text-gray-400"}`} />
+                <p className="text-sm font-medium text-gray-600">
+                  {fileUploading ? "Uploading…" : "Drop files or click to upload"}
+                </p>
+                <p className="text-xs text-gray-400 mt-0.5">Any file type supported</p>
+              </label>
+            </div>
+
+            {filesLoading ? (
+              <div className="space-y-2">
+                {[1,2,3].map((i) => (
+                  <div key={i} className="flex gap-3 p-3 border border-gray-100 rounded-xl animate-pulse">
+                    <div className="w-10 h-10 bg-gray-200 rounded-lg flex-shrink-0" />
+                    <div className="flex-1 space-y-1.5">
+                      <div className="h-3.5 bg-gray-200 rounded w-1/2" />
+                      <div className="h-3 bg-gray-200 rounded w-1/4" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : projectFiles.length === 0 ? (
+              <div className="text-center py-10">
+                <Paperclip className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                <p className="text-sm text-gray-400">No files yet for this project</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {projectFiles.map((file) => (
+                  <div key={file.id} className="flex items-center gap-3 p-3 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">
+                    <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
+                      {file.thumbnailUrl ? (
+                        <img src={file.thumbnailUrl} alt="" className="w-10 h-10 rounded-lg object-cover" />
+                      ) : (
+                        <FileMimeIcon mimeType={file.mimeType} />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{file.name}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        {formatFileSize(file.size)}
+                        {file.task && <span className="ml-2 text-indigo-500">→ {file.task.title}</span>}
+                        {(file._count?.versions ?? 0) > 0 && (
+                          <span className="ml-2 font-medium text-indigo-500">v{(file._count?.versions ?? 0) + 1}</span>
+                        )}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                        file.status === "APPROVED" ? "bg-emerald-50 text-emerald-700" :
+                        file.status === "IN_REVIEW" ? "bg-amber-50 text-amber-700" :
+                        file.status === "CHANGES_REQUIRED" ? "bg-red-50 text-red-700" :
+                        "bg-gray-100 text-gray-500"
+                      }`}>
+                        {file.status.replace("_", " ")}
+                      </span>
+                      {file.url && (
+                        <a href={file.url} download={file.name}
+                          className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                          title="Download" onClick={(e) => e.stopPropagation()}>
+                          <Download className="w-3.5 h-3.5" />
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── EXPENSES TAB ── */}
+        {pageTab === "expenses" && (
+          <div>
+            {/* Budget vs Actual */}
+            {expenseSummary && (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+                {[
+                  { label: "Total Spent", value: formatCurrency(expenseSummary.total, expenseSummary.currency), sub: "all expenses", color: "text-gray-900" },
+                  { label: "Budget", value: expenseSummary.budget ? formatCurrency(expenseSummary.budget, expenseSummary.currency) : "—", sub: "project budget", color: "text-gray-900" },
+                  { label: "Remaining", value: expenseSummary.remaining != null ? formatCurrency(expenseSummary.remaining, expenseSummary.currency) : "—", sub: "left in budget", color: expenseSummary.remaining != null && expenseSummary.remaining < 0 ? "text-red-600" : "text-emerald-600" },
+                  { label: "Reimbursable", value: formatCurrency(expenseSummary.reimbursable, expenseSummary.currency), sub: "to bill client", color: "text-indigo-600" },
+                ].map((s) => (
+                  <div key={s.label} className="bg-white border border-gray-200 rounded-xl px-4 py-3">
+                    <p className="text-xs text-gray-500 mb-1">{s.label}</p>
+                    <p className={`text-lg font-semibold ${s.color}`}>{s.value}</p>
+                    <p className="text-xs text-gray-400">{s.sub}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {expenseSummary?.budget && expenseSummary.total > 0 && (
+              <div className="bg-white border border-gray-200 rounded-xl px-5 py-4 mb-6">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-medium text-gray-600">Budget Used</span>
+                  <span className="text-xs text-gray-500">{Math.round((expenseSummary.total / expenseSummary.budget) * 100)}%</span>
+                </div>
+                <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${
+                      expenseSummary.total > expenseSummary.budget ? "bg-red-400" :
+                      expenseSummary.total / expenseSummary.budget > 0.8 ? "bg-amber-400" : "bg-emerald-400"
+                    }`}
+                    style={{ width: `${Math.min((expenseSummary.total / expenseSummary.budget) * 100, 100)}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-gray-900">Expenses</h3>
+              <Button size="sm" variant="secondary" icon={<Plus className="w-3.5 h-3.5" />}
+                onClick={() => setExpenseModalOpen(true)}
+              >
+                Add Expense
+              </Button>
+            </div>
+
+            {expenses.length === 0 ? (
+              <div className="bg-white border border-gray-200 rounded-xl p-10 text-center">
+                <TrendingDown className="w-8 h-8 text-gray-300 mx-auto mb-3" />
+                <p className="text-sm text-gray-500 mb-1">No expenses yet</p>
+                <p className="text-xs text-gray-400">Track costs like tools, freelancers, printing, and more</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto bg-white border border-gray-200 rounded-xl overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-100 text-xs font-medium text-gray-400 uppercase tracking-wide">
+                      <th className="text-left px-5 py-3">Title</th>
+                      <th className="text-left px-5 py-3">Category</th>
+                      <th className="text-left px-5 py-3">Stakeholder</th>
+                      <th className="text-left px-5 py-3">Date</th>
+                      <th className="text-right px-5 py-3">Amount</th>
+                      <th className="text-center px-5 py-3">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {expenses.map((exp) => (
+                      <tr key={exp.id} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-5 py-3">
+                          <p className="font-medium text-gray-900">{exp.title}</p>
+                          {exp.isReimbursable && <span className="text-[10px] text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded font-medium">Reimbursable</span>}
+                        </td>
+                        <td className="px-5 py-3 text-gray-500">{CATEGORY_LABELS[exp.category]}</td>
+                        <td className="px-5 py-3 text-gray-400 text-xs">{exp.stakeholder?.name ?? "—"}</td>
+                        <td className="px-5 py-3 text-gray-400 text-xs whitespace-nowrap">
+                          {new Date(exp.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                        </td>
+                        <td className="px-5 py-3 text-right font-semibold text-gray-900">
+                          {formatCurrency(Number(exp.amount), exp.currency)}
+                        </td>
+                        <td className="px-5 py-3 text-center">
+                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${EXPENSE_STATUS_COLORS[exp.status]}`}>
+                            {exp.status.charAt(0) + exp.status.slice(1).toLowerCase()}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── CONTRACTS TAB ── */}
+        {pageTab === "contracts" && (
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-gray-900">Contracts & NDAs</h3>
+              <Button size="sm" variant="secondary" icon={<Plus className="w-3.5 h-3.5" />}
+                onClick={() => setContractModalOpen(true)}
+              >
+                New Contract
+              </Button>
+            </div>
+
+            {contracts.length === 0 ? (
+              <div className="bg-white border border-gray-200 rounded-xl p-10 text-center">
+                <Scroll className="w-8 h-8 text-gray-300 mx-auto mb-3" />
+                <p className="text-sm text-gray-500 mb-1">No contracts yet</p>
+                <p className="text-xs text-gray-400">Attach NDAs and agreements to this project</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {contracts.map((contract) => {
+                  const signedCount = contract.parties.filter((p) => p.signedAt).length;
+                  const statusColors: Record<string, string> = {
+                    FULLY_SIGNED: "bg-emerald-50 text-emerald-700",
+                    PARTIALLY_SIGNED: "bg-amber-50 text-amber-700",
+                    DRAFT: "bg-gray-100 text-gray-600",
+                    SENT: "bg-blue-50 text-blue-700",
+                    EXPIRED: "bg-orange-50 text-orange-700",
+                    TERMINATED: "bg-red-50 text-red-700",
+                  };
+                  return (
+                    <Link key={contract.id} href={`/contracts/${contract.id}`}>
+                      <div className="bg-white border border-gray-200 rounded-xl p-4 hover:shadow-md hover:border-indigo-200 transition-all flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
+                            <Scroll className="w-4 h-4 text-gray-400" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-gray-900 truncate">{contract.title}</p>
+                            <p className="text-xs text-gray-400">
+                              {contract.type.replace("_", " ")} · {new Date(contract.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3 flex-shrink-0">
+                          <span className="text-xs text-gray-500">{signedCount}/{contract.parties.length} signed</span>
+                          <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${statusColors[contract.status] ?? "bg-gray-100 text-gray-600"}`}>
+                            {contract.status.replace("_", " ")}
+                          </span>
+                        </div>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Edit Project Modal */}
+      {editProjectOpen && (
+        <Modal open={editProjectOpen} title="Edit Project" onClose={() => setEditProjectOpen(false)} width="max-w-2xl">
+          <ProjectForm
+            projectId={id}
+            initialData={{
+              clientId: project.clientId,
+              name: project.name,
+              description: project.description ?? "",
+              type: project.type,
+              serviceType: project.serviceType ?? "",
+              recurringFrequency: project.recurringFrequency ?? "",
+              status: project.status,
+              startDate: project.startDate ? project.startDate.slice(0, 10) : "",
+              endDate: project.endDate ? project.endDate.slice(0, 10) : "",
+              budget: project.budget?.toString() ?? "",
+              currency: project.currency,
+            } as ProjectFormData}
+            onSuccess={() => { setEditProjectOpen(false); fetchProject(); }}
+          />
+        </Modal>
+      )}
+
+      {/* Template modal */}
+      {templateOpen && (
+        <Modal open={templateOpen} title="Apply Task Template" onClose={() => setTemplateOpen(false)}>
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600">
+              Choose a template to auto-generate tasks for this project. Existing tasks won't be affected.
+            </p>
+            <div className="space-y-2">
+              {relevantTemplates.map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => setSelectedTemplate(t.id)}
+                  className={`w-full text-left p-4 rounded-xl border-2 transition-colors ${
+                    selectedTemplate === t.id
+                      ? "border-indigo-500 bg-indigo-50"
+                      : "border-gray-200 hover:border-gray-300"
+                  }`}
+                >
+                  <p className="text-sm font-semibold text-gray-900">{t.name}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">{t.description}</p>
+                  <p className="text-xs text-indigo-600 mt-1">{t.items?.length ?? 0} tasks</p>
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-3 pt-2">
+              <Button variant="secondary" onClick={() => setTemplateOpen(false)}>Cancel</Button>
+              <Button
+                disabled={!selectedTemplate} loading={applyingTemplate}
+                onClick={handleApplyTemplate}
+              >
+                Apply Template
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Task Create Modal */}
+      {taskModal.open && (
+        <TaskModal
+          projectId={id}
+          defaultStatus={taskModal.defaultStatus}
+          parentTask={taskModal.parentTask}
+          allTasks={flattenTasks(tasks)}
+          onClose={() => setTaskModal({ open: false })}
+          onSaved={handleTaskSaved}
+        />
+      )}
+
+      {/* Task Detail Panel */}
+      {taskPanel.open && taskPanel.task && (
+        <TaskPanel
+          task={taskPanel.task}
+          allTasks={flattenTasks(tasks)}
+          projectId={id}
+          onClose={() => setTaskPanel({ open: false })}
+          onUpdated={handleTaskPanelUpdated}
+          onDeleted={handleTaskPanelDeleted}
+        />
+      )}
+
+      {/* ── Inline Expense Modal ── */}
+      <Modal open={expenseModalOpen} title="Add Expense" onClose={() => { setExpenseModalOpen(false); setExpenseForm(EMPTY_EXPENSE_FORM); }}>
+        <form onSubmit={handleAddExpense} className="space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Title *</label>
+            <input value={expenseForm.title} onChange={(e) => setExpenseForm((f) => ({ ...f, title: e.target.value }))} required
+              placeholder="e.g. Stock photos, Freelancer fee"
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Amount *</label>
+              <input value={expenseForm.amount} onChange={(e) => setExpenseForm((f) => ({ ...f, amount: e.target.value }))} required type="number" step="0.01"
+                placeholder="0.00"
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Currency</label>
+              <select value={expenseForm.currency} onChange={(e) => setExpenseForm((f) => ({ ...f, currency: e.target.value }))}
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                {CURRENCIES.map((c) => <option key={c}>{c}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Category</label>
+              <select value={expenseForm.category} onChange={(e) => setExpenseForm((f) => ({ ...f, category: e.target.value as ExpenseCategory }))}
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                {(Object.entries(CATEGORY_LABELS) as [ExpenseCategory, string][]).map(([v, l]) => (
+                  <option key={v} value={v}>{l}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Date</label>
+              <input type="date" value={expenseForm.date} onChange={(e) => setExpenseForm((f) => ({ ...f, date: e.target.value }))}
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Stakeholder</label>
+              <select value={expenseForm.stakeholderId} onChange={(e) => setExpenseForm((f) => ({ ...f, stakeholderId: e.target.value }))}
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="">None</option>
+                {expenseStakeholders.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Status</label>
+              <select value={expenseForm.status} onChange={(e) => setExpenseForm((f) => ({ ...f, status: e.target.value as ExpenseStatus }))}
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                {(["PENDING", "APPROVED", "PAID"] as ExpenseStatus[]).map((s) => (
+                  <option key={s} value={s}>{s.charAt(0) + s.slice(1).toLowerCase()}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Notes</label>
+            <textarea value={expenseForm.notes} onChange={(e) => setExpenseForm((f) => ({ ...f, notes: e.target.value }))} rows={2}
+              placeholder="Optional notes..."
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+            />
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" checked={expenseForm.isReimbursable}
+              onChange={(e) => setExpenseForm((f) => ({ ...f, isReimbursable: e.target.checked }))}
+              className="w-4 h-4 text-indigo-600 rounded"
+            />
+            <span className="text-sm text-gray-700">Reimbursable — bill this back to client</span>
+          </label>
+          <div className="flex gap-3 pt-1">
+            <Button type="button" variant="secondary" onClick={() => { setExpenseModalOpen(false); setExpenseForm(EMPTY_EXPENSE_FORM); }}>Cancel</Button>
+            <Button type="submit" loading={expenseSaving}>Add Expense</Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* ── Inline Contract Modal ── */}
+      <Modal open={contractModalOpen} title="New Contract / NDA" onClose={() => { setContractModalOpen(false); setContractForm(EMPTY_CONTRACT_FORM); setContractParties([{ ...EMPTY_PARTY }]); }} width="max-w-2xl">
+        <form onSubmit={handleAddContract} className="space-y-5">
+          {contractError && (
+            <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{contractError}</p>
+          )}
+
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Title *</label>
+            <input value={contractForm.title} onChange={(e) => setContractForm((f) => ({ ...f, title: e.target.value }))} required
+              placeholder="e.g. NDA with Rahul Verma"
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-2">Contract Type</label>
+            <div className="grid grid-cols-3 gap-2">
+              {CONTRACT_TYPES.map((t) => (
+                <button key={t.value} type="button" onClick={() => setContractForm((f) => ({ ...f, type: t.value }))}
+                  className={`py-2 px-3 rounded-lg border-2 text-xs font-medium transition-colors ${
+                    contractForm.type === t.value ? "border-indigo-500 bg-indigo-50 text-indigo-700" : "border-gray-200 text-gray-600 hover:border-gray-300"
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Start Date</label>
+              <input type="date" value={contractForm.startDate} onChange={(e) => setContractForm((f) => ({ ...f, startDate: e.target.value }))}
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">End Date</label>
+              <input type="date" value={contractForm.endDate} onChange={(e) => setContractForm((f) => ({ ...f, endDate: e.target.value }))}
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Contract Value</label>
+              <input type="number" step="0.01" value={contractForm.value} onChange={(e) => setContractForm((f) => ({ ...f, value: e.target.value }))}
+                placeholder="0.00 (optional)"
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Currency</label>
+              <select value={contractForm.currency} onChange={(e) => setContractForm((f) => ({ ...f, currency: e.target.value }))}
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                {CURRENCIES.map((c) => <option key={c}>{c}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {/* Signing Parties */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-medium text-gray-500">Signing Parties</label>
+              <button type="button" onClick={() => setContractParties((p) => [...p, { ...EMPTY_PARTY }])}
+                className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+              >
+                <Plus className="w-3 h-3" /> Add Party
+              </button>
+            </div>
+            <div className="space-y-3">
+              {contractParties.map((party, i) => (
+                <div key={i} className="border border-gray-200 rounded-xl p-3 bg-gray-50 dark:bg-slate-800/50">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Party {i + 1}</span>
+                    {contractParties.length > 1 && (
+                      <button type="button" onClick={() => setContractParties((p) => p.filter((_, idx) => idx !== i))}
+                        className="text-red-400 hover:text-red-600 text-xs"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex gap-1 mb-2 bg-white dark:bg-slate-900 rounded-lg border border-gray-200 p-0.5 w-fit">
+                    {(["CLIENT", "STAKEHOLDER", "USER"] as ContractPartyType[]).map((t) => (
+                      <button key={t} type="button" onClick={() => updateContractParty(i, "partyType", t)}
+                        className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+                          party.partyType === t ? "bg-indigo-600 text-white" : "text-gray-500 hover:text-gray-700"
+                        }`}
+                      >
+                        {t === "USER" ? "Internal" : t.charAt(0) + t.slice(1).toLowerCase()}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {party.partyType === "CLIENT" && (
+                      <div>
+                        <label className="block text-xs text-gray-400 mb-1">Client</label>
+                        <select value={party.clientId} onChange={(e) => updateContractParty(i, "clientId", e.target.value)}
+                          className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                        >
+                          <option value="">Pick client…</option>
+                          {contractClients.map((c) => (
+                            <option key={c.id} value={c.id}>{c.companyName ? `${c.companyName} (${c.name})` : c.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                    {party.partyType === "STAKEHOLDER" && (
+                      <div>
+                        <label className="block text-xs text-gray-400 mb-1">Stakeholder</label>
+                        <select value={party.stakeholderId} onChange={(e) => updateContractParty(i, "stakeholderId", e.target.value)}
+                          className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                        >
+                          <option value="">Pick stakeholder…</option>
+                          {contractStakeholders.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                        </select>
+                      </div>
+                    )}
+                    {party.partyType === "USER" && (
+                      <div>
+                        <label className="block text-xs text-gray-400 mb-1">Team Member</label>
+                        <select value={party.userId} onChange={(e) => updateContractParty(i, "userId", e.target.value)}
+                          className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                        >
+                          <option value="">Pick user…</option>
+                          {contractUsers.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+                        </select>
+                      </div>
+                    )}
+                    <div>
+                      <label className="block text-xs text-gray-400 mb-1">Name *</label>
+                      <input value={party.name} onChange={(e) => updateContractParty(i, "name", e.target.value)}
+                        placeholder="Full name"
+                        className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-xs text-gray-400 mb-1">Email</label>
+                      <input type="email" value={party.email} onChange={(e) => updateContractParty(i, "email", e.target.value)}
+                        placeholder="email@example.com"
+                        className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Notes</label>
+            <textarea value={contractForm.notes} onChange={(e) => setContractForm((f) => ({ ...f, notes: e.target.value }))} rows={2}
+              placeholder="Key terms, special clauses..."
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+            />
+          </div>
+
+          <div className="flex gap-3 pt-1">
+            <Button type="button" variant="secondary" onClick={() => { setContractModalOpen(false); setContractForm(EMPTY_CONTRACT_FORM); setContractParties([{ ...EMPTY_PARTY }]); }}>Cancel</Button>
+            <Button type="submit" loading={contractSaving}>Create Contract</Button>
+          </div>
+        </form>
+      </Modal>
+    </div>
+  );
+}

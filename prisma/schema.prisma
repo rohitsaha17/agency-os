@@ -839,7 +839,8 @@ model CompanySettings {
   letterheadEmail     String?
   letterheadWebsite   String?
   letterheadColor     String   @default("#6366f1")  // accent color on PDFs
-  letterheadTemplate  String   @default("CLASSIC")  // CLASSIC | MODERN | MINIMAL
+  letterheadTemplate  String   @default("CLASSIC")  // CLASSIC|MODERN|MINIMAL|BOLD|ELEGANT|SPLIT|EXECUTIVE
+  letterheadConfig    String?                        // JSON: extended layout config (logo pos, visibility, font…)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

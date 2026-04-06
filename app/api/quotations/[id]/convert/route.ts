@@ -20,6 +20,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       where: { id },
       include: {
         lineItems: { orderBy: { order: "asc" } },
+        project: true,
       },
     });
 

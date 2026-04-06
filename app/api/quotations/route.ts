@@ -83,7 +83,7 @@ export async function POST(req: Request) {
     }[]).map((item, i) => ({
       title: item.title,
       description: item.description?.trim() || null,
-      pricingType: item.pricingType || "PER_ITEM",
+      pricingType: (item.pricingType || "PER_ITEM") as import("@prisma/client").PricingType,
       quantity: parseFloat(item.quantity) || 1,
       unitPrice: parseFloat(item.unitPrice) || 0,
       unit: item.unit?.trim() || null,

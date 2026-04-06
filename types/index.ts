@@ -703,6 +703,22 @@ export interface MessageAttachmentItem {
   };
 }
 
+export interface LetterheadConfig {
+  logoPosition: "left" | "center" | "right";
+  logoSize:     "sm" | "md" | "lg";
+  headerBg:     string;
+  headerTextColor: "light" | "dark";
+  showPhone:    boolean;
+  showEmail:    boolean;
+  showWebsite:  boolean;
+  showAddress:  boolean;
+  showAgencyName: boolean;
+  footerAlign:  "left" | "center" | "right";
+  showFooterDate: boolean;
+  showFooterPageNum: boolean;
+  font: "sans" | "serif";
+}
+
 export interface CompanySettings {
   id: string;
   name: string;
@@ -725,6 +741,7 @@ export interface CompanySettings {
   letterheadWebsite: string | null;
   letterheadColor: string;
   letterheadTemplate: string;
+  letterheadConfig: string | null;
   createdAt: string;
   updatedAt: string;
 }

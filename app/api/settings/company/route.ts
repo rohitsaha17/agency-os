@@ -27,7 +27,7 @@ export async function PATCH(req: NextRequest) {
       logoUrl, currency, timezone, dateFormat,
       letterheadLogoUrl, letterheadHeader, letterheadFooter,
       letterheadAddress, letterheadPhone, letterheadEmail,
-      letterheadWebsite, letterheadColor, letterheadTemplate,
+      letterheadWebsite, letterheadColor, letterheadTemplate, letterheadConfig,
     } = body;
 
     const settings = await prisma.companySettings.upsert({
@@ -54,6 +54,7 @@ export async function PATCH(req: NextRequest) {
         letterheadWebsite:  letterheadWebsite  ?? null,
         letterheadColor:    letterheadColor    ?? "#6366f1",
         letterheadTemplate: letterheadTemplate ?? "CLASSIC",
+        letterheadConfig:   letterheadConfig   ?? null,
       },
       update: {
         ...(name               !== undefined && { name }),
@@ -76,6 +77,7 @@ export async function PATCH(req: NextRequest) {
         ...(letterheadWebsite  !== undefined && { letterheadWebsite }),
         ...(letterheadColor    !== undefined && { letterheadColor }),
         ...(letterheadTemplate !== undefined && { letterheadTemplate }),
+        ...(letterheadConfig   !== undefined && { letterheadConfig }),
       },
     });
 

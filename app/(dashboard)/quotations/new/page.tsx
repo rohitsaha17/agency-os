@@ -1,11 +1,12 @@
 "use client";
 
+import { Suspense } from "react";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { QuotationBuilder } from "@/components/quotations/QuotationBuilder";
 
-export default function NewQuotationPage() {
+function NewQuotationContent() {
   const searchParams = useSearchParams();
   const clientId = searchParams.get("clientId") ?? undefined;
 
@@ -27,5 +28,13 @@ export default function NewQuotationPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function NewQuotationPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-full"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500" /></div>}>
+      <NewQuotationContent />
+    </Suspense>
   );
 }

@@ -138,7 +138,7 @@ function NavContent({
               {section.group}
             </p>
             <ul className="space-y-0.5">
-              {section.links.map(({ href, label, icon, soon }) => (
+              {section.links.map(({ href, label, icon, soon }: { href: string; label: string; icon: React.ElementType; soon?: boolean }) => (
                 <NavItem
                   key={href}
                   href={href}

@@ -40,7 +40,7 @@ function buildTree(flat: PrismaTask[]): Task[] {
       isClientVisible: t.isClientVisible,
       showSubtasksToClient: t.showSubtasksToClient,
       manager: t.manager,
-      assignees: t.assignees.map((a) => ({ userId: a.userId, user: { ...a.user, isActive: true } })),
+      assignees: t.assignees.map((a) => ({ userId: a.userId, user: { ...a.user, isActive: true, role: a.user.role as import("@/types").UserRole } })),
       children: [],
       createdAt: t.createdAt.toISOString(),
       updatedAt: t.updatedAt.toISOString(),

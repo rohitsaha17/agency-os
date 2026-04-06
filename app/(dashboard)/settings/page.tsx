@@ -332,146 +332,329 @@ function CompanyTab({
 /* ─────────────────────────────────────────────────────────────
    Letterhead template definitions
    ───────────────────────────────────────────────────────────── */
-type LetterheadTemplate = "CLASSIC" | "MODERN" | "MINIMAL";
+interface LetterheadConfig {
+  logoPosition:    "left" | "center" | "right";
+  logoSize:        "sm" | "md" | "lg";
+  headerBg:        string;
+  headerTextColor: "light" | "dark";
+  showPhone:       boolean;
+  showEmail:       boolean;
+  showWebsite:     boolean;
+  showAddress:     boolean;
+  showAgencyName:  boolean;
+  footerAlign:     "left" | "center" | "right";
+  showFooterDate:  boolean;
+  showFooterPageNum: boolean;
+  font:            "sans" | "serif";
+}
+
+type LHTemplate = "CLASSIC" | "MODERN" | "MINIMAL" | "BOLD" | "ELEGANT" | "SPLIT" | "EXECUTIVE";
+
+const DEFAULT_LH_CFG: LetterheadConfig = {
+  logoPosition:    "left",
+  logoSize:        "md",
+  headerBg:        "#1e293b",
+  headerTextColor: "light",
+  showPhone:       true,
+  showEmail:       true,
+  showWebsite:     true,
+  showAddress:     true,
+  showAgencyName:  true,
+  footerAlign:     "center",
+  showFooterDate:  true,
+  showFooterPageNum: true,
+  font:            "sans",
+};
+
+function parseLHConfig(raw: string | null | undefined): LetterheadConfig {
+  try { if (raw) return { ...DEFAULT_LH_CFG, ...JSON.parse(raw) }; } catch {}
+  return { ...DEFAULT_LH_CFG };
+}
 
 interface TemplateOption {
-  value: LetterheadTemplate;
+  value: LHTemplate;
   label: string;
   desc: string;
+  hasDarkHeader: boolean;
 }
 
 const TEMPLATE_OPTIONS: TemplateOption[] = [
-  { value: "CLASSIC", label: "Classic",  desc: "Centered logo + clean header strip with a solid accent border" },
-  { value: "MODERN",  label: "Modern",   desc: "Bold left-aligned sidebar accent with contemporary typography" },
-  { value: "MINIMAL", label: "Minimal",  desc: "Ultra-clean monochrome layout with a single accent underline" },
+  { value: "CLASSIC",   label: "Classic",   desc: "Clean horizontal layout with logo, name, and solid accent border",    hasDarkHeader: false },
+  { value: "MODERN",    label: "Modern",    desc: "Bold vertical accent bar with contemporary typographic hierarchy",    hasDarkHeader: false },
+  { value: "MINIMAL",   label: "Minimal",   desc: "Ultra-clean whitespace-driven layout with single accent underline",   hasDarkHeader: false },
+  { value: "BOLD",      label: "Bold",      desc: "Full-width color band header — striking and high-impact",             hasDarkHeader: true  },
+  { value: "ELEGANT",   label: "Elegant",   desc: "Centered monogram layout with fine decorative rule lines",            hasDarkHeader: false },
+  { value: "SPLIT",     label: "Split",     desc: "Two-column: colored brand panel left, contact details right",        hasDarkHeader: true  },
+  { value: "EXECUTIVE", label: "Executive", desc: "Dark premium header with accent-colored name — luxury positioning",  hasDarkHeader: true  },
 ];
 
-/* Live preview renders differently per template */
+/* ── Mini thumbnail for each template ── */
+function TemplateThumbnail({ tpl, accent, headerBg }: { tpl: LHTemplate; accent: string; headerBg: string }) {
+  if (tpl === "CLASSIC") return (
+    <div className="w-full h-16 flex flex-col rounded overflow-hidden border border-gray-200">
+      <div className="flex-shrink-0 h-5 px-2 flex items-center justify-between" style={{ borderBottom: `2px solid ${accent}` }}>
+        <div className="flex items-center gap-1"><div className="h-3 w-3 rounded" style={{ background: accent }} /><div className="h-1.5 rounded bg-gray-300 w-8" /></div>
+        <div className="h-1 rounded bg-gray-200 w-8" />
+      </div>
+      <div className="flex-1 px-2 py-1.5 bg-gray-50 space-y-1"><div className="h-1 rounded bg-gray-200 w-full" /><div className="h-1 rounded bg-gray-100 w-3/4" /></div>
+      <div className="flex-shrink-0 h-3 px-2 border-t border-gray-100 flex items-center justify-center"><div className="h-1 rounded bg-gray-200 w-12" /></div>
+    </div>
+  );
+  if (tpl === "MODERN") return (
+    <div className="w-full h-16 flex flex-col rounded overflow-hidden border border-gray-200">
+      <div className="flex-shrink-0 h-5 flex" style={{ borderBottom: "1px solid #e5e7eb" }}>
+        <div className="w-1.5 flex-shrink-0" style={{ background: accent }} />
+        <div className="flex-1 px-2 flex items-center justify-between">
+          <div><div className="h-1.5 rounded bg-gray-300 w-10 mb-0.5" /><div className="h-0.5 rounded w-4" style={{ background: accent }} /></div>
+          <div className="h-1 rounded bg-gray-200 w-8" />
+        </div>
+      </div>
+      <div className="flex flex-1">
+        <div className="w-1.5 flex-shrink-0 opacity-30" style={{ background: accent }} />
+        <div className="flex-1 px-2 py-1.5 bg-gray-50 space-y-1"><div className="h-1 rounded bg-gray-200 w-full" /><div className="h-1 rounded bg-gray-100 w-3/4" /></div>
+      </div>
+    </div>
+  );
+  if (tpl === "MINIMAL") return (
+    <div className="w-full h-16 flex flex-col rounded overflow-hidden border border-gray-200">
+      <div className="flex-shrink-0 h-5 px-2 flex items-end justify-between pb-1" style={{ borderBottom: `1.5px solid ${accent}` }}>
+        <div className="h-1.5 rounded bg-gray-600 w-12" />
+        <div className="h-1 rounded bg-gray-400 w-8" />
+      </div>
+      <div className="flex-1 px-2 py-1.5 bg-white space-y-1"><div className="h-1 rounded bg-gray-100 w-full" /><div className="h-1 rounded bg-gray-100 w-3/4" /></div>
+    </div>
+  );
+  if (tpl === "BOLD") return (
+    <div className="w-full h-16 flex flex-col rounded overflow-hidden border border-gray-200">
+      <div className="flex-shrink-0 h-6 px-2.5 flex items-center justify-between" style={{ background: headerBg }}>
+        <div className="flex items-center gap-1.5"><div className="h-3 w-3 rounded-sm bg-white/30" /><div className="h-1.5 rounded bg-white/60 w-10" /></div>
+        <div className="h-1 rounded bg-white/30 w-8" />
+      </div>
+      <div className="flex-1 px-2 py-1.5 bg-gray-50 space-y-1"><div className="h-1 rounded bg-gray-200 w-full" /><div className="h-1 rounded bg-gray-100 w-3/4" /></div>
+    </div>
+  );
+  if (tpl === "ELEGANT") return (
+    <div className="w-full h-16 flex flex-col rounded overflow-hidden border border-gray-200">
+      <div className="flex-shrink-0 h-6 flex flex-col items-center justify-center gap-0.5 bg-white px-2 border-b" style={{ borderColor: `${accent}30` }}>
+        <div className="h-1.5 rounded bg-gray-600 w-10 text-center" />
+        <div className="flex items-center gap-1 mt-0.5"><div className="flex-1 h-px bg-gray-200 w-4" /><div className="w-1 h-1 rounded-full" style={{ background: accent }} /><div className="flex-1 h-px bg-gray-200 w-4" /></div>
+      </div>
+      <div className="flex-1 px-2 py-1.5 bg-gray-50 space-y-1"><div className="h-1 rounded bg-gray-200 w-full" /><div className="h-1 rounded bg-gray-100 w-3/4" /></div>
+    </div>
+  );
+  if (tpl === "SPLIT") return (
+    <div className="w-full h-16 flex rounded overflow-hidden border border-gray-200">
+      <div className="w-5 flex-shrink-0 flex flex-col justify-center items-center gap-1 p-1" style={{ background: headerBg }}>
+        <div className="w-2 h-2 rounded-sm bg-white/30" />
+        <div className="h-0.5 rounded bg-white/40 w-3" />
+      </div>
+      <div className="flex-1 bg-gray-50 px-2 py-1.5 space-y-1">
+        <div className="h-1 rounded bg-gray-200 w-full" /><div className="h-1 rounded bg-gray-100 w-3/4" />
+        <div className="h-1 rounded bg-gray-100 w-1/2" />
+      </div>
+    </div>
+  );
+  // EXECUTIVE
+  return (
+    <div className="w-full h-16 flex flex-col rounded overflow-hidden border border-gray-200">
+      <div className="flex-shrink-0 h-6 px-2.5 flex items-center justify-between" style={{ background: headerBg }}>
+        <div className="flex items-center gap-1.5"><div className="h-3 w-3 rounded-sm bg-white/20" /><div className="h-2 rounded w-10" style={{ background: accent, opacity: 0.9 }} /></div>
+        <div className="space-y-0.5"><div className="h-1 rounded bg-white/20 w-8" /><div className="h-1 rounded bg-white/20 w-6" /></div>
+      </div>
+      <div className="flex-1 px-2 py-1.5 bg-gray-50 space-y-1"><div className="h-1 rounded bg-gray-200 w-full" /><div className="h-1 rounded bg-gray-100 w-3/4" /></div>
+    </div>
+  );
+}
+
+/* ── Full live preview ── */
 function LetterheadPreview({
-  form,
-  template,
+  form, cfg, template,
 }: {
   form: Partial<CompanySettings>;
-  template: LetterheadTemplate;
+  cfg: LetterheadConfig;
+  template: LHTemplate;
 }) {
-  const accent = form.letterheadColor ?? "#6366f1";
+  const accent  = form.letterheadColor ?? "#6366f1";
+  const hBg     = cfg.headerBg ?? "#1e293b";
   const logoSrc = form.letterheadLogoUrl || form.logoUrl;
-  const agencyName = form.letterheadHeader || form.name || "Agency Name";
-  const footer = form.letterheadFooter || "Thank you for your business.";
+  const name    = form.letterheadHeader || form.name || "Agency Name";
+  const footer  = form.letterheadFooter || "Thank you for your business.";
 
-  const ContactBlock = () => (
-    <div className="text-[10px] text-gray-500 space-y-0.5">
-      {form.letterheadAddress && <p className="whitespace-pre-line">{form.letterheadAddress}</p>}
-      {form.letterheadPhone    && <p>{form.letterheadPhone}</p>}
-      {form.letterheadEmail    && <p>{form.letterheadEmail}</p>}
-      {form.letterheadWebsite  && <p>{form.letterheadWebsite}</p>}
-    </div>
-  );
+  const LogoEl = ({ light = false }: { light?: boolean }) => {
+    const sz = cfg.logoSize === "lg" ? "h-10" : cfg.logoSize === "sm" ? "h-6" : "h-8";
+    if (logoSrc) return <img src={logoSrc} alt={name} className={`${sz} object-contain`} />;
+    const bg = light ? "rgba(255,255,255,0.25)" : accent;
+    const wSz = cfg.logoSize === "lg" ? "w-9 h-9" : cfg.logoSize === "sm" ? "w-6 h-6" : "w-8 h-8";
+    return <div className={`${wSz} rounded-lg flex items-center justify-center text-white font-bold text-sm flex-shrink-0`} style={{ background: bg }}>{name[0]}</div>;
+  };
 
-  const LogoOrInitial = ({ size = "h-9", textSize = "text-sm" }: { size?: string; textSize?: string }) => (
-    logoSrc ? (
-      <img src={logoSrc} alt="Logo" className={`${size} object-contain`} />
-    ) : (
-      <div
-        className={`w-9 h-9 rounded-lg flex items-center justify-center text-white font-bold ${textSize} flex-shrink-0`}
-        style={{ background: accent }}
-      >
-        {agencyName[0]}
-      </div>
-    )
-  );
+  const ContactBlock = ({ light = false }: { light?: boolean }) => {
+    const col = light ? "rgba(255,255,255,0.7)" : "#9ca3af";
+    const items: string[] = [];
+    if (cfg.showAddress && form.letterheadAddress) items.push(form.letterheadAddress.replace(/\n/g, " · "));
+    if (cfg.showPhone   && form.letterheadPhone)   items.push(form.letterheadPhone);
+    if (cfg.showEmail   && form.letterheadEmail)   items.push(form.letterheadEmail);
+    if (cfg.showWebsite && form.letterheadWebsite) items.push(form.letterheadWebsite);
+    if (!items.length) return null;
+    return <div className="space-y-0.5">{items.map((it, i) => <p key={i} className="text-[9px] leading-relaxed" style={{ color: col }}>{it}</p>)}</div>;
+  };
 
   const ContentSkeleton = () => (
-    <div className="px-5 py-4 bg-gray-50/60 flex-1">
-      <div className="space-y-1.5 mb-3">
-        <div className="h-2.5 rounded bg-gray-200 w-1/3" />
-        <div className="h-2 rounded bg-gray-100 w-full" />
-        <div className="h-2 rounded bg-gray-100 w-5/6" />
+    <div className="px-4 py-3 bg-gray-50/60 flex-1">
+      <div className="space-y-1.5 mb-2">
+        <div className="h-2 rounded bg-gray-200 w-1/4" />
+        <div className="h-1.5 rounded bg-gray-100 w-full" />
+        <div className="h-1.5 rounded bg-gray-100 w-5/6" />
       </div>
-      <div className="border border-gray-200 rounded-lg overflow-hidden">
-        <div className="h-5 px-3 flex items-center" style={{ background: accent }}>
-          <div className="h-1.5 rounded bg-white/50 w-16" />
-        </div>
-        {[1, 2, 3].map((i) => (
-          <div key={i} className="h-6 flex items-center px-3 border-b border-gray-100 last:border-0">
-            <div className="h-1.5 rounded bg-gray-200 w-full" />
-          </div>
-        ))}
+      <div className="border border-gray-200 rounded overflow-hidden">
+        <div className="h-4 px-2 flex items-center" style={{ background: accent }}><div className="h-1.5 rounded bg-white/50 w-12" /></div>
+        {[1,2,3].map(i => <div key={i} className="h-5 flex items-center px-2 border-b border-gray-100 last:border-0"><div className="h-1 rounded bg-gray-200 w-full" /></div>)}
       </div>
     </div>
   );
 
-  if (template === "CLASSIC") {
-    return (
-      <div className="border border-gray-200 rounded-xl overflow-hidden shadow-sm bg-white text-xs">
-        {/* Header */}
-        <div className="px-5 py-4" style={{ borderBottom: `3px solid ${accent}` }}>
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex items-center gap-2.5">
-              <LogoOrInitial />
-              <p className="font-bold text-gray-800 text-sm leading-tight">{agencyName}</p>
-            </div>
-            <ContactBlock />
-          </div>
-        </div>
-        <ContentSkeleton />
-        <div className="px-5 py-2.5 border-t border-gray-100">
-          <p className="text-[10px] text-gray-400 text-center">{footer}</p>
-        </div>
-      </div>
-    );
-  }
+  const agencyNameEl = cfg.showAgencyName
+    ? <span className="font-bold text-[11px] leading-tight">{name}</span>
+    : null;
 
-  if (template === "MODERN") {
-    return (
-      <div className="border border-gray-200 rounded-xl overflow-hidden shadow-sm bg-white text-xs">
-        {/* Header with left accent bar */}
-        <div className="flex" style={{ borderBottom: `1px solid #e5e7eb` }}>
-          <div className="w-1.5 flex-shrink-0" style={{ background: accent }} />
-          <div className="flex-1 px-4 py-4 flex items-start justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <LogoOrInitial />
-              </div>
-              <p className="font-bold text-gray-900 text-sm leading-tight">{agencyName}</p>
-              <div className="h-0.5 w-8 rounded mt-1" style={{ background: accent }} />
-            </div>
-            <ContactBlock />
-          </div>
-        </div>
-        <ContentSkeleton />
-        <div className="flex">
-          <div className="w-1.5 flex-shrink-0" style={{ background: `${accent}30` }} />
-          <div className="flex-1 px-4 py-2">
-            <p className="text-[10px] text-gray-400">{footer}</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const logoJustify = cfg.logoPosition === "center" ? "justify-center" : cfg.logoPosition === "right" ? "justify-end" : "justify-start";
 
-  // MINIMAL
-  return (
+  if (template === "CLASSIC") return (
     <div className="border border-gray-200 rounded-xl overflow-hidden shadow-sm bg-white text-xs">
-      {/* Ultra-clean header */}
-      <div className="px-5 py-4">
-        <div className="flex items-end justify-between gap-3 pb-3" style={{ borderBottom: `1.5px solid ${accent}` }}>
-          <div>
-            {logoSrc && <img src={logoSrc} alt="Logo" className="h-7 object-contain mb-1.5" />}
-            <p className="font-semibold text-gray-900 tracking-tight text-sm">{agencyName}</p>
+      <div className="px-4 py-3 flex items-start justify-between gap-3" style={{ borderBottom: `3px solid ${accent}` }}>
+        <div className={`flex items-center gap-2 ${logoJustify}`}><LogoEl />{agencyNameEl && <div className="text-gray-800">{agencyNameEl}</div>}</div>
+        <ContactBlock />
+      </div>
+      <ContentSkeleton />
+      <div className="px-4 py-2 border-t border-gray-100 text-center text-[9px] text-gray-400">{footer}</div>
+    </div>
+  );
+
+  if (template === "MODERN") return (
+    <div className="border border-gray-200 rounded-xl overflow-hidden shadow-sm bg-white text-xs">
+      <div className="flex" style={{ borderBottom: "1px solid #e5e7eb" }}>
+        <div className="w-1.5 flex-shrink-0" style={{ background: accent }} />
+        <div className="flex-1 px-3 py-3 flex items-start justify-between gap-2">
+          <div className={`flex items-center gap-2 ${logoJustify}`}>
+            <LogoEl />
+            <div>{agencyNameEl && <div className="text-gray-900">{agencyNameEl}</div>}<div className="h-0.5 w-6 rounded mt-1" style={{ background: accent }} /></div>
           </div>
-          <div className="text-right text-[10px] text-gray-400 space-y-0.5">
-            {form.letterheadPhone   && <p>{form.letterheadPhone}</p>}
-            {form.letterheadEmail   && <p>{form.letterheadEmail}</p>}
-            {form.letterheadWebsite && <p>{form.letterheadWebsite}</p>}
+          <ContactBlock />
+        </div>
+      </div>
+      <ContentSkeleton />
+      <div className="flex">
+        <div className="w-1.5 flex-shrink-0 opacity-20" style={{ background: accent }} />
+        <div className="flex-1 px-3 py-1.5 text-[9px] text-gray-400">{footer}</div>
+      </div>
+    </div>
+  );
+
+  if (template === "MINIMAL") return (
+    <div className="border border-gray-200 rounded-xl overflow-hidden shadow-sm bg-white text-xs">
+      <div className="px-4 py-3">
+        <div className="flex items-end justify-between gap-3 pb-2" style={{ borderBottom: `1.5px solid ${accent}` }}>
+          <div className={`flex items-center gap-2 ${logoJustify}`}>
+            {logoSrc && <img src={logoSrc} alt={name} className="h-6 object-contain" />}
+            {agencyNameEl && <div className="text-gray-900">{agencyNameEl}</div>}
+          </div>
+          <div className="text-right text-[9px] text-gray-400 space-y-0.5">
+            {cfg.showPhone   && form.letterheadPhone   && <p>{form.letterheadPhone}</p>}
+            {cfg.showEmail   && form.letterheadEmail   && <p>{form.letterheadEmail}</p>}
+            {cfg.showWebsite && form.letterheadWebsite && <p>{form.letterheadWebsite}</p>}
           </div>
         </div>
       </div>
       <ContentSkeleton />
-      <div className="px-5 py-2.5 border-t border-gray-100">
-        <p className="text-[10px] text-gray-400">{footer}</p>
-      </div>
+      <div className="px-4 py-2 border-t border-gray-100 text-[9px] text-gray-400">{footer}</div>
     </div>
+  );
+
+  if (template === "BOLD") return (
+    <div className="border border-gray-200 rounded-xl overflow-hidden shadow-sm bg-white text-xs">
+      <div className="px-4 py-3 flex items-center justify-between gap-3" style={{ background: hBg }}>
+        <div className={`flex items-center gap-2 ${logoJustify}`}><LogoEl light />{agencyNameEl && <div style={{ color: cfg.headerTextColor === "light" ? "#fff" : "#111" }} className="font-bold text-[12px]">{name}</div>}</div>
+        <ContactBlock light />
+      </div>
+      <ContentSkeleton />
+      <div className="px-4 py-2 border-t border-gray-100 text-center text-[9px] text-gray-400">{footer}</div>
+    </div>
+  );
+
+  if (template === "ELEGANT") return (
+    <div className="border border-gray-200 rounded-xl overflow-hidden shadow-sm bg-white text-xs">
+      <div className="px-4 py-3 text-center bg-white border-b" style={{ borderColor: `${accent}30` }}>
+        <div className="flex justify-center mb-1.5"><LogoEl /></div>
+        {agencyNameEl && <div className="text-gray-800 text-[11px] uppercase font-semibold tracking-wide">{name}</div>}
+        <div className="flex items-center gap-2 mt-1.5 justify-center">
+          <div className="flex-1 h-px bg-gray-200" />
+          <div className="w-1.5 h-1.5 rounded-full" style={{ background: accent }} />
+          <div className="flex-1 h-px bg-gray-200" />
+        </div>
+        {(() => {
+          const ps: string[] = [];
+          if (cfg.showPhone   && form.letterheadPhone)   ps.push(form.letterheadPhone);
+          if (cfg.showEmail   && form.letterheadEmail)   ps.push(form.letterheadEmail);
+          if (cfg.showWebsite && form.letterheadWebsite) ps.push(form.letterheadWebsite);
+          return ps.length ? <p className="text-[8px] text-gray-400 mt-1">{ps.join(" · ")}</p> : null;
+        })()}
+      </div>
+      <ContentSkeleton />
+      <div className="px-4 py-2 border-t border-gray-100 text-center text-[9px] text-gray-400">{footer}</div>
+    </div>
+  );
+
+  if (template === "SPLIT") return (
+    <div className="border border-gray-200 rounded-xl overflow-hidden shadow-sm bg-white text-xs">
+      <div className="flex border-b border-gray-200">
+        <div className="w-1/3 flex-shrink-0 p-3 flex flex-col justify-center gap-1.5" style={{ background: hBg }}>
+          <div className={`flex ${logoJustify}`}><LogoEl light /></div>
+          {agencyNameEl && <div className="font-bold text-[10px] leading-tight" style={{ color: cfg.headerTextColor === "light" ? "#fff" : "#111" }}>{name}</div>}
+          <div className="h-0.5 w-5 rounded" style={{ background: accent }} />
+        </div>
+        <div className="flex-1 p-3 bg-gray-50 flex flex-col justify-center space-y-0.5">
+          <ContactBlock />
+        </div>
+      </div>
+      <ContentSkeleton />
+      <div className="px-4 py-2 border-t border-gray-100 text-[9px] text-gray-400">{footer}</div>
+    </div>
+  );
+
+  // EXECUTIVE
+  return (
+    <div className="border border-gray-200 rounded-xl overflow-hidden shadow-sm bg-white text-xs">
+      <div className="px-4 py-3 flex items-center justify-between gap-3" style={{ background: hBg }}>
+        <div className={`flex items-center gap-2.5 ${logoJustify}`}>
+          <LogoEl light />
+          <div>
+            {agencyNameEl && <div className="font-bold text-[12px]" style={{ color: accent }}>{name}</div>}
+            <div className="h-0.5 w-8 rounded mt-1 opacity-40 bg-white" />
+          </div>
+        </div>
+        <div className="border-l border-white/10 pl-3"><ContactBlock light /></div>
+      </div>
+      <ContentSkeleton />
+      <div className="px-4 py-2 border-t border-gray-100 text-[9px] text-gray-400">{footer}</div>
+    </div>
+  );
+}
+
+/* ── Toggle switch ── */
+function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
+  return (
+    <label className="flex items-center gap-2.5 cursor-pointer select-none">
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        onClick={() => onChange(!checked)}
+        className={`relative w-8 h-5 rounded-full transition-colors flex-shrink-0 ${checked ? "bg-indigo-500" : "bg-gray-200"}`}
+      >
+        <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${checked ? "translate-x-3" : ""}`} />
+      </button>
+      <span className={`text-xs ${checked ? "text-gray-700" : "text-gray-400"}`}>{label}</span>
+    </label>
   );
 }
 
@@ -481,25 +664,33 @@ function LetterheadPreview({
 function LetterheadTab({
   settings, onSaved,
 }: { settings: CompanySettings; onSaved: (s: CompanySettings) => void }) {
-  const [form, setForm] = useState<Partial<CompanySettings>>({});
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [form, setForm]         = useState<Partial<CompanySettings>>({});
+  const [cfg,  setCfg]          = useState<LetterheadConfig>({ ...DEFAULT_LH_CFG });
+  const [saving, setSaving]     = useState(false);
+  const [saved, setSaved]       = useState(false);
   const [logoUploading, setLogoUploading] = useState(false);
-  const [logoError, setLogoError] = useState("");
+  const [logoError, setLogoError]         = useState("");
   const logoFileRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => { setForm(settings); }, [settings]);
-  const set = (k: string, v: string) => setForm((p) => ({ ...p, [k]: v }));
+  useEffect(() => {
+    setForm(settings);
+    setCfg(parseLHConfig((settings as unknown as Record<string, unknown>).letterheadConfig as string | null));
+  }, [settings]);
 
-  const template: LetterheadTemplate = (form.letterheadTemplate as LetterheadTemplate) ?? "CLASSIC";
+  const set      = (k: string, v: string) => setForm(p => ({ ...p, [k]: v }));
+  const setCfgK  = <K extends keyof LetterheadConfig>(k: K, v: LetterheadConfig[K]) => setCfg(p => ({ ...p, [k]: v }));
+
+  const template = (form.letterheadTemplate as LHTemplate) ?? "CLASSIC";
+  const accent   = form.letterheadColor ?? "#6366f1";
+  const hasDarkHeader = TEMPLATE_OPTIONS.find(o => o.value === template)?.hasDarkHeader ?? false;
 
   const handleSave = async () => {
     setSaving(true);
     try {
+      const payload = { ...form, letterheadConfig: JSON.stringify(cfg) };
       const res = await fetch("/api/settings/company", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
       });
       if (res.ok) {
         const data = await res.json();
@@ -522,12 +713,10 @@ function LetterheadTab({
       const dataUrl = reader.result as string;
       const updated = { ...form, letterheadLogoUrl: dataUrl };
       setForm(updated);
-      // Auto-save immediately
       try {
         const res = await fetch("/api/settings/company", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(updated),
+          method: "PATCH", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...updated, letterheadConfig: JSON.stringify(cfg) }),
         });
         if (res.ok) { const data = await res.json(); onSaved(data); }
       } finally { setLogoUploading(false); }
@@ -536,104 +725,42 @@ function LetterheadTab({
     e.target.value = "";
   };
 
-  const accentColor = form.letterheadColor ?? "#6366f1";
-
   return (
     <div className="space-y-6">
-      {/* ── Template Style Selector ─────────────────────────── */}
-      <SectionCard
-        title="Template Style"
-        desc="Choose the visual layout for your letterhead across all generated PDFs"
-      >
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {TEMPLATE_OPTIONS.map((opt) => {
+
+      {/* ── Template Selector ── */}
+      <SectionCard title="Template Style" desc="Choose the visual layout applied to all generated PDFs">
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5">
+          {TEMPLATE_OPTIONS.map(opt => {
             const isSelected = template === opt.value;
             return (
               <button
                 key={opt.value}
                 onClick={() => set("letterheadTemplate", opt.value)}
-                className={`
-                  relative text-left p-4 rounded-xl border-2 transition-all
-                  ${isSelected
-                    ? "border-indigo-500 bg-indigo-50/60 shadow-sm"
-                    : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"}
-                `}
+                className={`relative text-left p-2.5 rounded-xl border-2 transition-all ${isSelected ? "border-indigo-500 bg-indigo-50/50 shadow-sm" : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"}`}
               >
                 {isSelected && (
-                  <span className="absolute top-2.5 right-2.5 w-5 h-5 rounded-full bg-indigo-500 flex items-center justify-center">
-                    <Check className="w-3 h-3 text-white" />
+                  <span className="absolute top-2 right-2 w-4 h-4 rounded-full bg-indigo-500 flex items-center justify-center">
+                    <Check className="w-2.5 h-2.5 text-white" />
                   </span>
                 )}
-                {/* Mini template thumbnail */}
-                <div className={`w-full h-16 rounded-lg mb-3 overflow-hidden border ${isSelected ? "border-indigo-200" : "border-gray-200"}`}>
-                  {opt.value === "CLASSIC" && (
-                    <div className="h-full flex flex-col">
-                      <div className="flex-shrink-0 h-5 px-2 flex items-center justify-between" style={{ borderBottom: `2px solid ${accentColor}` }}>
-                        <div className="h-1.5 rounded bg-gray-300 w-10" />
-                        <div className="h-1 rounded bg-gray-200 w-6" />
-                      </div>
-                      <div className="flex-1 px-2 py-1.5 bg-gray-50 space-y-1">
-                        <div className="h-1 rounded bg-gray-200 w-full" />
-                        <div className="h-1 rounded bg-gray-100 w-3/4" />
-                      </div>
-                      <div className="flex-shrink-0 h-3 px-2 border-t border-gray-100 flex items-center justify-center">
-                        <div className="h-1 rounded bg-gray-200 w-12" />
-                      </div>
-                    </div>
-                  )}
-                  {opt.value === "MODERN" && (
-                    <div className="h-full flex flex-col">
-                      <div className="flex-shrink-0 h-5 flex" style={{ borderBottom: "1px solid #e5e7eb" }}>
-                        <div className="w-1 flex-shrink-0" style={{ background: accentColor }} />
-                        <div className="flex-1 px-2 flex items-center justify-between">
-                          <div className="space-y-0.5">
-                            <div className="h-1.5 rounded bg-gray-300 w-10" />
-                            <div className="h-0.5 rounded w-4" style={{ background: accentColor }} />
-                          </div>
-                          <div className="h-1 rounded bg-gray-200 w-6" />
-                        </div>
-                      </div>
-                      <div className="flex flex-1">
-                        <div className="w-1 flex-shrink-0" style={{ background: `${accentColor}25` }} />
-                        <div className="flex-1 px-2 py-1.5 bg-gray-50 space-y-1">
-                          <div className="h-1 rounded bg-gray-200 w-full" />
-                          <div className="h-1 rounded bg-gray-100 w-3/4" />
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  {opt.value === "MINIMAL" && (
-                    <div className="h-full flex flex-col">
-                      <div className="flex-shrink-0 h-5 px-2 flex items-end justify-between pb-1" style={{ borderBottom: `1.5px solid ${accentColor}` }}>
-                        <div className="h-1.5 rounded bg-gray-400 w-10" />
-                        <div className="h-1 rounded bg-gray-300 w-6" />
-                      </div>
-                      <div className="flex-1 px-2 py-1.5 bg-white space-y-1">
-                        <div className="h-1 rounded bg-gray-100 w-full" />
-                        <div className="h-1 rounded bg-gray-100 w-3/4" />
-                      </div>
-                      <div className="flex-shrink-0 h-3 px-2 border-t border-gray-100 flex items-center">
-                        <div className="h-1 rounded bg-gray-200 w-10" />
-                      </div>
-                    </div>
-                  )}
+                <div className="mb-2">
+                  <TemplateThumbnail tpl={opt.value} accent={accent} headerBg={cfg.headerBg} />
                 </div>
-
-                <p className={`text-sm font-semibold ${isSelected ? "text-indigo-700" : "text-gray-800"}`}>
-                  {opt.label}
-                </p>
-                <p className="text-[11px] text-gray-500 mt-0.5 leading-snug">{opt.desc}</p>
+                <p className={`text-xs font-semibold truncate ${isSelected ? "text-indigo-700" : "text-gray-700"}`}>{opt.label}</p>
+                <p className="text-[9px] text-gray-400 mt-0.5 leading-tight overflow-hidden" style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{opt.desc}</p>
               </button>
             );
           })}
         </div>
       </SectionCard>
 
-      {/* ── Content & Branding ──────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Left: editor fields */}
-        <div className="space-y-5">
-          <SectionCard title="Logo" desc="Upload a letterhead-specific logo — e.g. a white or dark version">
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+        {/* ── Editor panels ── */}
+        <div className="lg:col-span-3 space-y-5">
+
+          {/* Logo */}
+          <SectionCard title="Logo" desc="Upload a letterhead logo (can be a white or dark version for colored headers)">
             <div className="flex items-start gap-4">
               <div className="w-16 h-16 rounded-xl border border-gray-200 flex items-center justify-center overflow-hidden bg-gray-50 flex-shrink-0">
                 {form.letterheadLogoUrl ? (
@@ -641,133 +768,193 @@ function LetterheadTab({
                 ) : form.logoUrl ? (
                   <img src={form.logoUrl} alt="Company logo" className="w-full h-full object-contain" />
                 ) : (
-                  <div className="w-10 h-10 rounded-lg flex items-center justify-center text-white font-bold text-lg"
-                    style={{ background: accentColor }}>
+                  <div className="w-10 h-10 rounded-lg flex items-center justify-center text-white font-bold text-lg" style={{ background: accent }}>
                     {(form.name ?? "A")[0]}
                   </div>
                 )}
               </div>
               <div className="flex-1 space-y-2">
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => logoFileRef.current?.click()}
-                    disabled={logoUploading}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-60"
-                  >
-                    {logoUploading
-                      ? <><RefreshCw className="w-3 h-3 animate-spin" /> Uploading…</>
-                      : <><Upload className="w-3 h-3" /> Upload Logo</>}
+                <div className="flex gap-2 flex-wrap">
+                  <button onClick={() => logoFileRef.current?.click()} disabled={logoUploading}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-60">
+                    {logoUploading ? <><RefreshCw className="w-3 h-3 animate-spin" /> Uploading…</> : <><Upload className="w-3 h-3" /> Upload Logo</>}
                   </button>
                   {form.letterheadLogoUrl && (
-                    <button
-                      onClick={() => set("letterheadLogoUrl", "")}
-                      className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium border border-gray-200 text-gray-500 rounded-lg hover:bg-red-50 hover:text-red-600 hover:border-red-200"
-                    >
+                    <button onClick={() => set("letterheadLogoUrl", "")}
+                      className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium border border-gray-200 text-gray-500 rounded-lg hover:bg-red-50 hover:text-red-600 hover:border-red-200">
                       <X className="w-3 h-3" /> Remove
                     </button>
                   )}
                 </div>
                 {logoError && <p className="text-[11px] text-red-500">{logoError}</p>}
                 <p className="text-[11px] text-gray-400">PNG, JPG or SVG · max 2 MB</p>
-                <p className="text-[11px] text-gray-400">Leave blank to use your main company logo</p>
               </div>
               <input ref={logoFileRef} type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" />
             </div>
+
+            {/* Logo position + size */}
+            <div className="mt-4 grid grid-cols-2 gap-4 pt-4 border-t border-gray-100">
+              <div>
+                <p className="text-xs font-medium text-gray-700 mb-2">Logo Position</p>
+                <div className="flex gap-1.5">
+                  {(["left","center","right"] as const).map(pos => (
+                    <button key={pos} onClick={() => setCfgK("logoPosition", pos)}
+                      className={`flex-1 py-1.5 text-xs rounded-lg border font-medium capitalize transition-all ${cfg.logoPosition === pos ? "border-indigo-500 bg-indigo-50 text-indigo-700" : "border-gray-200 text-gray-500 hover:border-gray-300"}`}>
+                      {pos}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-gray-700 mb-2">Logo Size</p>
+                <div className="flex gap-1.5">
+                  {(["sm","md","lg"] as const).map(sz => (
+                    <button key={sz} onClick={() => setCfgK("logoSize", sz)}
+                      className={`flex-1 py-1.5 text-xs rounded-lg border font-medium uppercase transition-all ${cfg.logoSize === sz ? "border-indigo-500 bg-indigo-50 text-indigo-700" : "border-gray-200 text-gray-500 hover:border-gray-300"}`}>
+                      {sz}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
           </SectionCard>
 
-          <SectionCard title="Header Content" desc="Text and contact details shown in the PDF header">
+          {/* Header Content */}
+          <SectionCard title="Header Content" desc="Control what information appears in the letterhead header">
             <div className="space-y-4">
-              <Field label="Agency Name / Header Line" hint="Displayed prominently at the top of every PDF">
-                <Input
-                  value={form.letterheadHeader ?? ""}
-                  onChange={(e) => set("letterheadHeader", e.target.value)}
-                  placeholder={form.name ?? "Vibrnd Creative Studio"}
-                />
+              <Field label="Agency Name / Header Line">
+                <div className="flex items-center gap-3">
+                  <Input value={form.letterheadHeader ?? ""} onChange={e => set("letterheadHeader", e.target.value)} placeholder={form.name ?? "Vibrnd Creative Studio"} />
+                  <Toggle checked={cfg.showAgencyName} onChange={v => setCfgK("showAgencyName", v)} label="Show" />
+                </div>
               </Field>
               <Field label="Address Block">
-                <Textarea
-                  value={form.letterheadAddress ?? ""}
-                  onChange={(e) => set("letterheadAddress", e.target.value)}
-                  placeholder={"123 Creative Lane\nDubai, UAE"}
-                  rows={2}
-                />
+                <div className="flex items-start gap-3">
+                  <Textarea value={form.letterheadAddress ?? ""} onChange={e => set("letterheadAddress", e.target.value)} placeholder={"123 Creative Lane\nDubai, UAE"} rows={2} />
+                  <div className="mt-1 flex-shrink-0"><Toggle checked={cfg.showAddress} onChange={v => setCfgK("showAddress", v)} label="Show" /></div>
+                </div>
               </Field>
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Phone">
-                  <Input
-                    value={form.letterheadPhone ?? ""}
-                    onChange={(e) => set("letterheadPhone", e.target.value)}
-                    placeholder="+971 50 000 0000"
-                  />
+                  <Input value={form.letterheadPhone ?? ""} onChange={e => set("letterheadPhone", e.target.value)} placeholder="+971 50 000 0000" />
+                  <div className="mt-1.5"><Toggle checked={cfg.showPhone} onChange={v => setCfgK("showPhone", v)} label="Show phone" /></div>
                 </Field>
                 <Field label="Email">
-                  <Input
-                    value={form.letterheadEmail ?? ""}
-                    onChange={(e) => set("letterheadEmail", e.target.value)}
-                    placeholder="hello@agency.com"
-                  />
+                  <Input value={form.letterheadEmail ?? ""} onChange={e => set("letterheadEmail", e.target.value)} placeholder="hello@agency.com" />
+                  <div className="mt-1.5"><Toggle checked={cfg.showEmail} onChange={v => setCfgK("showEmail", v)} label="Show email" /></div>
                 </Field>
               </div>
               <Field label="Website">
-                <Input
-                  value={form.letterheadWebsite ?? ""}
-                  onChange={(e) => set("letterheadWebsite", e.target.value)}
-                  placeholder="www.agency.com"
-                />
+                <div className="flex items-center gap-3">
+                  <Input value={form.letterheadWebsite ?? ""} onChange={e => set("letterheadWebsite", e.target.value)} placeholder="www.agency.com" />
+                  <Toggle checked={cfg.showWebsite} onChange={v => setCfgK("showWebsite", v)} label="Show" />
+                </div>
               </Field>
             </div>
           </SectionCard>
 
-          <SectionCard title="Footer & Accent" desc="Footer text and brand color applied across all PDFs">
-            <div className="space-y-4">
-              <Field label="Footer Text" hint="Appears at the bottom of every PDF page">
-                <Input
-                  value={form.letterheadFooter ?? ""}
-                  onChange={(e) => set("letterheadFooter", e.target.value)}
-                  placeholder="Thank you for your business."
-                />
-              </Field>
+          {/* Styling */}
+          <SectionCard title="Styling" desc="Colors, fonts, and visual treatment for your letterhead">
+            <div className="space-y-5">
               <Field label="Accent Color" hint="Used for borders, table headers, and highlights">
                 <div className="flex items-center gap-3">
-                  <input
-                    type="color"
-                    value={accentColor}
-                    onChange={(e) => set("letterheadColor", e.target.value)}
-                    className="w-10 h-10 rounded-lg border border-gray-300 cursor-pointer p-0.5 bg-white"
-                  />
-                  <Input
-                    value={accentColor}
-                    onChange={(e) => set("letterheadColor", e.target.value)}
-                    placeholder="#6366f1"
-                    className="flex-1 font-mono"
-                  />
+                  <input type="color" value={form.letterheadColor ?? "#6366f1"} onChange={e => set("letterheadColor", e.target.value)}
+                    className="w-10 h-10 rounded-lg border border-gray-300 cursor-pointer p-0.5 bg-white" />
+                  <Input value={form.letterheadColor ?? "#6366f1"} onChange={e => set("letterheadColor", e.target.value)} placeholder="#6366f1" className="flex-1 font-mono" />
                 </div>
                 <div className="mt-3 flex gap-2 flex-wrap">
-                  {["#6366f1", "#0ea5e9", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#0f172a"].map((c) => (
-                    <button
-                      key={c}
-                      onClick={() => set("letterheadColor", c)}
-                      className={`w-6 h-6 rounded-full border-2 transition-all ${accentColor === c ? "border-gray-700 scale-110" : "border-transparent hover:scale-105"}`}
-                      style={{ background: c }}
-                      title={c}
-                    />
+                  {["#6366f1","#0ea5e9","#10b981","#f59e0b","#ef4444","#8b5cf6","#ec4899","#0f172a","#f97316","#14b8a6"].map(c => (
+                    <button key={c} onClick={() => set("letterheadColor", c)}
+                      className={`w-6 h-6 rounded-full border-2 transition-all ${(form.letterheadColor ?? "#6366f1") === c ? "border-gray-700 scale-110" : "border-transparent hover:scale-105"}`}
+                      style={{ background: c }} title={c} />
+                  ))}
+                </div>
+              </Field>
+
+              {hasDarkHeader && (
+                <Field label="Header Background" hint={`Background color for the ${template.toLowerCase()} header`}>
+                  <div className="flex items-center gap-3">
+                    <input type="color" value={cfg.headerBg} onChange={e => setCfgK("headerBg", e.target.value)}
+                      className="w-10 h-10 rounded-lg border border-gray-300 cursor-pointer p-0.5 bg-white" />
+                    <Input value={cfg.headerBg} onChange={e => setCfgK("headerBg", e.target.value)} placeholder="#1e293b" className="flex-1 font-mono" />
+                  </div>
+                  <div className="mt-3 flex gap-2 flex-wrap">
+                    {["#1e293b","#111827","#1a1a2e","#0f172a","#1e3a5f","#2d1b69","#1a3a2a","#3d0000","#1c1917","#292524"].map(c => (
+                      <button key={c} onClick={() => setCfgK("headerBg", c)}
+                        className={`w-6 h-6 rounded-full border-2 transition-all ${cfg.headerBg === c ? "border-gray-400 scale-110" : "border-transparent hover:scale-105"}`}
+                        style={{ background: c }} title={c} />
+                    ))}
+                  </div>
+                  <div className="mt-3 flex gap-2">
+                    <p className="text-xs text-gray-500 mr-2 self-center">Text on header:</p>
+                    {(["light","dark"] as const).map(tc => (
+                      <button key={tc} onClick={() => setCfgK("headerTextColor", tc)}
+                        className={`px-3 py-1 text-xs rounded-lg border font-medium capitalize transition-all ${cfg.headerTextColor === tc ? "border-indigo-500 bg-indigo-50 text-indigo-700" : "border-gray-200 text-gray-500 hover:border-gray-300"}`}>
+                        {tc}
+                      </button>
+                    ))}
+                  </div>
+                </Field>
+              )}
+
+              <Field label="Font Style" hint="Typography used throughout the PDF">
+                <div className="flex gap-2">
+                  {([
+                    { value: "sans" as const, label: "Sans-serif", sub: "Helvetica / Arial" },
+                    { value: "serif" as const, label: "Serif", sub: "Georgia / Times" },
+                  ]).map(f => (
+                    <button key={f.value} onClick={() => setCfgK("font", f.value)}
+                      className={`flex-1 p-3 rounded-xl border-2 text-left transition-all ${cfg.font === f.value ? "border-indigo-500 bg-indigo-50/50" : "border-gray-200 hover:border-gray-300"}`}>
+                      <p className={`text-xs font-semibold ${cfg.font === f.value ? "text-indigo-700" : "text-gray-700"}`} style={{ fontFamily: f.value === "serif" ? "Georgia, serif" : undefined }}>{f.label}</p>
+                      <p className="text-[10px] text-gray-400 mt-0.5">{f.sub}</p>
+                    </button>
                   ))}
                 </div>
               </Field>
             </div>
           </SectionCard>
+
+          {/* Footer */}
+          <SectionCard title="Footer" desc="Footer text and layout options shown at the bottom of every PDF page">
+            <div className="space-y-4">
+              <Field label="Footer Text">
+                <Input value={form.letterheadFooter ?? ""} onChange={e => set("letterheadFooter", e.target.value)} placeholder="Thank you for your business." />
+              </Field>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs font-medium text-gray-700 mb-2">Text Alignment</p>
+                  <div className="flex gap-1.5">
+                    {(["left","center","right"] as const).map(a => (
+                      <button key={a} onClick={() => setCfgK("footerAlign", a)}
+                        className={`flex-1 py-1.5 text-xs rounded-lg border font-medium capitalize transition-all ${cfg.footerAlign === a ? "border-indigo-500 bg-indigo-50 text-indigo-700" : "border-gray-200 text-gray-500 hover:border-gray-300"}`}>
+                        {a}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-gray-700">Show in Footer</p>
+                  <Toggle checked={cfg.showFooterDate} onChange={v => setCfgK("showFooterDate", v)} label="Generated date" />
+                  <Toggle checked={cfg.showFooterPageNum} onChange={v => setCfgK("showFooterPageNum", v)} label="Page number" />
+                </div>
+              </div>
+            </div>
+          </SectionCard>
+
         </div>
 
-        {/* Right: live preview */}
-        <div className="lg:sticky lg:top-4 self-start">
-          <div className="bg-white border border-gray-200 rounded-2xl p-5">
+        {/* ── Live Preview ── */}
+        <div className="lg:col-span-2 lg:sticky lg:top-4 self-start">
+          <div className="bg-white border border-gray-200 rounded-2xl p-4">
             <div className="flex items-center justify-between mb-3">
               <p className="text-xs font-semibold text-gray-700">Live Preview</p>
-              <span className="text-[10px] text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">{template.charAt(0) + template.slice(1).toLowerCase()} layout</span>
+              <span className="text-[10px] text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full capitalize">
+                {template.charAt(0) + template.slice(1).toLowerCase()} layout
+              </span>
             </div>
-            <LetterheadPreview form={form} template={template} />
-            <p className="text-[11px] text-gray-400 mt-3 text-center">
-              Updates in real-time as you edit · Applied to all exported PDFs
+            <LetterheadPreview form={form} cfg={cfg} template={template} />
+            <p className="text-[10px] text-gray-400 mt-3 text-center leading-relaxed">
+              Updates in real-time · Applied to all exported PDFs
             </p>
           </div>
         </div>
@@ -1093,6 +1280,7 @@ const DEFAULT_SETTINGS: CompanySettings = {
   letterheadLogoUrl: null, letterheadHeader: null, letterheadFooter: null,
   letterheadAddress: null, letterheadPhone: null, letterheadEmail: null,
   letterheadWebsite: null, letterheadColor: "#6366f1", letterheadTemplate: "CLASSIC",
+  letterheadConfig: null,
   createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
 };
 

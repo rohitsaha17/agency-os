@@ -91,7 +91,7 @@ export async function PATCH(req: Request, { params }: Params) {
       // Delete existing and recreate
       await prisma.quotationLineItem.deleteMany({ where: { quotationId: id } });
       await prisma.quotationLineItem.createMany({
-        data: parsedItems.map((item) => ({ ...item, quotationId: id })),
+        data: parsedItems.map((item) => ({ ...item, quotationId: id, pricingType: item.pricingType as import("@prisma/client").PricingType })),
       });
     }
 

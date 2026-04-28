@@ -1,16 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
+import { apiError, handleApiError, ApiError } from "@/lib/api-errors";
+import { checkRateLimit, WRITE_RATE_LIMITS } from "@/lib/rate-limit";
 
 export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  const type          = searchParams.get("type");
-  const status        = searchParams.get("status");
-  const clientId      = searchParams.get("clientId");
-  const projectId     = searchParams.get("projectId");
-  const stakeholderId = searchParams.get("stakeholderId");
-  const search        = searchParams.get("search");
-
   try {
+    await requireAuth(req);
+
+    const { searchParams } = new URL(req.url);
+    const type          = searchParams.get("type");
+    const status        = searchParams.get("status");
+    const clientId      = searchParams.get("clientId");
+    const projectId     = searchParams.get("projectId");
+    const stakeholderId = searchParams.get("stakeholderId");
+    const search        = searchParams.get("search");
+
     const contracts = await prisma.contract.findMany({
       where: {
         ...(type      ? { type:     type   as never } : {}),
@@ -37,17 +42,21 @@ export async function GET(req: NextRequest) {
     });
     return NextResponse.json(contracts);
   } catch (error) {
-    console.error("[GET /api/contracts]", error);
-    return NextResponse.json({ error: "Failed to load contracts" }, { status: 500 });
+    return handleApiError(error, "GET /api/contracts");
   }
 }
 
 export async function POST(req: NextRequest) {
   try {
+    const user = await requireAuth(req);
+
+    const rl = checkRateLimit(req, `contracts:create:${user.id}`, WRITE_RATE_LIMITS.light);
+    if (!rl.allowed) return apiError("Too many requests, please slow down", 429);
+
     const body = await req.json();
     const { title, type, projectId, clientId, startDate, endDate, value, currency, notes, parties } = body;
 
-    if (!title?.trim()) return NextResponse.json({ error: "Title is required" }, { status: 400 });
+    if (!title?.trim()) throw new ApiError("Title is required", 400);
 
     const contract = await prisma.contract.create({
       data: {
@@ -89,7 +98,6 @@ export async function POST(req: NextRequest) {
     });
     return NextResponse.json(contract, { status: 201 });
   } catch (error) {
-    console.error("[POST /api/contracts]", error);
-    return NextResponse.json({ error: "Failed to create contract" }, { status: 500 });
+    return handleApiError(error, "POST /api/contracts");
   }
 }

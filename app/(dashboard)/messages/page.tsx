@@ -8,31 +8,40 @@ import { MessageFeed } from "@/components/chat/MessageFeed";
 import { ComposeBox } from "@/components/chat/ComposeBox";
 import { CreateChannelModal } from "@/components/chat/CreateChannelModal";
 import { ManageMembersModal } from "@/components/chat/ManageMembersModal";
+import { useCurrentUser } from "@/lib/useCurrentUser";
+import { toast } from "@/lib/toast";
 import type { Channel } from "@/types";
 
 export default function MessagesPage() {
+  const { user: currentUser } = useCurrentUser();
   const [channels, setChannels] = useState<Channel[]>([]);
   const [activeChannel, setActiveChannel] = useState<Channel | null>(null);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [manageChannel, setManageChannel] = useState<Channel | null>(null);
+  // Bumped whenever a message is sent so MessageFeed remounts and refetches.
+  const [feedNonce, setFeedNonce] = useState(0);
 
   const fetchChannels = useCallback(async () => {
     try {
       const res = await fetch("/api/channels");
-      if (res.ok) {
-        const data = await res.json();
-        setChannels(data);
-        // Auto-select first channel if none selected
-        setActiveChannel((prev) => {
-          if (prev) {
-            // Re-sync active channel data from fresh list
-            const updated = data.find((c: Channel) => c.id === prev.id);
-            return updated ?? prev;
-          }
-          return data[0] ?? null;
-        });
+      if (!res.ok) {
+        toast.error("Failed to load channels");
+        return;
       }
+      const data = await res.json();
+      setChannels(data);
+      // Auto-select first channel if none selected
+      setActiveChannel((prev) => {
+        if (prev) {
+          // Re-sync active channel data from fresh list
+          const updated = data.find((c: Channel) => c.id === prev.id);
+          return updated ?? prev;
+        }
+        return data[0] ?? null;
+      });
+    } catch {
+      toast.error("Failed to load channels");
     } finally {
       setLoading(false);
     }
@@ -40,8 +49,21 @@ export default function MessagesPage() {
 
   // Seed default channels on first load, then fetch
   useEffect(() => {
-    fetch("/api/channels/seed", { method: "POST" })
-      .finally(() => fetchChannels());
+    (async () => {
+      try {
+        const seedRes = await fetch("/api/channels/seed", { method: "POST" });
+        if (!seedRes.ok) {
+          // Seed failure is non-fatal: channels may already exist.
+          // eslint-disable-next-line no-console
+          console.warn("[messages] channel seed returned non-ok status");
+        }
+      } catch {
+        // eslint-disable-next-line no-console
+        console.warn("[messages] channel seed call failed");
+      } finally {
+        fetchChannels();
+      }
+    })();
   }, [fetchChannels]);
 
   const handleChannelCreated = (channel: Channel) => {
@@ -75,13 +97,14 @@ export default function MessagesPage() {
               onManageMembers={() => setManageChannel(activeChannel)}
             />
             <MessageFeed
+              key={`${activeChannel.id}:${feedNonce}`}
               channel={activeChannel}
-              currentUser="Admin"
+              currentUser={currentUser?.name ?? currentUser?.id ?? "You"}
             />
             <ComposeBox
               channel={activeChannel}
-              authorName="Admin"
-              onMessageSent={() => {}}
+              authorName={currentUser?.name ?? "You"}
+              onMessageSent={() => setFeedNonce((n) => n + 1)}
             />
           </>
         ) : (

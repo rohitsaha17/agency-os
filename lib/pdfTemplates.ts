@@ -54,95 +54,130 @@ function baseStyles(accent: string, font: "sans" | "serif"): string {
     : `"Helvetica Neue", Helvetica, Arial, sans-serif`;
 
   return `
-    @page { size: A4 portrait; margin: 16mm 18mm 22mm 18mm; }
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+    @page { size: A4 portrait; margin: 14mm 18mm 20mm 18mm; }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
-      font-family: ${fontStack};
+      font-family: ${font === "sans" ? `"Inter", "Helvetica Neue", Helvetica, Arial, sans-serif` : fontStack};
       font-size: 9.5pt;
       color: #1f2937;
-      line-height: 1.55;
+      line-height: 1.6;
       background: #fff;
+      -webkit-font-smoothing: antialiased;
     }
-    h1,h2,h3,h4 { line-height: 1.25; font-weight: 700; font-family: ${fontStack}; }
+    h1,h2,h3,h4 { line-height: 1.2; font-weight: 700; }
 
     /* ── Document header ── */
-    .doc-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 18px; }
-    .doc-title  { font-size: 20pt; font-weight: 800; color: #111827; letter-spacing: -0.5px; }
-    .doc-number { font-size: 9pt; color: #6b7280; font-family: monospace; margin-top: 4px; }
+    .doc-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
+    .doc-title  { font-size: 22pt; font-weight: 800; color: #111827; letter-spacing: -0.8px; }
+    .doc-number { font-size: 8.5pt; color: #9ca3af; font-family: monospace; margin-top: 5px; letter-spacing: 0.3px; }
+    .doc-meta   { text-align: right; }
+    .doc-meta .doc-status { margin-bottom: 6px; }
+
+    /* ── Divider ── */
+    .divider { height: 1px; background: #f3f4f6; margin: 16px 0; }
+    .divider-accent { height: 2px; background: linear-gradient(90deg, ${accent}, transparent); margin: 16px 0; }
 
     /* ── Badges ── */
-    .badge { display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 8pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
-    .badge-gray   { background: #f3f4f6; color: #374151; }
+    .badge { display: inline-block; padding: 3px 9px; border-radius: 20px; font-size: 7.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; }
+    .badge-gray   { background: #f3f4f6; color: #4b5563; }
     .badge-blue   { background: #eff6ff; color: #1d4ed8; }
     .badge-green  { background: #f0fdf4; color: #15803d; }
     .badge-red    { background: #fef2f2; color: #b91c1c; }
-    .badge-amber  { background: #fffbeb; color: #b45309; }
-    .badge-purple { background: #faf5ff; color: #7c3aed; }
-    .badge-indigo { background: #eef2ff; color: #4338ca; }
+    .badge-amber  { background: #fffbeb; color: #92400e; }
+    .badge-purple { background: #faf5ff; color: #6d28d9; }
+    .badge-indigo { background: #eef2ff; color: #3730a3; }
 
     /* ── Info grid ── */
-    .info-grid   { display: grid; grid-template-columns: 1fr 1fr;     gap: 12px 24px; margin-bottom: 18px; }
-    .info-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px 24px; margin-bottom: 18px; }
-    .info-block label { font-size: 7.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: #9ca3af; display: block; margin-bottom: 2px; }
-    .info-block p     { font-size: 9.5pt; color: #111827; }
-    .info-block p.sub { font-size: 8.5pt; color: #6b7280; }
+    .info-grid   { display: grid; grid-template-columns: 1fr 1fr;     gap: 14px 28px; margin-bottom: 20px; }
+    .info-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px 24px; margin-bottom: 20px; }
+    .info-block label { font-size: 7pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #9ca3af; display: block; margin-bottom: 3px; }
+    .info-block p     { font-size: 9.5pt; color: #111827; font-weight: 500; }
+    .info-block p.sub { font-size: 8.5pt; color: #6b7280; font-weight: 400; }
+
+    /* ── Bill To / From block ── */
+    .billing-section { display: flex; justify-content: space-between; gap: 24px; margin-bottom: 20px; }
+    .billing-block { flex: 1; }
+    .billing-block label { font-size: 7pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #9ca3af; display: block; margin-bottom: 5px; }
+    .billing-block .company { font-size: 11pt; font-weight: 700; color: #111827; }
+    .billing-block .detail  { font-size: 8.5pt; color: #6b7280; line-height: 1.7; }
 
     /* ── Section heading ── */
-    .section-head { font-size: 8pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.7px; color: ${accent}; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid #f3f4f6; }
+    .section-head { font-size: 7.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: ${accent}; margin-bottom: 10px; padding-bottom: 5px; border-bottom: 1.5px solid #f3f4f6; }
 
     /* ── Description block ── */
-    .desc-block { background: #f9fafb; border-left: 3px solid ${accent}; padding: 10px 14px; border-radius: 0 6px 6px 0; font-size: 9pt; color: #374151; line-height: 1.6; margin-bottom: 18px; }
+    .desc-block { background: #f9fafb; border-left: 3px solid ${accent}; padding: 11px 15px; border-radius: 0 8px 8px 0; font-size: 9pt; color: #374151; line-height: 1.65; margin-bottom: 20px; }
 
     /* ── Table ── */
-    table { width: 100%; border-collapse: collapse; margin-bottom: 18px; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 9pt; }
     thead tr  { background: ${accent}; }
-    thead th  { color: #fff; font-size: 8pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; padding: 7px 10px; text-align: left; }
+    thead th  { color: #fff; font-size: 7.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; padding: 8px 11px; text-align: left; }
     thead th.r { text-align: right; }
-    tbody tr:nth-child(even) { background: #f9fafb; }
+    tbody tr:nth-child(even) { background: #fafafa; }
     tbody tr  { border-bottom: 1px solid #f3f4f6; }
-    tbody td  { padding: 8px 10px; font-size: 9pt; color: #1f2937; vertical-align: top; }
+    tbody td  { padding: 9px 11px; color: #1f2937; vertical-align: top; }
     tbody td.r  { text-align: right; white-space: nowrap; }
     tbody td.sub { font-size: 8pt; color: #6b7280; padding-top: 2px; }
     tfoot tr  { border-top: 2px solid #e5e7eb; }
-    tfoot td  { padding: 6px 10px; font-size: 9pt; }
+    tfoot td  { padding: 7px 11px; }
 
     /* ── Totals ── */
-    .totals-wrap { display: flex; justify-content: flex-end; margin-bottom: 18px; }
-    .totals-box  { width: 240px; }
-    .totals-row  { display: flex; justify-content: space-between; padding: 4px 0; font-size: 9pt; color: #4b5563; }
+    .totals-wrap  { display: flex; justify-content: flex-end; margin-bottom: 20px; }
+    .totals-box   { width: 260px; }
+    .totals-row   { display: flex; justify-content: space-between; padding: 4px 0; font-size: 9pt; color: #4b5563; }
     .totals-row.discount { color: #059669; }
-    .totals-row.total    { border-top: 2px solid #e5e7eb; margin-top: 4px; padding-top: 8px; font-size: 11pt; font-weight: 800; color: #111827; }
+    .totals-row.total    { border-top: 2px solid #e5e7eb; margin-top: 6px; padding-top: 9px; font-size: 11.5pt; font-weight: 800; color: #111827; }
     .totals-row.total .amount { color: ${accent}; }
 
+    /* ── Invoice totals block (right-aligned) ── */
+    .totals-block { margin-left: auto; width: 270px; margin-top: 6px; margin-bottom: 24px; background: #fafafa; border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px 18px; }
+    .totals-block .totals-row { display: flex; justify-content: space-between; font-size: 9pt; color: #6b7280; padding: 3.5px 0; }
+    .totals-block .totals-row.tax-row { color: #4b5563; }
+    .totals-block .totals-row.disc-row { color: #059669; }
+    .totals-block .totals-grand { display: flex; justify-content: space-between; align-items: center; font-size: 12.5pt; font-weight: 800; color: #111827; border-top: 2px solid #e5e7eb; margin-top: 10px; padding-top: 10px; }
+    .totals-block .totals-grand .grand-amount { color: ${accent}; }
+
+    /* ── Invoice line table ── */
+    .line-table { width: 100%; border-collapse: collapse; margin-bottom: 0; font-size: 9pt; }
+    .line-table thead tr { background: ${accent}; }
+    .line-table thead th { color: #fff; font-size: 7.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; padding: 9px 11px; text-align: left; }
+    .line-table tbody td { padding: 10px 11px; color: #1f2937; border-bottom: 1px solid #f3f4f6; vertical-align: top; }
+    .line-table tbody td.desc { color: #374151; }
+    .line-table tbody td.desc-note { font-size: 8pt; color: #9ca3af; padding-top: 2px; }
+    .line-table tbody tr.row-even { background: #fafafa; }
+    .line-table .qty   { text-align: center; width: 64px; color: #4b5563; }
+    .line-table .price { text-align: right; width: 96px; color: #4b5563; }
+    .line-table .total { text-align: right; width: 96px; font-weight: 600; color: #111827; }
+
     /* ── Signature ── */
-    .sig-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; margin-bottom: 18px; }
-    .sig-card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; }
+    .sig-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; margin-bottom: 20px; }
+    .sig-card { border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px; }
     .sig-card .name { font-weight: 700; font-size: 9.5pt; color: #111827; }
-    .sig-card .role { font-size: 8pt; color: #6b7280; margin-bottom: 8px; }
-    .sig-card .signed { display: flex; align-items: center; gap: 6px; font-size: 8.5pt; }
+    .sig-card .role { font-size: 8pt; color: #6b7280; margin-bottom: 10px; }
+    .sig-card .signed { display: flex; align-items: center; gap: 7px; font-size: 8.5pt; }
     .sig-card .signed .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
     .sig-card .signed .dot.yes { background: #22c55e; }
     .sig-card .signed .dot.no  { background: #e5e7eb; }
     .sig-card .signed-date { font-size: 7.5pt; color: #6b7280; margin-top: 3px; }
     .sig-card .sig-note    { font-size: 7.5pt; color: #9ca3af; margin-top: 2px; }
-    .sig-line  { height: 32px; border-bottom: 1px dashed #d1d5db; margin: 12px 0 4px; }
+    .sig-line  { height: 36px; border-bottom: 1px dashed #d1d5db; margin: 14px 0 4px; }
     .sig-label { font-size: 7pt; color: #9ca3af; }
 
     /* ── Notes / Terms ── */
-    .note-block { border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px 14px; margin-bottom: 14px; }
-    .note-block h4 { font-size: 8.5pt; font-weight: 700; color: #374151; margin-bottom: 6px; }
-    .note-block p, .note-block pre { font-size: 8.5pt; color: #4b5563; white-space: pre-wrap; font-family: inherit; line-height: 1.6; }
+    .note-block { border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; }
+    .note-block h4 { font-size: 8.5pt; font-weight: 700; color: #374151; margin-bottom: 7px; }
+    .note-block p, .note-block pre { font-size: 8.5pt; color: #4b5563; white-space: pre-wrap; font-family: inherit; line-height: 1.65; }
 
     /* ── Progress ── */
-    .progress-wrap { background: #f3f4f6; border-radius: 4px; height: 6px; margin-top: 4px; }
+    .progress-wrap { background: #f3f4f6; border-radius: 4px; height: 6px; margin-top: 5px; overflow: hidden; }
     .progress-fill { height: 6px; border-radius: 4px; background: ${accent}; }
 
     /* ── Task list ── */
-    .task-row   { display: flex; align-items: flex-start; gap: 8px; padding: 6px 0; border-bottom: 1px solid #f9fafb; }
+    .task-row   { display: flex; align-items: flex-start; gap: 8px; padding: 7px 0; border-bottom: 1px solid #f9fafb; }
     .task-dot   { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
     .task-name  { font-size: 9pt; color: #1f2937; flex: 1; }
-    .task-status { font-size: 7.5pt; color: #6b7280; background: #f3f4f6; padding: 1px 6px; border-radius: 10px; flex-shrink: 0; }
+    .task-status { font-size: 7.5pt; color: #6b7280; background: #f3f4f6; padding: 2px 7px; border-radius: 10px; flex-shrink: 0; }
 
     /* ── Page break ── */
     .page-break { page-break-before: always; padding-top: 24px; }
@@ -654,4 +689,117 @@ export function buildProjectHtml(p: ProjectPdfData, s: CompanySettings): string 
     ${footerHtml(s)}`;
 
   return wrapHtml(`Project — ${p.name}`, accent, cfg.font, body);
+}
+
+/* ── Invoice PDF ──────────────────────────────────────────────── */
+export interface InvoicePdfData {
+  invoiceNumber: string;
+  status:        string;
+  dueDate:       string | null;
+  paidAt:        string | null;
+  currency:      string;
+  discountPct:   number | null;
+  taxPct:        number | null;
+  notes:         string | null;
+  client:        { id: string; name: string; companyName: string | null } | null;
+  project:       { id: string; name: string } | null;
+  quotation:     { id: string; number: string; title: string } | null;
+  lineItems:     { description: string; quantity: number; unitPrice: number; unit: string | null }[];
+}
+
+export function buildInvoiceHtml(inv: InvoicePdfData, s: CompanySettings): string {
+  const cfg    = parseCfg(s);
+  const accent = s.letterheadColor || "#6366f1";
+
+  const subtotal = inv.lineItems.reduce((sum, li) => sum + li.quantity * li.unitPrice, 0);
+  const disc     = subtotal * ((inv.discountPct ?? 0) / 100);
+  const tax      = (subtotal - disc) * ((inv.taxPct ?? 0) / 100);
+  const total    = subtotal - disc + tax;
+
+  const fmtStatus: Record<string, string> = {
+    DRAFT: "badge-gray", SENT: "badge-blue", PAID: "badge-green",
+    OVERDUE: "badge-red", CANCELLED: "badge-gray",
+  };
+  const statusLabel: Record<string, string> = {
+    DRAFT: "Draft", SENT: "Sent", PAID: "Paid", OVERDUE: "Overdue", CANCELLED: "Cancelled",
+  };
+
+  const rows = inv.lineItems.map((li, i) => `
+    <tr class="${i % 2 !== 0 ? "row-even" : ""}">
+      <td class="desc">${esc(li.description)}</td>
+      <td class="qty">${li.quantity}${li.unit ? `<br/><span style="font-size:7.5pt;color:#9ca3af;">${esc(li.unit)}</span>` : ""}</td>
+      <td class="price">${fmt(li.unitPrice, inv.currency)}</td>
+      <td class="total">${fmt(li.quantity * li.unitPrice, inv.currency)}</td>
+    </tr>
+  `).join("");
+
+  const agencyName = s.name || "Agency";
+
+  const body = `
+    ${letterheadHtml(s)}
+
+    <div class="doc-header">
+      <div>
+        <div class="doc-title">Invoice</div>
+        <div class="doc-number">#${esc(inv.invoiceNumber)}</div>
+        ${inv.quotation ? `<div class="doc-number" style="margin-top:3px;">Ref: ${esc(inv.quotation.title ?? inv.quotation.number)}</div>` : ""}
+      </div>
+      <div class="doc-meta">
+        <div class="doc-status"><span class="badge ${fmtStatus[inv.status] ?? "badge-gray"}">${statusLabel[inv.status] ?? inv.status}</span></div>
+        ${inv.dueDate ? `<div style="font-size:8.5pt;color:#6b7280;margin-top:4px;">Due <strong style="color:#374151;">${fmtDate(inv.dueDate)}</strong></div>` : ""}
+        ${inv.paidAt  ? `<div style="font-size:8.5pt;color:#15803d;margin-top:3px;font-weight:600;">✓ Paid ${fmtDate(inv.paidAt)}</div>` : ""}
+      </div>
+    </div>
+
+    <div class="divider-accent"></div>
+
+    <div class="billing-section">
+      ${inv.client ? `
+      <div class="billing-block">
+        <label>Bill To</label>
+        <div class="company">${esc(inv.client.companyName ?? inv.client.name)}</div>
+        ${inv.client.companyName ? `<div class="detail">${esc(inv.client.name)}</div>` : ""}
+      </div>` : ""}
+      <div class="billing-block" style="text-align:right;">
+        <label>From</label>
+        <div class="company">${esc(agencyName)}</div>
+        ${s.email ? `<div class="detail">${esc(s.email)}</div>` : ""}
+        ${s.phone ? `<div class="detail">${esc(s.phone)}</div>` : ""}
+      </div>
+    </div>
+
+    ${inv.project ? `
+    <div class="info-grid-3" style="margin-bottom:16px;">
+      <div class="info-block"><label>Project</label><p>${esc(inv.project.name)}</p></div>
+    </div>` : ""}
+
+    <p class="section-head">Line Items</p>
+    <table class="line-table" style="margin-bottom:6px;">
+      <thead>
+        <tr>
+          <th style="text-align:left;">Description</th>
+          <th class="qty" style="text-align:center;">Qty</th>
+          <th class="price" style="text-align:right;">Unit Price</th>
+          <th class="total" style="text-align:right;">Amount</th>
+        </tr>
+      </thead>
+      <tbody>${rows || `<tr><td colspan="4" style="text-align:center;color:#9ca3af;padding:16px;">No line items</td></tr>`}</tbody>
+    </table>
+
+    <div class="totals-block">
+      <div class="totals-row"><span>Subtotal</span><span>${fmt(subtotal, inv.currency)}</span></div>
+      ${disc > 0 ? `<div class="totals-row disc-row"><span>Discount (${inv.discountPct}%)</span><span>−${fmt(disc, inv.currency)}</span></div>` : ""}
+      ${tax > 0  ? `<div class="totals-row tax-row"><span>Tax (${inv.taxPct}%)</span><span>+${fmt(tax, inv.currency)}</span></div>` : ""}
+      <div class="totals-grand"><span>Total Due</span><span class="grand-amount">${fmt(total, inv.currency)}</span></div>
+    </div>
+
+    ${inv.notes ? `
+    <div style="margin-top:8px;">
+      <p class="section-head">Notes &amp; Payment Terms</p>
+      <div class="note-block"><p>${esc(inv.notes)}</p></div>
+    </div>` : ""}
+
+    ${footerHtml(s)}`;
+
+  return wrapHtml(`Invoice ${inv.invoiceNumber}`, accent, cfg.font, body);
 }

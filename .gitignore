@@ -19,3 +19,13 @@
 # misc
 .DS_Store
 *.pem
+
+# typescript build cache
+tsconfig.tsbuildinfo
+
+# user uploads
+/public/uploads/
+
+# binary marketing/sales assets — not part of the codebase
+*.pdf
+*.pptx

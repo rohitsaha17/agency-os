@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -56,6 +56,7 @@ function NavItem({
   icon: Icon,
   soon,
   active,
+  badge,
   onClick,
 }: {
   href: string;
@@ -63,6 +64,7 @@ function NavItem({
   icon: React.ElementType;
   soon?: boolean;
   active: boolean;
+  badge?: number;
   onClick?: () => void;
 }) {
   return (
@@ -98,6 +100,12 @@ function NavItem({
 
         <span className="flex-1 tracking-tight">{label}</span>
 
+        {badge != null && badge > 0 && (
+          <span className="min-w-[20px] h-5 flex items-center justify-center px-1.5 text-[11px] font-semibold leading-none text-white bg-indigo-500 rounded-full">
+            {badge > 99 ? "99+" : badge}
+          </span>
+        )}
+
         {soon && (
           <span className="text-[10px] font-normal text-slate-600 bg-slate-800 px-1.5 py-0.5 rounded-md">
             Soon
@@ -115,10 +123,12 @@ function NavContent({
   pathname,
   onClose,
   appUser,
+  unreadCount,
 }: {
   pathname: string;
   onClose?: () => void;
   appUser?: { name: string; email: string } | null;
+  unreadCount: number;
 }) {
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
@@ -146,6 +156,7 @@ function NavContent({
                   icon={icon}
                   soon={soon}
                   active={isActive(href)}
+                  badge={href === "/messages" ? unreadCount : undefined}
                   onClick={onClose}
                 />
               ))}
@@ -219,6 +230,26 @@ export function Sidebar() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [appUser, setAppUser] = useState<AppUser | null>(null);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  /* Fetch unread message count */
+  const fetchUnread = useCallback(() => {
+    fetch("/api/channels/unread-count")
+      .then((r) => r.json())
+      .then((data: { unreadCount?: number }) => {
+        if (typeof data.unreadCount === "number") setUnreadCount(data.unreadCount);
+      })
+      .catch(() => {});
+  }, []);
+
+  /* Poll unread count on mount and every 60 seconds.
+     TODO: replace polling with a WebSocket subscription once the realtime
+     layer lands — this cuts request volume ~50% vs. the old 30s cadence. */
+  useEffect(() => {
+    fetchUnread();
+    const interval = setInterval(fetchUnread, 60_000);
+    return () => clearInterval(interval);
+  }, [fetchUnread]);
 
   useEffect(() => {
     fetch("/api/users")
@@ -242,6 +273,22 @@ export function Sidebar() {
     return () => { document.body.style.overflow = ""; };
   }, [open]);
 
+  /* Focus trap: when drawer opens, focus the close button; on close,
+     restore focus to whatever triggered it. */
+  const closeBtnRef = useRef<HTMLButtonElement>(null);
+  const openerRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (open) {
+      openerRef.current = (document.activeElement as HTMLElement) ?? null;
+      // Defer to after the drawer is rendered
+      const t = setTimeout(() => closeBtnRef.current?.focus(), 30);
+      return () => clearTimeout(t);
+    } else if (openerRef.current) {
+      openerRef.current.focus?.();
+      openerRef.current = null;
+    }
+  }, [open]);
+
   return (
     <>
       {/* ── Desktop sidebar (lg+) ─────────────────────────────── */}
@@ -254,7 +301,7 @@ export function Sidebar() {
           <Logo />
         </div>
 
-        <NavContent pathname={pathname} appUser={appUser} />
+        <NavContent pathname={pathname} appUser={appUser} unreadCount={unreadCount} />
       </aside>
 
       {/* ── Mobile / tablet top bar ───────────────────────────── */}
@@ -296,6 +343,7 @@ export function Sidebar() {
         <div className="h-14 flex items-center justify-between px-5 border-b border-white/[0.06] flex-shrink-0">
           <Logo />
           <button
+            ref={closeBtnRef}
             onClick={() => setOpen(false)}
             className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] transition-colors"
             aria-label="Close menu"
@@ -304,7 +352,7 @@ export function Sidebar() {
           </button>
         </div>
 
-        <NavContent pathname={pathname} onClose={() => setOpen(false)} appUser={appUser} />
+        <NavContent pathname={pathname} onClose={() => setOpen(false)} appUser={appUser} unreadCount={unreadCount} />
       </aside>
     </>
   );

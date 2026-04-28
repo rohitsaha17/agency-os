@@ -25,6 +25,8 @@ export async function GET() {
       recentTasks,
       recentFiles,
       recentComments,
+      expenseThisMonth,
+      pendingExpenses,
     ] = await Promise.all([
       // Project counts by status
       prisma.project.groupBy({
@@ -159,6 +161,19 @@ export async function GET() {
         orderBy: { createdAt: "desc" },
         take: 4,
       }),
+
+      // Expense totals this month (excluding REJECTED)
+      prisma.expense.aggregate({
+        where: {
+          status: { not: "REJECTED" },
+          date: { gte: monthStart },
+        },
+        _sum: { amount: true },
+        _count: { id: true },
+      }),
+
+      // Pending expenses count
+      prisma.expense.count({ where: { status: "PENDING" } }),
     ]);
 
     // ── Compute stats ─────────────────────────────────────────
@@ -298,6 +313,16 @@ export async function GET() {
       return order[a.severity] - order[b.severity];
     });
 
+    // Deduplicate by id — keep only the first (highest severity) occurrence of each task/entity
+    const seenIds = new Set<string>();
+    const deduped = urgentItems.filter((item) => {
+      const key = item.id;
+      if (seenIds.has(key)) return false;
+      seenIds.add(key);
+      return true;
+    });
+    urgentItems.splice(0, urgentItems.length, ...deduped);
+
     // ── Activity feed ─────────────────────────────────────────
 
     type FeedItem = {
@@ -351,6 +376,9 @@ export async function GET() {
         completionRate,
         monthCompletionRate,
         completedThisMonth,
+        expensesThisMonth:  Number(expenseThisMonth._sum.amount ?? 0),
+        expenseCount:       expenseThisMonth._count.id,
+        pendingExpenses,
       },
 
       taskStats: {

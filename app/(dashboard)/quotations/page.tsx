@@ -7,6 +7,7 @@ import {
   Clock, CheckCircle2, XCircle, Send, RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { formatMoney } from "@/lib/format";
 import type { Quotation, QuotationStatus } from "@/types";
 
 // ── Status config ─────────────────────────────────────────────
@@ -24,12 +25,6 @@ type QuotationSummary = Quotation & {
   client: { id: string; name: string; companyName: string | null; logoUrl: string | null };
   _count: { lineItems: number };
 };
-
-function fmt(n: number, currency: string) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency", currency, maximumFractionDigits: 0,
-  }).format(n);
-}
 
 function formatDate(d: string | null) {
   if (!d) return "—";
@@ -104,7 +99,7 @@ export default function QuotationsPage() {
             { label: "Total",    value: stats.total,    color: "text-gray-900" },
             { label: "Draft",    value: stats.draft,    color: "text-gray-600" },
             { label: "Sent",     value: stats.sent,     color: "text-blue-700" },
-            { label: "Approved value", value: `${stats.value > 0 ? fmt(stats.value, "USD") : stats.approved + " approved"}`, color: "text-emerald-700" },
+            { label: "Approved value", value: `${stats.value > 0 ? formatMoney(stats.value, "USD") : stats.approved + " approved"}`, color: "text-emerald-700" },
           ].map(({ label, value, color }) => (
             <div key={label} className="bg-gray-50 rounded-xl px-4 py-3">
               <p className="text-xs text-gray-500">{label}</p>
@@ -210,7 +205,7 @@ export default function QuotationsPage() {
                   <span className="text-sm text-gray-600">{q._count?.lineItems ?? 0} items</span>
                   <span className="text-sm text-gray-500">{formatDate(q.validUntil)}</span>
                   <span className="text-sm font-semibold text-gray-900 text-right">
-                    {fmt(Number(q.total), q.currency)}
+                    {formatMoney(Number(q.total), q.currency)}
                   </span>
                   <ChevronRight className="w-4 h-4 text-gray-400" />
                 </Link>

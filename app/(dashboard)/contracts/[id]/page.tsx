@@ -9,6 +9,9 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
+import { useToast } from "@/components/ui/Toast";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { formatMoney } from "@/lib/format";
 import type { Contract, ContractStatus, ContractType } from "@/types";
 
 const TYPE_LABELS: Record<ContractType, string> = {
@@ -38,7 +41,7 @@ function formatDate(d: string | null) {
 
 function formatCurrency(v: number | null, currency: string) {
   if (!v) return null;
-  return new Intl.NumberFormat("en-US", { style: "currency", currency, maximumFractionDigits: 0 }).format(v);
+  return formatMoney(v, currency);
 }
 
 function initials(name: string) {
@@ -47,6 +50,8 @@ function initials(name: string) {
 
 export default function ContractDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const toast   = useToast();
+  const confirm = useConfirm();
   const [contract, setContract] = useState<Contract | null>(null);
   const [loading, setLoading] = useState(true);
   const [pdfLoading, setPdfLoading] = useState(false);
@@ -66,37 +71,83 @@ export default function ContractDetailPage() {
 
   const handleSign = async () => {
     if (!signModal) return;
+    const ok = await confirm({
+      title: "Record signature?",
+      message: `Mark ${signModal.partyName} as having signed this contract. Once all parties have signed the contract becomes fully signed.`,
+      confirmLabel: "Confirm Signature",
+      variant: "info",
+    });
+    if (!ok) return;
     setSigning(true);
     const res = await fetch(`/api/contracts/${id}/sign`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ partyId: signModal.partyId, signatureNote: signNote }),
     });
-    if (res.ok) setContract(await res.json());
+    if (res.ok) {
+      setContract(await res.json());
+      toast.success(`${signModal.partyName} marked as signed`);
+    } else {
+      toast.error("Failed to record signature");
+    }
     setSigning(false);
     setSignModal(null);
     setSignNote("");
   };
 
   const handleUnsign = async (partyId: string) => {
-    if (!confirm("Remove signature for this party?")) return;
+    const ok = await confirm({
+      title: "Remove signature?",
+      message: "This will reset the party's signature status.",
+      confirmLabel: "Remove",
+      variant: "warning",
+    });
+    if (!ok) return;
     const res = await fetch(`/api/contracts/${id}/sign`, {
       method: "DELETE", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ partyId }),
     });
     if (res.ok) setContract(await res.json());
+    else toast.error("Failed to remove signature");
   };
 
   const handleStatusUpdate = async () => {
+    // Irreversible-ish transitions — confirm before activating / terminating.
+    const irreversible: ContractStatus[] = ["FULLY_SIGNED", "TERMINATED", "EXPIRED"];
+    if (irreversible.includes(newStatus) && contract?.status !== newStatus) {
+      const ok = await confirm({
+        title: `Set status to ${STATUS_CONFIG[newStatus].label}?`,
+        message: newStatus === "FULLY_SIGNED"
+          ? "Activating the contract locks it as fully executed."
+          : `Marking this contract as ${STATUS_CONFIG[newStatus].label.toLowerCase()} is typically not reversed.`,
+        confirmLabel: "Confirm",
+        variant: newStatus === "TERMINATED" ? "danger" : "warning",
+      });
+      if (!ok) return;
+    }
+
     const res = await fetch(`/api/contracts/${id}`, {
       method: "PATCH", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: newStatus }),
     });
-    if (res.ok) { setContract(await res.json()); setStatusOpen(false); }
+    if (res.ok) {
+      setContract(await res.json());
+      setStatusOpen(false);
+      toast.success("Status updated");
+    } else {
+      toast.error("Failed to update status");
+    }
   };
 
   const handleDelete = async () => {
-    if (!confirm("Delete this contract? This cannot be undone.")) return;
+    const ok = await confirm({
+      title: "Delete contract?",
+      message: "This contract and all party information will be permanently deleted.",
+      confirmLabel: "Delete Contract",
+      variant: "danger",
+    });
+    if (!ok) return;
     await fetch(`/api/contracts/${id}`, { method: "DELETE" });
+    toast.success("Contract deleted");
     window.location.href = "/contracts";
   };
 
@@ -129,6 +180,8 @@ export default function ContractDetailPage() {
         })),
       }, settings);
       await openPrintPdf(html);
+    } catch {
+      toast.error("Failed to generate PDF");
     } finally {
       setPdfLoading(false);
     }

@@ -12,6 +12,7 @@ export type ServiceType =
   | "pr" | "other";
 export type TaskStatus       = "TODO" | "IN_PROGRESS" | "IN_REVIEW" | "DONE" | "BLOCKED";
 export type Priority         = "LOW" | "MEDIUM" | "HIGH" | "URGENT";
+export type ProjectRole      = "EDITOR" | "VIEWER";
 export type QuotationStatus  = "DRAFT" | "SENT" | "APPROVED" | "REJECTED" | "EXPIRED" | "CONVERTED";
 export type PricingType      = "FIXED" | "RETAINER" | "PER_ITEM";
 export type DiscountType     = "PERCENT" | "AMOUNT";
@@ -315,6 +316,8 @@ export interface CalendarEvent {
   projectId?: string;
   projectName?: string;
   clientName?: string;
+  clientId?: string;
+  assignees?: string[];
   color: string;
 }
 
@@ -417,6 +420,38 @@ export interface ConvertQuotationData {
   createTasks: boolean;
 }
 
+// ── Folders ──────────────────────────────────────────────────
+
+export type FolderScope = "PROJECT" | "CLIENT" | "COMMON";
+
+export interface Folder {
+  id: string;
+  name: string;
+  parentId: string | null;
+  scope: FolderScope;
+  projectId: string | null;
+  clientId: string | null;
+  description: string | null;
+  color: string | null;
+  createdAt: string;
+  updatedAt: string;
+  children?: Folder[];
+  files?: AssetFile[];
+  project?: { id: string; name: string } | null;
+  client?: { id: string; name: string } | null;
+  _count?: { files: number; children: number };
+}
+
+export interface FolderFormData {
+  name: string;
+  scope: FolderScope;
+  parentId: string;
+  projectId: string;
+  clientId: string;
+  description: string;
+  color: string;
+}
+
 // ── Files & Assets ───────────────────────────────────────────
 
 export type FileStatus = "DRAFT" | "IN_REVIEW" | "APPROVED" | "CHANGES_REQUIRED";
@@ -469,13 +504,15 @@ export interface AssetFile {
   description: string | null;
   status: FileStatus;
   isShared: boolean;
+  folderId: string | null;
   clientId: string | null;
   projectId: string | null;
   taskId: string | null;
   uploadedById: string | null;
   createdAt: string;
   updatedAt: string;
-  uploadedBy?: { id: string; name: string; avatarUrl: string | null } | null;
+  uploadedBy?: { id: string; name: string; avatarUrl: string | null; role?: string } | null;
+  folder?: { id: string; name: string } | null;
   client?: { id: string; name: string } | null;
   project?: { id: string; name: string } | null;
   task?: { id: string; title: string } | null;
@@ -630,6 +667,41 @@ export interface ContractFormData {
   currency: string;
   notes: string;
   parties: ContractPartyFormData[];
+}
+
+// ── Invoices ──────────────────────────────────────────────────
+
+export type InvoiceStatus = "DRAFT" | "SENT" | "PAID" | "OVERDUE" | "CANCELLED";
+
+export interface InvoiceLineItem {
+  id: string;
+  invoiceId: string;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  unit: string | null;
+  order: number;
+}
+
+export interface Invoice {
+  id: string;
+  invoiceNumber: string;
+  projectId: string | null;
+  quotationId: string | null;
+  clientId: string;
+  status: InvoiceStatus;
+  dueDate: string | null;
+  currency: string;
+  discountPct: number | null;
+  taxPct: number | null;
+  notes: string | null;
+  paidAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  lineItems: InvoiceLineItem[];
+  project?: { id: string; name: string } | null;
+  quotation?: { id: string; number: string; title: string } | null;
+  client?: { id: string; name: string; companyName: string | null } | null;
 }
 
 // ── API helpers ───────────────────────────────────────────────

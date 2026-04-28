@@ -5,6 +5,9 @@ import {
   Plus, Tag, Edit3, Trash2, Check, X, ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { useToast } from "@/components/ui/Toast";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { formatMoney } from "@/lib/format";
 import type { RateCard, RateCardFormData, PricingType } from "@/types";
 
 const CURRENCIES = ["USD", "EUR", "GBP", "INR", "AUD", "CAD", "SGD", "AED"];
@@ -22,10 +25,6 @@ const EMPTY_FORM: RateCardFormData = {
   unit: "hour", unitPrice: "", currency: "USD",
 };
 
-function fmt(n: number, currency: string) {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency, maximumFractionDigits: 2 }).format(n);
-}
-
 interface RateCardRowProps {
   rc: RateCard;
   onUpdate: (id: string, data: Partial<RateCardFormData>) => Promise<void>;
@@ -33,17 +32,24 @@ interface RateCardRowProps {
 }
 
 function RateCardRow({ rc, onUpdate, onDelete }: RateCardRowProps) {
-  const [editing, setEditing] = useState(false);
-  const [form, setForm] = useState<RateCardFormData>({
+  const initialForm = (): RateCardFormData => ({
     name: rc.name, description: rc.description ?? "", category: rc.category ?? "",
     pricingType: rc.pricingType, unit: rc.unit, unitPrice: String(rc.unitPrice), currency: rc.currency,
   });
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState<RateCardFormData>(initialForm);
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
     setSaving(true);
     await onUpdate(rc.id, form);
     setSaving(false);
+    setEditing(false);
+  };
+
+  // Restore the original values (including category) when the user cancels.
+  const handleCancel = () => {
+    setForm(initialForm());
     setEditing(false);
   };
 
@@ -126,7 +132,7 @@ function RateCardRow({ rc, onUpdate, onDelete }: RateCardRowProps) {
               <Check className="w-3.5 h-3.5" />
             </button>
             <button
-              onClick={() => setEditing(false)}
+              onClick={handleCancel}
               className="p-1.5 bg-gray-100 text-gray-600 rounded-md hover:bg-gray-200 transition-colors"
             >
               <X className="w-3.5 h-3.5" />
@@ -160,7 +166,7 @@ function RateCardRow({ rc, onUpdate, onDelete }: RateCardRowProps) {
         </span>
       </td>
       <td className="px-3 py-3.5 text-sm font-semibold text-gray-900">
-        {fmt(Number(rc.unitPrice), rc.currency)}
+        {formatMoney(Number(rc.unitPrice), rc.currency)}
       </td>
       <td className="px-3 py-3.5 text-sm text-gray-500">per {rc.unit}</td>
       <td className="px-4 py-3.5">
@@ -186,6 +192,8 @@ function RateCardRow({ rc, onUpdate, onDelete }: RateCardRowProps) {
 // ── Page ──────────────────────────────────────────────────────
 
 export default function RateCardsPage() {
+  const toast   = useToast();
+  const confirm = useConfirm();
   const [rateCards, setRateCards] = useState<RateCard[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -226,6 +234,7 @@ export default function RateCardsPage() {
       setRateCards((p) => [data, ...p]);
       setForm(EMPTY_FORM);
       setShowForm(false);
+      toast.success("Rate card created");
     } catch (e) {
       setFormError(e instanceof Error ? e.message : "Failed");
     } finally {
@@ -241,13 +250,23 @@ export default function RateCardsPage() {
     if (res.ok) {
       const updated = await res.json();
       setRateCards((p) => p.map((rc) => rc.id === id ? updated : rc));
+      toast.success("Rate card updated");
+    } else {
+      toast.error("Failed to update rate card");
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Archive this rate card?")) return;
+    const ok = await confirm({
+      title: "Archive rate card?",
+      message: "This rate card will be archived and hidden from quotation dropdowns.",
+      confirmLabel: "Archive",
+      variant: "warning",
+    });
+    if (!ok) return;
     await fetch(`/api/rate-cards/${id}`, { method: "DELETE" });
     setRateCards((p) => p.filter((rc) => rc.id !== id));
+    toast.success("Rate card archived");
   };
 
   // Group by category for display

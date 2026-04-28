@@ -3,7 +3,7 @@ builder = "nixpacks"
 buildCommand = "npm install && prisma generate && next build"
 
 [deploy]
-startCommand = "next start"
+startCommand = "prisma db push --accept-data-loss && next start"
 healthcheckPath = "/"
 healthcheckTimeout = 30
 restartPolicyType = "on_failure"

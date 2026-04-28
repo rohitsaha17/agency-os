@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -8,6 +8,7 @@ import {
   LayoutGrid, List, Edit3, RefreshCw, Zap, Wand2, FileText,
   TrendingDown, Scroll, Clock, CheckCircle2, XCircle, Paperclip,
   Upload, Download, Image, Film, File as FileIcon, Grid3X3,
+  MessageSquare, Receipt, Send, Hash, ExternalLink, Trash2, Users, Sparkles, Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/Badge";
@@ -18,14 +19,20 @@ import { TaskList } from "@/components/tasks/TaskList";
 import { TaskModal } from "@/components/tasks/TaskModal";
 import { TaskPanel } from "@/components/tasks/TaskPanel";
 import type {
-  Project, Task, TaskStatus, ProjectFormData, TaskTemplate, QuotationStatus,
+  Project, Task, TaskStatus, ProjectFormData, QuotationStatus,
   Expense, Contract, ExpenseCategory, ExpenseStatus,
   ContractType, ContractPartyType, AssetFile, MimeCategory,
+  Channel, ChatMessage, Invoice, InvoiceStatus,
 } from "@/types";
 import { SERVICE_TYPES, RECURRING_FREQUENCIES } from "@/components/projects/ProjectForm";
+import { useCurrentUser } from "@/lib/useCurrentUser";
+import { useToast } from "@/components/ui/Toast";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { TaskGeneratorWizard } from "@/components/projects/TaskGeneratorWizard";
+import { ProjectHealthCard } from "@/components/ai/ProjectHealthCard";
 
 type QuotationStub = { id: string; number: string; title: string; total: number; status: QuotationStatus };
-type PageTab = "tasks" | "files" | "expenses" | "contracts";
+type PageTab = "tasks" | "files" | "expenses" | "contracts" | "chat" | "invoices" | "tax";
 type ViewMode = "kanban" | "list";
 
 function formatFileSize(bytes: number) {
@@ -125,12 +132,15 @@ function ProgressRing({ progress }: { progress: number }) {
 export default function ProjectDetailPage() {
   const params = useParams();
   const id = params.id as string;
+  const toast = useToast();
+  const confirmDialog = useConfirm();
+  const { user: currentUser } = useCurrentUser();
+  const canManageChannels = currentUser?.role === "ADMIN" || currentUser?.role === "MANAGER";
 
   const [pdfLoading, setPdfLoading] = useState(false);
 
   const [project, setProject] = useState<(Project & { progress: number; quotation?: QuotationStub | null }) | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [templates, setTemplates] = useState<TaskTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [tasksLoading, setTasksLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -144,11 +154,34 @@ export default function ProjectDetailPage() {
   const [filesLoaded, setFilesLoaded] = useState(false);
   const [fileUploading, setFileUploading] = useState(false);
 
+  // Chat state
+  const [channels, setChannels] = useState<Channel[]>([]);
+  const [activeChannel, setActiveChannel] = useState<Channel | null>(null);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatLoading, setChatLoading] = useState(false);
+  const [chatMessagesLoading, setChatMessagesLoading] = useState(false);
+  const [chatLoaded, setChatLoaded] = useState(false);
+  const [chatCompose, setChatCompose] = useState("");
+  const [chatSending, setChatSending] = useState(false);
+  const [showCreateChannel, setShowCreateChannel] = useState(false);
+  const [newChannelName, setNewChannelName] = useState("");
+  const [newChannelType, setNewChannelType] = useState<"PROJECT_INTERNAL" | "PROJECT_CLIENT" | "GENERAL">("PROJECT_INTERNAL");
+  const [newChannelMemberIds, setNewChannelMemberIds] = useState<string[]>([]);
+  const [teamUsers, setTeamUsers] = useState<{ id: string; name: string; role: string }[]>([]);
+  const chatBottomRef = useRef<HTMLDivElement>(null);
+
+  // Invoices state
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [invoicesLoading, setInvoicesLoading] = useState(false);
+  const [invoicesLoaded, setInvoicesLoaded] = useState(false);
+
+  // Tax state
+  const [clientTaxData, setClientTaxData] = useState<{ taxRegistrations: { id: string; type: string; number: string; country: string }[]; billingCurrency: string; paymentTermDays: number } | null>(null);
+  const [taxLoaded, setTaxLoaded] = useState(false);
+
   // Modals
   const [editProjectOpen, setEditProjectOpen] = useState(false);
-  const [templateOpen, setTemplateOpen] = useState(false);
-  const [selectedTemplate, setSelectedTemplate] = useState("");
-  const [applyingTemplate, setApplyingTemplate] = useState(false);
+  const [wizardOpen, setWizardOpen] = useState(false);
   const [taskModal, setTaskModal] = useState<{
     open: boolean; defaultStatus?: TaskStatus; parentTask?: Task | null;
   }>({ open: false });
@@ -169,6 +202,10 @@ export default function ProjectDetailPage() {
   const [contractClients, setContractClients] = useState<{ id: string; name: string; companyName: string | null }[]>([]);
   const [contractStakeholders, setContractStakeholders] = useState<{ id: string; name: string }[]>([]);
   const [contractUsers, setContractUsers] = useState<{ id: string; name: string; email: string }[]>([]);
+
+  // AI contract draft
+  const [aiDraftLoading, setAiDraftLoading] = useState(false);
+  const [aiDraftResult, setAiDraftResult] = useState<{ title: string; content: string; clauses: { heading: string; body: string }[]; notes: string } | null>(null);
 
   const fetchProject = useCallback(async () => {
     try {
@@ -212,14 +249,47 @@ export default function ProjectDetailPage() {
     finally { setTasksLoading(false); }
   }, [id]);
 
+  const fetchChannels = useCallback(async () => {
+    setChatLoading(true);
+    try {
+      const res = await fetch(`/api/channels?projectId=${id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setChannels(data);
+        setActiveChannel((prev) => {
+          if (prev) {
+            const updated = data.find((c: Channel) => c.id === prev.id);
+            return updated ?? data[0] ?? null;
+          }
+          return data[0] ?? null;
+        });
+      }
+      setChatLoaded(true);
+    } finally { setChatLoading(false); }
+  }, [id]);
+
+  const fetchChatMessages = useCallback(async (channelId: string, silent = false) => {
+    if (!silent) setChatMessagesLoading(true);
+    try {
+      const res = await fetch(`/api/channels/${channelId}/messages?limit=100`);
+      if (res.ok) setChatMessages(await res.json());
+    } finally { setChatMessagesLoading(false); }
+  }, []);
+
+  const fetchInvoices = useCallback(async () => {
+    setInvoicesLoading(true);
+    try {
+      const res = await fetch(`/api/invoices?projectId=${id}`);
+      if (res.ok) setInvoices(await res.json());
+      setInvoicesLoaded(true);
+    } finally { setInvoicesLoading(false); }
+  }, [id]);
+
   useEffect(() => {
     fetchProject();
     fetchTasks();
     fetchExpenses();
     fetchContracts();
-    fetch("/api/task-templates")
-      .then((r) => r.json())
-      .then((d) => { if (Array.isArray(d)) setTemplates(d); });
   }, [fetchProject, fetchTasks, fetchExpenses, fetchContracts]);
 
   const handleStatusChange = async (taskId: string, status: TaskStatus) => {
@@ -257,18 +327,65 @@ export default function ProjectDetailPage() {
     fetchTasks();
   };
 
-  const handleApplyTemplate = async () => {
-    if (!selectedTemplate) return;
-    setApplyingTemplate(true);
+
+  const handleChatSend = async () => {
+    if (!chatCompose.trim() || !activeChannel || chatSending) return;
+    setChatSending(true);
     try {
-      await fetch(`/api/task-templates/${selectedTemplate}/apply`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId: id, startDate: project?.startDate }),
+      const res = await fetch(`/api/channels/${activeChannel.id}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ body: chatCompose.trim(), authorName: "You" }),
       });
-      fetchTasks();
-      setTemplateOpen(false);
-      setSelectedTemplate("");
-    } finally { setApplyingTemplate(false); }
+      if (res.ok) {
+        setChatCompose("");
+        fetchChatMessages(activeChannel.id, true);
+      }
+    } finally { setChatSending(false); }
+  };
+
+  const handleCreateChannel = async () => {
+    if (!newChannelName.trim() || !project) return;
+    try {
+      const res = await fetch("/api/channels", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newChannelName.trim(),
+          type: newChannelType,
+          ...(newChannelType !== "GENERAL" ? { projectId: id } : {}),
+          ...(newChannelMemberIds.length > 0 ? { memberIds: newChannelMemberIds } : {}),
+        }),
+      });
+      if (res.ok) {
+        setNewChannelName("");
+        setNewChannelType("PROJECT_INTERNAL");
+        setNewChannelMemberIds([]);
+        setShowCreateChannel(false);
+        setChatLoaded(false);
+        fetchChannels();
+      }
+    } catch { /* ignore */ }
+  };
+
+  const handleDeleteChannel = async (channelId: string, channelName: string) => {
+    const ok = await confirmDialog({
+      title: "Delete channel?",
+      message: `"${channelName}" and all its messages will be permanently deleted.`,
+      confirmLabel: "Delete Channel",
+      variant: "danger",
+    });
+    if (!ok) return;
+    const res = await fetch(`/api/channels/${channelId}`, { method: "DELETE" });
+    if (res.ok) {
+      toast.success("Channel deleted");
+      setChannels(prev => prev.filter(c => c.id !== channelId));
+      if (activeChannel?.id === channelId) {
+        setActiveChannel(channels.find(c => c.id !== channelId) ?? null);
+      }
+    } else {
+      toast.error("Failed to delete channel");
+    }
   };
 
   const handleDownloadPdf = async () => {
@@ -309,6 +426,56 @@ export default function ProjectDetailPage() {
   useEffect(() => {
     if (pageTab === "files" && !filesLoaded) fetchFiles();
   }, [pageTab, filesLoaded, fetchFiles]);
+
+  // Lazy-load chat tab
+  useEffect(() => {
+    if (pageTab === "chat" && !chatLoaded) fetchChannels();
+    if (pageTab === "chat" && teamUsers.length === 0) {
+      fetch("/api/users").then(r => r.json()).then(d => setTeamUsers(Array.isArray(d) ? d : d.users ?? [])).catch(() => {});
+    }
+  }, [pageTab, chatLoaded, fetchChannels]);
+
+  // Fetch messages when active channel changes
+  useEffect(() => {
+    if (activeChannel && pageTab === "chat") {
+      setChatMessages([]);
+      fetchChatMessages(activeChannel.id);
+    }
+  }, [activeChannel?.id, pageTab, fetchChatMessages]);
+
+  // Poll for new chat messages every 4 seconds
+  useEffect(() => {
+    if (pageTab !== "chat" || !activeChannel) return;
+    const interval = setInterval(() => fetchChatMessages(activeChannel.id, true), 4000);
+    return () => clearInterval(interval);
+  }, [pageTab, activeChannel?.id, fetchChatMessages]);
+
+  // Auto-scroll chat to bottom on new messages
+  useEffect(() => {
+    chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [chatMessages]);
+
+  // Lazy-load invoices tab
+  useEffect(() => {
+    if (pageTab === "invoices" && !invoicesLoaded) fetchInvoices();
+  }, [pageTab, invoicesLoaded, fetchInvoices]);
+
+  // Lazy-load tax tab
+  useEffect(() => {
+    if (pageTab === "tax" && !taxLoaded && project?.client?.id) {
+      fetch(`/api/clients/${project.client.id}`)
+        .then(r => r.json())
+        .then(d => {
+          setClientTaxData({
+            taxRegistrations: d.taxRegistrations ?? [],
+            billingCurrency: d.billingCurrency ?? "USD",
+            paymentTermDays: d.paymentTermDays ?? 30,
+          });
+          setTaxLoaded(true);
+        })
+        .catch(() => setTaxLoaded(true));
+    }
+  }, [pageTab, taxLoaded, project?.client?.id]);
 
   // Load stakeholders when expense modal opens
   useEffect(() => {
@@ -391,6 +558,43 @@ export default function ProjectDetailPage() {
     }
   };
 
+  const handleAIDraft = async () => {
+    setAiDraftLoading(true);
+    setAiDraftResult(null);
+    try {
+      const parties = contractParties
+        .filter((p) => p.name.trim())
+        .map((p) => ({ name: p.name, role: p.partyType }));
+      const res = await fetch("/api/ai/draft-contract", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: contractForm.type,
+          parties: parties.length > 0 ? parties : [{ name: "Party A", role: "CLIENT" }],
+          projectName: project?.name,
+          projectDescription: project?.description,
+          value: contractForm.value ? parseFloat(contractForm.value) : undefined,
+          currency: contractForm.currency,
+          startDate: contractForm.startDate,
+          endDate: contractForm.endDate,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAiDraftResult(data);
+        // Pre-fill title if empty
+        if (!contractForm.title.trim() && data.title) {
+          setContractForm((f) => ({ ...f, title: data.title }));
+        }
+        // Pre-fill notes with the AI content
+        if (data.content) {
+          setContractForm((f) => ({ ...f, notes: data.content }));
+        }
+      }
+    } catch { /* ignore */ }
+    finally { setAiDraftLoading(false); }
+  };
+
   const allFlat = flattenTasks(tasks);
   const taskCounts = {
     total: allFlat.length,
@@ -398,9 +602,6 @@ export default function ProjectDetailPage() {
     inProgress: allFlat.filter((t) => t.status === "IN_PROGRESS").length,
   };
 
-  const relevantTemplates = project
-    ? templates.filter((t) => !t.projectType || t.projectType === project.type)
-    : templates;
 
   if (loading) {
     return (
@@ -476,11 +677,9 @@ export default function ProjectDetailPage() {
           </div>
 
           <div className="flex items-center gap-2 flex-shrink-0">
-            {relevantTemplates.length > 0 && (
-              <Button variant="ghost" size="sm" icon={<Wand2 className="w-3.5 h-3.5" />} onClick={() => setTemplateOpen(true)}>
-                Auto-generate Tasks
-              </Button>
-            )}
+            <Button variant="ghost" size="sm" icon={<Wand2 className="w-3.5 h-3.5" />} onClick={() => setWizardOpen(true)}>
+              AI Generate Tasks
+            </Button>
             <Button
               variant="secondary" size="sm"
               icon={pdfLoading ? undefined : <Download className="w-3.5 h-3.5" />}
@@ -538,6 +737,9 @@ export default function ProjectDetailPage() {
             { id: "files", label: `Files${projectFiles.length > 0 ? ` (${projectFiles.length})` : ""}`, icon: <Paperclip className="w-3.5 h-3.5" /> },
             { id: "expenses", label: `Expenses${expenses.length > 0 ? ` (${expenses.length})` : ""}`, icon: <TrendingDown className="w-3.5 h-3.5" /> },
             { id: "contracts", label: `Contracts${contracts.length > 0 ? ` (${contracts.length})` : ""}`, icon: <Scroll className="w-3.5 h-3.5" /> },
+            { id: "chat", label: `Chat${channels.length > 0 ? ` (${channels.length})` : ""}`, icon: <MessageSquare className="w-3.5 h-3.5" /> },
+            { id: "invoices", label: `Invoices${invoices.length > 0 ? ` (${invoices.length})` : ""}`, icon: <Receipt className="w-3.5 h-3.5" /> },
+            { id: "tax", label: "Tax & Billing", icon: <DollarSign className="w-3.5 h-3.5" /> },
           ] as { id: PageTab; label: string; icon: React.ReactNode }[]).map((tab) => (
             <button
               key={tab.id} onClick={() => setPageTab(tab.id)}
@@ -558,6 +760,28 @@ export default function ProjectDetailPage() {
       <div className="flex-1 px-4 sm:px-6 lg:px-8 py-4 sm:py-6 overflow-auto">
         {/* ── TASKS TAB ── */}
         {pageTab === "tasks" && (<>
+        {/* AI Project Health */}
+        {project && allFlat.length > 0 && (
+          <div className="mb-5">
+            <ProjectHealthCard data={{
+              projectName: project.name,
+              type: project.type as "ONE_TIME" | "RETAINER",
+              progress: project.progress,
+              totalTasks: taskCounts.total,
+              completedTasks: taskCounts.done,
+              overdueTasks: allFlat.filter((t) => t.dueDate && new Date(t.dueDate) < new Date() && t.status !== "DONE").length,
+              blockedTasks: allFlat.filter((t) => t.status === "BLOCKED").length,
+              budget: project.budget ? Number(project.budget) : null,
+              expensesTotal: expenseSummary?.total ?? 0,
+              startDate: project.startDate,
+              endDate: project.endDate,
+              daysElapsed: project.startDate ? Math.max(0, Math.floor((Date.now() - new Date(project.startDate).getTime()) / 86400000)) : 0,
+              daysRemaining: project.endDate ? Math.max(0, Math.ceil((new Date(project.endDate).getTime() - Date.now()) / 86400000)) : null,
+              teamSize: [...new Set(allFlat.flatMap((t) => t.assignees.map((a) => a.userId)))].length,
+              recentVelocity: allFlat.filter((t) => t.status === "DONE" && t.updatedAt && (Date.now() - new Date(t.updatedAt).getTime()) < 7 * 86400000).length,
+            }} />
+          </div>
+        )}
         <div className="flex items-center mb-5">
           <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1">
             {(["list", "kanban"] as ViewMode[]).map((v) => (
@@ -573,21 +797,21 @@ export default function ProjectDetailPage() {
           </div>
         </div>
 
-        {!tasksLoading && allFlat.length === 0 && relevantTemplates.length > 0 && (
+        {!tasksLoading && allFlat.length === 0 && (
           <div className="mb-5 p-5 rounded-xl border-2 border-dashed border-indigo-200 bg-indigo-50/50 flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-lg bg-indigo-100 flex items-center justify-center flex-shrink-0">
                 <Wand2 className="w-4 h-4 text-indigo-600" />
               </div>
               <div>
-                <p className="text-sm font-semibold text-indigo-900">Auto-generate tasks</p>
+                <p className="text-sm font-semibold text-indigo-900">AI-powered task generation</p>
                 <p className="text-xs text-indigo-600 mt-0.5">
-                  Use a template to instantly create a full task structure for this project.
+                  Describe your project and let AI create a complete task breakdown with subtasks, priorities, and timelines.
                 </p>
               </div>
             </div>
-            <Button size="sm" icon={<Wand2 className="w-3.5 h-3.5" />} onClick={() => setTemplateOpen(true)}>
-              Use Template
+            <Button size="sm" icon={<Sparkles className="w-3.5 h-3.5" />} onClick={() => setWizardOpen(true)}>
+              Generate Tasks
             </Button>
           </div>
         )}
@@ -699,6 +923,22 @@ export default function ProjectDetailPage() {
                       }`}>
                         {file.status.replace("_", " ")}
                       </span>
+                      <label
+                        className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
+                        title="Upload new version"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Upload className="w-3.5 h-3.5" />
+                        <input type="file" className="hidden" onChange={async (e) => {
+                          const f = e.target.files?.[0];
+                          if (!f) return;
+                          const fd = new FormData();
+                          fd.append("file", f);
+                          const res = await fetch(`/api/files/${file.id}/versions`, { method: "POST", body: fd });
+                          if (res.ok) fetchFiles();
+                          e.target.value = "";
+                        }} />
+                      </label>
                       {file.url && (
                         <a href={file.url} download={file.name}
                           className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
@@ -868,6 +1108,557 @@ export default function ProjectDetailPage() {
             )}
           </div>
         )}
+
+        {/* ── CHAT TAB ── */}
+        {pageTab === "chat" && (
+          <div className="flex flex-col h-[calc(100vh-320px)]">
+            {chatLoading ? (
+              <div className="space-y-3 p-4">
+                {[1, 2, 3, 4].map((i) => (
+                  <div key={i} className="flex gap-3 animate-pulse">
+                    <div className="w-8 h-8 bg-gray-200 rounded-full flex-shrink-0" />
+                    <div className="flex-1 space-y-2">
+                      <div className="h-3 bg-gray-200 rounded w-24" />
+                      <div className="h-3 bg-gray-200 rounded w-64" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : channels.length === 0 ? (
+              <div className="flex flex-col items-center justify-center flex-1 text-center py-16">
+                <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center mb-4">
+                  <MessageSquare className="w-7 h-7 text-gray-300" />
+                </div>
+                <p className="text-sm text-gray-500 mb-1">No channels for this project yet</p>
+                <p className="text-xs text-gray-400 mb-4">Create a channel to start collaborating</p>
+
+                {!showCreateChannel ? (
+                  <button
+                    onClick={() => setShowCreateChannel(true)}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                  >
+                    <Plus className="w-4 h-4" /> New Channel
+                  </button>
+                ) : (
+                  <div className="w-full max-w-sm bg-white border border-gray-200 rounded-xl p-4 text-left space-y-3">
+                    <input
+                      type="text"
+                      placeholder="Channel name..."
+                      value={newChannelName}
+                      onChange={(e) => setNewChannelName(e.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      autoFocus
+                    />
+                    <div className="flex gap-2">
+                      {([
+                        { value: "PROJECT_INTERNAL", label: "Team Only", active: "bg-indigo-50 border-indigo-300 text-indigo-700" },
+                        { value: "PROJECT_CLIENT", label: "With Client", active: "bg-emerald-50 border-emerald-300 text-emerald-700" },
+                        { value: "GENERAL", label: "General", active: "bg-gray-200 border-gray-400 text-gray-800" },
+                      ] as const).map(opt => (
+                        <button
+                          key={opt.value}
+                          onClick={() => setNewChannelType(opt.value)}
+                          className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
+                            newChannelType === opt.value ? opt.active : "border-gray-200 text-gray-600"
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                    {/* Member selection */}
+                    {teamUsers.length > 0 && (
+                      <div>
+                        <p className="text-xs text-gray-500 mb-1">Add members (optional)</p>
+                        <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+                          {teamUsers.map(u => (
+                            <button
+                              key={u.id}
+                              type="button"
+                              onClick={() => setNewChannelMemberIds(prev =>
+                                prev.includes(u.id) ? prev.filter(id => id !== u.id) : [...prev, u.id]
+                              )}
+                              className={`px-2 py-1 text-[11px] rounded-full border transition-colors ${
+                                newChannelMemberIds.includes(u.id)
+                                  ? "bg-indigo-100 border-indigo-300 text-indigo-700"
+                                  : "border-gray-200 text-gray-500 hover:bg-gray-50"
+                              }`}
+                            >
+                              {u.name}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    <div className="flex gap-2">
+                      <button onClick={() => setShowCreateChannel(false)} className="flex-1 px-3 py-2 text-xs font-medium border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50">
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleCreateChannel}
+                        disabled={!newChannelName.trim()}
+                        className="flex-1 px-3 py-2 text-xs font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                      >
+                        Create
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <>
+                {/* Channel selector + New Channel button */}
+                <div className="flex items-center gap-2 mb-4">
+                  {channels.length > 1 && (
+                    <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1 w-fit">
+                      {channels.map((ch) => (
+                        <button
+                          key={ch.id}
+                          onClick={() => setActiveChannel(ch)}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                            activeChannel?.id === ch.id
+                              ? "bg-indigo-600 text-white"
+                              : "text-gray-600 hover:bg-gray-100"
+                          }`}
+                        >
+                          <Hash className="w-3 h-3" />
+                          {ch.name}
+                          {ch._count?.messages != null && (
+                            <span className={`text-[10px] ${activeChannel?.id === ch.id ? "text-indigo-200" : "text-gray-400"}`}>
+                              ({ch._count.messages})
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {channels.length === 1 && activeChannel && (
+                    <div className="flex items-center gap-2">
+                      <Hash className="w-4 h-4 text-gray-400" />
+                      <span className="text-sm font-semibold text-gray-900">{activeChannel.name}</span>
+                      {activeChannel.description && (
+                        <span className="text-xs text-gray-400 ml-2">{activeChannel.description}</span>
+                      )}
+                    </div>
+                  )}
+
+                  {canManageChannels && activeChannel && (
+                    <button
+                      onClick={() => handleDeleteChannel(activeChannel.id, activeChannel.name)}
+                      className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                      title="Delete channel"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setShowCreateChannel(!showCreateChannel)}
+                    className="ml-auto flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> New Channel
+                  </button>
+                </div>
+
+                {/* Inline channel creation */}
+                {showCreateChannel && (
+                  <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 mb-4 space-y-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <input
+                        type="text"
+                        placeholder="Channel name..."
+                        value={newChannelName}
+                        onChange={(e) => setNewChannelName(e.target.value)}
+                        className="flex-1 min-w-[150px] px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                        autoFocus
+                        onKeyDown={(e) => e.key === "Enter" && handleCreateChannel()}
+                      />
+                      <select
+                        value={newChannelType}
+                        onChange={(e) => setNewChannelType(e.target.value as "PROJECT_INTERNAL" | "PROJECT_CLIENT" | "GENERAL")}
+                        className="px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg bg-white text-gray-600"
+                      >
+                        <option value="PROJECT_INTERNAL">Team Only</option>
+                        <option value="PROJECT_CLIENT">With Client</option>
+                        <option value="GENERAL">General</option>
+                      </select>
+                      <button onClick={handleCreateChannel} disabled={!newChannelName.trim()} className="px-3 py-1.5 text-xs font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50">
+                        Create
+                      </button>
+                      <button onClick={() => setShowCreateChannel(false)} className="px-2.5 py-1.5 text-xs text-gray-500 hover:text-gray-700">
+                        Cancel
+                      </button>
+                    </div>
+                    {teamUsers.length > 0 && (
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <Users className="w-3.5 h-3.5 text-gray-400" />
+                        <span className="text-[11px] text-gray-500 mr-1">Members:</span>
+                        {teamUsers.map(u => (
+                          <button
+                            key={u.id}
+                            type="button"
+                            onClick={() => setNewChannelMemberIds(prev =>
+                              prev.includes(u.id) ? prev.filter(uid => uid !== u.id) : [...prev, u.id]
+                            )}
+                            className={`px-2 py-0.5 text-[11px] rounded-full border transition-colors ${
+                              newChannelMemberIds.includes(u.id)
+                                ? "bg-indigo-100 border-indigo-300 text-indigo-700"
+                                : "border-gray-200 text-gray-500 hover:bg-gray-50"
+                            }`}
+                          >
+                            {u.name}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+
+                {/* Message feed */}
+                <div className="flex-1 overflow-y-auto bg-white border border-gray-200 rounded-xl min-h-0">
+                  {chatMessagesLoading && chatMessages.length === 0 ? (
+                    <div className="space-y-3 p-4">
+                      {[1, 2, 3].map((i) => (
+                        <div key={i} className="flex gap-3 animate-pulse">
+                          <div className="w-8 h-8 bg-gray-100 rounded-full flex-shrink-0" />
+                          <div className="flex-1 space-y-2">
+                            <div className="h-3 bg-gray-100 rounded w-24" />
+                            <div className="h-3 bg-gray-100 rounded w-48" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : chatMessages.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-full text-center px-6 py-12">
+                      <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-3">
+                        <Hash className="w-5 h-5 text-gray-400" />
+                      </div>
+                      <p className="text-sm font-medium text-gray-700 mb-1">
+                        Welcome to #{activeChannel?.name}
+                      </p>
+                      <p className="text-xs text-gray-400">
+                        {activeChannel?.description || "Send a message to start the conversation."}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="py-3 px-4 space-y-0.5">
+                      {chatMessages.map((msg, i) => {
+                        const prev = chatMessages[i - 1];
+                        const sameAuthor = prev && prev.authorId === msg.authorId && prev.authorName === msg.authorName;
+                        const within5min = prev && new Date(msg.createdAt).getTime() - new Date(prev.createdAt).getTime() < 5 * 60 * 1000;
+                        const showAvatar = !sameAuthor || !within5min;
+
+                        // Date divider
+                        let showDivider: string | undefined;
+                        if (!prev) {
+                          showDivider = new Date(msg.createdAt).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+                        } else {
+                          const prevDate = new Date(prev.createdAt).toDateString();
+                          const curDate = new Date(msg.createdAt).toDateString();
+                          if (prevDate !== curDate) {
+                            const d = new Date(msg.createdAt);
+                            const now = new Date();
+                            showDivider = d.toDateString() === now.toDateString() ? "Today"
+                              : d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+                          }
+                        }
+
+                        return (
+                          <div key={msg.id}>
+                            {showDivider && (
+                              <div className="flex items-center gap-3 py-3">
+                                <div className="flex-1 h-px bg-gray-200" />
+                                <span className="text-[10px] font-medium text-gray-400 px-2">{showDivider}</span>
+                                <div className="flex-1 h-px bg-gray-200" />
+                              </div>
+                            )}
+                            <div className={`flex gap-2.5 group py-1 hover:bg-gray-50 rounded-lg transition-colors ${showAvatar ? "mt-2" : "mt-0"}`}>
+                              <div className="w-8 flex-shrink-0 mt-0.5">
+                                {showAvatar && (
+                                  msg.author?.avatarUrl ? (
+                                    <img src={msg.author.avatarUrl} alt={msg.authorName} className="w-8 h-8 rounded-full object-cover" />
+                                  ) : (
+                                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center text-white text-xs font-bold">
+                                      {msg.authorName.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase()}
+                                    </div>
+                                  )
+                                )}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                {showAvatar && (
+                                  <div className="flex items-baseline gap-2 mb-0.5">
+                                    <span className="text-sm font-semibold text-gray-900">{msg.authorName}</span>
+                                    <span className="text-[10px] text-gray-400">
+                                      {new Date(msg.createdAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+                                    </span>
+                                  </div>
+                                )}
+                                {msg.deletedAt ? (
+                                  <p className="text-sm text-gray-400 italic">This message was deleted</p>
+                                ) : (
+                                  <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap break-words">{msg.body}</p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                      <div ref={chatBottomRef} className="h-2" />
+                    </div>
+                  )}
+                </div>
+
+                {/* Compose box */}
+                {activeChannel && (
+                  <div className="mt-3">
+                    <div className="flex items-end gap-2 bg-white border border-gray-200 rounded-xl px-3 py-2">
+                      <textarea
+                        value={chatCompose}
+                        onChange={(e) => setChatCompose(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && !e.shiftKey) {
+                            e.preventDefault();
+                            handleChatSend();
+                          }
+                        }}
+                        placeholder={`Message #${activeChannel.name}`}
+                        rows={1}
+                        className="flex-1 bg-transparent text-sm text-gray-900 placeholder-gray-400 resize-none focus:outline-none max-h-32 overflow-y-auto py-1"
+                        style={{ fieldSizing: "content" } as React.CSSProperties}
+                        disabled={chatSending}
+                      />
+                      <button
+                        onClick={handleChatSend}
+                        disabled={!chatCompose.trim() || chatSending}
+                        className={`flex items-center justify-center w-8 h-8 rounded-lg transition-all flex-shrink-0 ${
+                          chatCompose.trim() && !chatSending
+                            ? "bg-indigo-600 text-white hover:bg-indigo-500"
+                            : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                        }`}
+                      >
+                        {chatSending ? (
+                          <div className="w-4 h-4 border-2 border-gray-300 border-t-white rounded-full animate-spin" />
+                        ) : (
+                          <Send className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-gray-400 mt-1.5 px-1">
+                      Enter to send · Shift+Enter for new line
+                    </p>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {/* ── INVOICES TAB ── */}
+        {pageTab === "invoices" && (
+          <div>
+            {/* Invoice summary cards */}
+            {invoices.length > 0 && (() => {
+              const totalInvoiced = invoices.reduce((sum, inv) => {
+                const lineTotal = inv.lineItems.reduce((s, li) => s + li.quantity * li.unitPrice, 0);
+                const discount = inv.discountPct ? lineTotal * (inv.discountPct / 100) : 0;
+                const afterDiscount = lineTotal - discount;
+                const tax = inv.taxPct ? afterDiscount * (inv.taxPct / 100) : 0;
+                return sum + afterDiscount + tax;
+              }, 0);
+              const totalPaid = invoices
+                .filter((inv) => inv.status === "PAID")
+                .reduce((sum, inv) => {
+                  const lineTotal = inv.lineItems.reduce((s, li) => s + li.quantity * li.unitPrice, 0);
+                  const discount = inv.discountPct ? lineTotal * (inv.discountPct / 100) : 0;
+                  const afterDiscount = lineTotal - discount;
+                  const tax = inv.taxPct ? afterDiscount * (inv.taxPct / 100) : 0;
+                  return sum + afterDiscount + tax;
+                }, 0);
+              const outstanding = totalInvoiced - totalPaid;
+              const currency = invoices[0]?.currency ?? project?.currency ?? "USD";
+
+              return (
+                <div className="grid grid-cols-3 gap-4 mb-6">
+                  {[
+                    { label: "Total Invoiced", value: formatCurrency(totalInvoiced, currency), color: "text-gray-900" },
+                    { label: "Total Paid", value: formatCurrency(totalPaid, currency), color: "text-emerald-600" },
+                    { label: "Outstanding", value: formatCurrency(outstanding, currency), color: outstanding > 0 ? "text-amber-600" : "text-gray-900" },
+                  ].map((s) => (
+                    <div key={s.label} className="bg-white border border-gray-200 rounded-xl px-4 py-3">
+                      <p className="text-xs text-gray-500 mb-1">{s.label}</p>
+                      <p className={`text-lg font-semibold ${s.color}`}>{s.value}</p>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-gray-900">Invoices</h3>
+              <Link href="/invoices">
+                <Button size="sm" variant="secondary" icon={<Plus className="w-3.5 h-3.5" />}>
+                  Create Invoice
+                </Button>
+              </Link>
+            </div>
+
+            {invoicesLoading ? (
+              <div className="space-y-2">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="bg-white border border-gray-200 rounded-xl p-4 animate-pulse">
+                    <div className="h-4 bg-gray-200 rounded w-1/2" />
+                  </div>
+                ))}
+              </div>
+            ) : invoices.length === 0 ? (
+              <div className="bg-white border border-gray-200 rounded-xl p-10 text-center">
+                <Receipt className="w-8 h-8 text-gray-300 mx-auto mb-3" />
+                <p className="text-sm text-gray-500 mb-1">No invoices yet</p>
+                <p className="text-xs text-gray-400">Create an invoice from the Invoices page</p>
+                <Link href="/invoices" className="mt-4 inline-flex items-center gap-1.5 text-sm text-indigo-600 hover:text-indigo-800 font-medium">
+                  Go to Invoices <ExternalLink className="w-3.5 h-3.5" />
+                </Link>
+              </div>
+            ) : (
+              <div className="overflow-x-auto bg-white border border-gray-200 rounded-xl overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-100 text-xs font-medium text-gray-400 uppercase tracking-wide">
+                      <th className="text-left px-5 py-3">Invoice #</th>
+                      <th className="text-left px-5 py-3">Status</th>
+                      <th className="text-left px-5 py-3">Due Date</th>
+                      <th className="text-right px-5 py-3">Amount</th>
+                      <th className="text-center px-5 py-3">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {invoices.map((inv) => {
+                      const lineTotal = inv.lineItems.reduce((s, li) => s + li.quantity * li.unitPrice, 0);
+                      const discount = inv.discountPct ? lineTotal * (inv.discountPct / 100) : 0;
+                      const afterDiscount = lineTotal - discount;
+                      const tax = inv.taxPct ? afterDiscount * (inv.taxPct / 100) : 0;
+                      const total = afterDiscount + tax;
+                      const statusColors: Record<InvoiceStatus, string> = {
+                        DRAFT: "bg-gray-100 text-gray-600",
+                        SENT: "bg-blue-50 text-blue-700",
+                        PAID: "bg-emerald-50 text-emerald-700",
+                        OVERDUE: "bg-red-50 text-red-700",
+                        CANCELLED: "bg-slate-100 text-slate-500",
+                      };
+                      return (
+                        <tr key={inv.id} className="hover:bg-gray-50 transition-colors">
+                          <td className="px-5 py-3">
+                            <p className="font-medium text-gray-900">{inv.invoiceNumber}</p>
+                            {inv.quotation && (
+                              <p className="text-[10px] text-gray-400 mt-0.5">from {inv.quotation.number}</p>
+                            )}
+                          </td>
+                          <td className="px-5 py-3">
+                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${statusColors[inv.status]}`}>
+                              {inv.status.charAt(0) + inv.status.slice(1).toLowerCase()}
+                            </span>
+                          </td>
+                          <td className="px-5 py-3 text-gray-400 text-xs whitespace-nowrap">
+                            {inv.dueDate ? formatDate(inv.dueDate) : "No due date"}
+                          </td>
+                          <td className="px-5 py-3 text-right font-semibold text-gray-900">
+                            {formatCurrency(total, inv.currency)}
+                          </td>
+                          <td className="px-5 py-3 text-center">
+                            <Link
+                              href={`/invoices/${inv.id}`}
+                              className="inline-flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+                            >
+                              View <ExternalLink className="w-3 h-3" />
+                            </Link>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── TAX & BILLING TAB ── */}
+        {pageTab === "tax" && (
+          <div className="max-w-2xl">
+            {!project?.client ? (
+              <div className="bg-white border border-gray-200 rounded-xl p-10 text-center">
+                <DollarSign className="w-8 h-8 text-gray-300 mx-auto mb-3" />
+                <p className="text-sm text-gray-500">No client linked to this project.</p>
+                <p className="text-xs text-gray-400 mt-1">Link a client to view tax & billing information.</p>
+              </div>
+            ) : !taxLoaded ? (
+              <div className="space-y-3">
+                {[1, 2].map((i) => <div key={i} className="bg-white border border-gray-200 rounded-xl h-20 animate-pulse" />)}
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Client reference */}
+                <div className="bg-white border border-gray-200 rounded-xl p-4 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-gray-500">Client</p>
+                    <p className="text-sm font-semibold text-gray-900">{project.client.name}</p>
+                  </div>
+                  <Link href={`/clients/${project.client.id}`} className="text-xs text-indigo-600 hover:text-indigo-700 font-medium flex items-center gap-1">
+                    View Client <ExternalLink className="w-3 h-3" />
+                  </Link>
+                </div>
+
+                {/* Billing info */}
+                <div className="bg-white border border-gray-200 rounded-xl p-5">
+                  <h3 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                    <Receipt className="w-4 h-4 text-gray-400" /> Billing Settings
+                  </h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-xs text-gray-500">Currency</p>
+                      <p className="text-sm font-medium text-gray-900">{clientTaxData?.billingCurrency || project.currency || "USD"}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Payment Terms</p>
+                      <p className="text-sm font-medium text-gray-900">{clientTaxData?.paymentTermDays ?? 30} days</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Tax Registrations */}
+                <div className="bg-white border border-gray-200 rounded-xl p-5">
+                  <h3 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                    <Receipt className="w-4 h-4 text-gray-400" /> Tax Registrations
+                  </h3>
+                  {clientTaxData?.taxRegistrations && clientTaxData.taxRegistrations.length > 0 ? (
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-3 gap-3 px-1">
+                        {["Type", "Number", "Country / Region"].map((h) => (
+                          <p key={h} className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</p>
+                        ))}
+                      </div>
+                      {clientTaxData.taxRegistrations.map((tax) => (
+                        <div key={tax.id} className="grid grid-cols-3 gap-3 bg-gray-50 rounded-xl px-4 py-3 items-center">
+                          <span className="text-xs font-mono font-semibold text-indigo-700 bg-indigo-50 px-2 py-1 rounded w-fit">{tax.type}</span>
+                          <span className="text-sm font-mono text-gray-800">{tax.number}</span>
+                          <span className="text-sm text-gray-600">{tax.country}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center">
+                      <p className="text-sm text-gray-400">No tax registrations.</p>
+                      <Link href={`/clients/${project.client.id}`} className="mt-2 inline-flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-700 font-medium">
+                        Add from Client page <ExternalLink className="w-3 h-3" />
+                      </Link>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Edit Project Modal */}
@@ -893,42 +1684,19 @@ export default function ProjectDetailPage() {
         </Modal>
       )}
 
-      {/* Template modal */}
-      {templateOpen && (
-        <Modal open={templateOpen} title="Apply Task Template" onClose={() => setTemplateOpen(false)}>
-          <div className="space-y-4">
-            <p className="text-sm text-gray-600">
-              Choose a template to auto-generate tasks for this project. Existing tasks won't be affected.
-            </p>
-            <div className="space-y-2">
-              {relevantTemplates.map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => setSelectedTemplate(t.id)}
-                  className={`w-full text-left p-4 rounded-xl border-2 transition-colors ${
-                    selectedTemplate === t.id
-                      ? "border-indigo-500 bg-indigo-50"
-                      : "border-gray-200 hover:border-gray-300"
-                  }`}
-                >
-                  <p className="text-sm font-semibold text-gray-900">{t.name}</p>
-                  <p className="text-xs text-gray-500 mt-0.5">{t.description}</p>
-                  <p className="text-xs text-indigo-600 mt-1">{t.items?.length ?? 0} tasks</p>
-                </button>
-              ))}
-            </div>
-            <div className="flex gap-3 pt-2">
-              <Button variant="secondary" onClick={() => setTemplateOpen(false)}>Cancel</Button>
-              <Button
-                disabled={!selectedTemplate} loading={applyingTemplate}
-                onClick={handleApplyTemplate}
-              >
-                Apply Template
-              </Button>
-            </div>
-          </div>
-        </Modal>
-      )}
+      {/* AI Task Generator Wizard */}
+      <TaskGeneratorWizard
+        open={wizardOpen}
+        onClose={() => setWizardOpen(false)}
+        projectId={id}
+        projectName={project?.name}
+        projectType={project?.type as "ONE_TIME" | "RETAINER" | undefined}
+        projectServiceType={project?.serviceType || undefined}
+        projectDescription={project?.description || undefined}
+        clientIndustry={undefined}
+        startDate={project?.startDate}
+        onTasksCreated={fetchTasks}
+      />
 
       {/* Task Create Modal */}
       {taskModal.open && (
@@ -1195,15 +1963,48 @@ export default function ProjectDetailPage() {
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Notes</label>
-            <textarea value={contractForm.notes} onChange={(e) => setContractForm((f) => ({ ...f, notes: e.target.value }))} rows={2}
-              placeholder="Key terms, special clauses..."
+            <label className="block text-xs font-medium text-gray-500 mb-1">Notes / Contract Content</label>
+            <textarea value={contractForm.notes} onChange={(e) => setContractForm((f) => ({ ...f, notes: e.target.value }))} rows={4}
+              placeholder="Key terms, special clauses... or use AI to generate a draft"
               className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
             />
           </div>
 
+          {/* AI Draft */}
+          <div className="bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200 rounded-xl p-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-indigo-500" />
+                <div>
+                  <p className="text-xs font-medium text-indigo-900">AI Contract Draft</p>
+                  <p className="text-[11px] text-indigo-600">Generate professional clauses based on type & parties</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleAIDraft}
+                disabled={aiDraftLoading}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+              >
+                {aiDraftLoading ? <><Loader2 className="w-3 h-3 animate-spin" /> Drafting...</> : <><Sparkles className="w-3 h-3" /> Generate Draft</>}
+              </button>
+            </div>
+            {aiDraftResult && (
+              <div className="mt-3 bg-white rounded-lg border border-indigo-100 p-3 max-h-40 overflow-y-auto">
+                <p className="text-xs font-semibold text-gray-700 mb-1">{aiDraftResult.title}</p>
+                {aiDraftResult.clauses?.slice(0, 3).map((c, i) => (
+                  <div key={i} className="mb-1.5">
+                    <p className="text-[11px] font-medium text-gray-600">{c.heading}</p>
+                    <p className="text-[11px] text-gray-500 leading-relaxed">{c.body.slice(0, 150)}...</p>
+                  </div>
+                ))}
+                <p className="text-[10px] text-amber-600 mt-2 italic">This is an AI-generated draft. Please review with legal counsel before use.</p>
+              </div>
+            )}
+          </div>
+
           <div className="flex gap-3 pt-1">
-            <Button type="button" variant="secondary" onClick={() => { setContractModalOpen(false); setContractForm(EMPTY_CONTRACT_FORM); setContractParties([{ ...EMPTY_PARTY }]); }}>Cancel</Button>
+            <Button type="button" variant="secondary" onClick={() => { setContractModalOpen(false); setContractForm(EMPTY_CONTRACT_FORM); setContractParties([{ ...EMPTY_PARTY }]); setAiDraftResult(null); }}>Cancel</Button>
             <Button type="submit" loading={contractSaving}>Create Contract</Button>
           </div>
         </form>

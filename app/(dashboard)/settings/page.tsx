@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, Component, type ReactNode } from "react";
 import {
   Building2, Users, Shield, Palette, Save, Plus,
   Trash2, Edit2, Check, X, Upload, RefreshCw, Eye,
@@ -8,6 +8,8 @@ import {
   Clock, FileText, ChevronDown,
 } from "lucide-react";
 import type { CompanySettings, TeamUser } from "@/types";
+import { useToast } from "@/components/ui/Toast";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 
 /* ─────────────────────────────────────────────────────────────
    Helpers
@@ -99,6 +101,32 @@ function Select({ children, ...props }: React.SelectHTMLAttributes<HTMLSelectEle
   );
 }
 
+/* ─────────────────────────────────────────────────────────────
+   Local error boundary — used to fence the live letterhead preview
+   so a malformed config can't crash the entire settings page.
+   ───────────────────────────────────────────────────────────── */
+class PreviewBoundary extends Component<
+  { children: ReactNode; fallback: ReactNode },
+  { hasError: boolean }
+> {
+  state = { hasError: false };
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(err: unknown) {
+    // eslint-disable-next-line no-console
+    console.warn("LetterheadPreview render error:", err);
+  }
+  componentDidUpdate(prev: { children: ReactNode }) {
+    if (this.state.hasError && prev.children !== this.props.children) {
+      this.setState({ hasError: false });
+    }
+  }
+  render() {
+    return this.state.hasError ? this.props.fallback : this.props.children;
+  }
+}
+
 function SaveButton({ saving, onClick }: { saving: boolean; onClick: () => void }) {
   return (
     <button
@@ -118,12 +146,14 @@ function SaveButton({ saving, onClick }: { saving: boolean; onClick: () => void 
 function CompanyTab({
   settings, onSaved,
 }: { settings: CompanySettings; onSaved: (s: CompanySettings) => void }) {
+  const toast = useToast();
   const [form, setForm] = useState<Partial<CompanySettings>>({});
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
   const [logoUploading, setLogoUploading] = useState(false);
   const [logoError, setLogoError] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
+  // Sequence counter — latest upload always wins; older responses are discarded.
+  const uploadSeqRef = useRef(0);
 
   useEffect(() => { setForm(settings); }, [settings]);
   const set = (k: string, v: string) => setForm((p) => ({ ...p, [k]: v }));
@@ -139,9 +169,13 @@ function CompanyTab({
       if (res.ok) {
         const data = await res.json();
         onSaved(data);
-        setSaved(true);
-        setTimeout(() => setSaved(false), 2000);
+        toast.success("Company settings saved");
+      } else {
+        const d = await res.json();
+        toast.error(d.error ?? "Failed to save settings");
       }
+    } catch {
+      toast.error("Failed to save settings");
     } finally { setSaving(false); }
   };
 
@@ -157,30 +191,40 @@ function CompanyTab({
       setLogoError("File too large. Please use an image under 2MB.");
       return;
     }
+    const seq = ++uploadSeqRef.current;
     setLogoUploading(true);
     const reader = new FileReader();
     reader.onload = (e) => {
       const dataUrl = e.target?.result as string;
       if (dataUrl) {
-        set("logoUrl", dataUrl);
-        // Auto-save the logo immediately
+        // Only reflect this upload if a newer one hasn't started
+        if (uploadSeqRef.current === seq) set("logoUrl", dataUrl);
+        // Auto-save the logo immediately — discard response if superseded
         fetch("/api/settings/company", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ logoUrl: dataUrl }),
         })
           .then((r) => r.json())
-          .then((data) => { onSaved(data); })
+          .then((data) => {
+            if (uploadSeqRef.current === seq) onSaved(data);
+          })
           .catch(() => {})
-          .finally(() => setLogoUploading(false));
+          .finally(() => {
+            if (uploadSeqRef.current === seq) setLogoUploading(false);
+          });
       } else {
-        setLogoUploading(false);
-        setLogoError("Failed to read file. Try again.");
+        if (uploadSeqRef.current === seq) {
+          setLogoUploading(false);
+          setLogoError("Failed to read file. Try again.");
+        }
       }
     };
     reader.onerror = () => {
-      setLogoUploading(false);
-      setLogoError("Failed to read file. Try again.");
+      if (uploadSeqRef.current === seq) {
+        setLogoUploading(false);
+        setLogoError("Failed to read file. Try again.");
+      }
     };
     reader.readAsDataURL(file);
   };
@@ -315,11 +359,6 @@ function CompanyTab({
       </SectionCard>
 
       <div className="flex justify-end gap-3">
-        {saved && (
-          <span className="flex items-center gap-1.5 text-sm text-emerald-600 font-medium">
-            <Check className="w-4 h-4" /> Saved
-          </span>
-        )}
         <SaveButton saving={saving} onClick={handleSave} />
       </div>
     </div>
@@ -664,18 +703,28 @@ function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: 
 function LetterheadTab({
   settings, onSaved,
 }: { settings: CompanySettings; onSaved: (s: CompanySettings) => void }) {
+  const toast = useToast();
   const [form, setForm]         = useState<Partial<CompanySettings>>({});
   const [cfg,  setCfg]          = useState<LetterheadConfig>({ ...DEFAULT_LH_CFG });
   const [saving, setSaving]     = useState(false);
-  const [saved, setSaved]       = useState(false);
   const [logoUploading, setLogoUploading] = useState(false);
   const [logoError, setLogoError]         = useState("");
+  const [colorError, setColorError]       = useState("");
   const logoFileRef = useRef<HTMLInputElement>(null);
+  // Sequence counter — latest upload wins.
+  const uploadSeqRef = useRef(0);
 
   useEffect(() => {
     setForm(settings);
     setCfg(parseLHConfig((settings as unknown as Record<string, unknown>).letterheadConfig as string | null));
   }, [settings]);
+
+  const HEX_RE = /^#([0-9A-Fa-f]{3}){1,2}$/;
+  const setColor = (value: string) => {
+    set("letterheadColor", value);
+    if (!value || HEX_RE.test(value)) setColorError("");
+    else setColorError("Invalid hex color (e.g. #6366f1)");
+  };
 
   const set      = (k: string, v: string) => setForm(p => ({ ...p, [k]: v }));
   const setCfgK  = <K extends keyof LetterheadConfig>(k: K, v: LetterheadConfig[K]) => setCfg(p => ({ ...p, [k]: v }));
@@ -695,9 +744,13 @@ function LetterheadTab({
       if (res.ok) {
         const data = await res.json();
         onSaved(data);
-        setSaved(true);
-        setTimeout(() => setSaved(false), 2000);
+        toast.success("Letterhead settings saved");
+      } else {
+        const d = await res.json();
+        toast.error(d.error ?? "Failed to save letterhead");
       }
+    } catch {
+      toast.error("Failed to save letterhead");
     } finally { setSaving(false); }
   };
 
@@ -707,19 +760,25 @@ function LetterheadTab({
     if (!file.type.startsWith("image/")) { setLogoError("Please select an image file"); return; }
     if (file.size > 2 * 1024 * 1024) { setLogoError("Image must be under 2 MB"); return; }
     setLogoError("");
+    const seq = ++uploadSeqRef.current;
     setLogoUploading(true);
     const reader = new FileReader();
     reader.onload = async () => {
       const dataUrl = reader.result as string;
       const updated = { ...form, letterheadLogoUrl: dataUrl };
-      setForm(updated);
+      if (uploadSeqRef.current === seq) setForm(updated);
       try {
         const res = await fetch("/api/settings/company", {
           method: "PATCH", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ ...updated, letterheadConfig: JSON.stringify(cfg) }),
         });
-        if (res.ok) { const data = await res.json(); onSaved(data); }
-      } finally { setLogoUploading(false); }
+        if (res.ok && uploadSeqRef.current === seq) {
+          const data = await res.json();
+          onSaved(data);
+        }
+      } finally {
+        if (uploadSeqRef.current === seq) setLogoUploading(false);
+      }
     };
     reader.readAsDataURL(file);
     e.target.value = "";
@@ -858,13 +917,14 @@ function LetterheadTab({
             <div className="space-y-5">
               <Field label="Accent Color" hint="Used for borders, table headers, and highlights">
                 <div className="flex items-center gap-3">
-                  <input type="color" value={form.letterheadColor ?? "#6366f1"} onChange={e => set("letterheadColor", e.target.value)}
+                  <input type="color" value={form.letterheadColor ?? "#6366f1"} onChange={e => setColor(e.target.value)}
                     className="w-10 h-10 rounded-lg border border-gray-300 cursor-pointer p-0.5 bg-white" />
-                  <Input value={form.letterheadColor ?? "#6366f1"} onChange={e => set("letterheadColor", e.target.value)} placeholder="#6366f1" className="flex-1 font-mono" />
+                  <Input value={form.letterheadColor ?? "#6366f1"} onChange={e => setColor(e.target.value)} placeholder="#6366f1" className="flex-1 font-mono" />
                 </div>
+                {colorError && <p className="text-[11px] text-red-500 mt-1">{colorError}</p>}
                 <div className="mt-3 flex gap-2 flex-wrap">
                   {["#6366f1","#0ea5e9","#10b981","#f59e0b","#ef4444","#8b5cf6","#ec4899","#0f172a","#f97316","#14b8a6"].map(c => (
-                    <button key={c} onClick={() => set("letterheadColor", c)}
+                    <button key={c} onClick={() => setColor(c)}
                       className={`w-6 h-6 rounded-full border-2 transition-all ${(form.letterheadColor ?? "#6366f1") === c ? "border-gray-700 scale-110" : "border-transparent hover:scale-105"}`}
                       style={{ background: c }} title={c} />
                   ))}
@@ -952,7 +1012,16 @@ function LetterheadTab({
                 {template.charAt(0) + template.slice(1).toLowerCase()} layout
               </span>
             </div>
-            <LetterheadPreview form={form} cfg={cfg} template={template} />
+            <PreviewBoundary
+              fallback={
+                <div className="p-6 text-center bg-red-50 border border-red-100 rounded-xl">
+                  <p className="text-xs font-medium text-red-600">Invalid letterhead config</p>
+                  <p className="text-[11px] text-red-400 mt-1">Reset or adjust settings to restore the preview.</p>
+                </div>
+              }
+            >
+              <LetterheadPreview form={form} cfg={cfg} template={template} />
+            </PreviewBoundary>
             <p className="text-[10px] text-gray-400 mt-3 text-center leading-relaxed">
               Updates in real-time · Applied to all exported PDFs
             </p>
@@ -961,11 +1030,6 @@ function LetterheadTab({
       </div>
 
       <div className="flex justify-end gap-3">
-        {saved && (
-          <span className="flex items-center gap-1.5 text-sm text-emerald-600 font-medium">
-            <Check className="w-4 h-4" /> Saved
-          </span>
-        )}
         <SaveButton saving={saving} onClick={handleSave} />
       </div>
     </div>
@@ -976,6 +1040,8 @@ function LetterheadTab({
    Tab: User Management
    ───────────────────────────────────────────────────────────── */
 function UsersTab() {
+  const toast = useToast();
+  const confirm = useConfirm();
   const [users, setUsers]     = useState<TeamUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
@@ -1006,6 +1072,7 @@ function UsersTab() {
       setUsers((p) => [...p, data]);
       setNewForm({ name: "", email: "", role: "MEMBER" });
       setShowAdd(false);
+      toast.success(`${data.name} added to team`);
     } finally { setSaving(false); }
   };
 
@@ -1018,10 +1085,22 @@ function UsersTab() {
     if (res.ok) {
       const updated = await res.json();
       setUsers((p) => p.map((u) => u.id === userId ? updated : u));
+      toast.success("Role updated");
+    } else {
+      toast.error("Failed to update role");
     }
   };
 
   const handleToggleActive = async (userId: string, isActive: boolean) => {
+    const ok = await confirm({
+      title: isActive ? "Deactivate member?" : "Reactivate member?",
+      message: isActive
+        ? "This member will lose access to the platform."
+        : "This member will regain access to the platform.",
+      confirmLabel: isActive ? "Deactivate" : "Reactivate",
+      variant: isActive ? "warning" : "info",
+    });
+    if (!ok) return;
     const res = await fetch(`/api/users/${userId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -1030,6 +1109,9 @@ function UsersTab() {
     if (res.ok) {
       const updated = await res.json();
       setUsers((p) => p.map((u) => u.id === userId ? updated : u));
+      toast.success(isActive ? "Member deactivated" : "Member reactivated");
+    } else {
+      toast.error("Failed to update member");
     }
   };
 

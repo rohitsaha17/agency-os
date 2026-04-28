@@ -7,6 +7,7 @@ import {
   DollarSign, Percent, Tag,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { formatMoney } from "@/lib/format";
 import type {
   QuotationFormData, QuotationLineItemFormData,
   PricingType, DiscountType, RateCard, ClientSummary,
@@ -73,11 +74,7 @@ function computeTotals(
   };
 }
 
-function fmt(n: number, currency: string) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency", currency, maximumFractionDigits: 2,
-  }).format(n);
-}
+const fmt = (n: number, currency: string) => formatMoney(n, currency);
 
 // ── Sub-components ────────────────────────────────────────────
 

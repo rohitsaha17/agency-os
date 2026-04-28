@@ -10,6 +10,9 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { ConvertModal } from "@/components/quotations/ConvertModal";
+import { useToast } from "@/components/ui/Toast";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { formatMoney } from "@/lib/format";
 import type { Quotation, QuotationStatus } from "@/types";
 
 const STATUS_CONFIG: Record<QuotationStatus, { label: string; color: string }> = {
@@ -21,18 +24,16 @@ const STATUS_CONFIG: Record<QuotationStatus, { label: string; color: string }> =
   CONVERTED: { label: "Converted", color: "bg-indigo-50 text-indigo-700" },
 };
 
-function fmt(n: number, currency: string) {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency, maximumFractionDigits: 2 }).format(n);
-}
-
 function formatDate(d: string | null) {
   if (!d) return "—";
   return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
 export default function QuotationDetailPage() {
-  const params = useParams();
-  const router = useRouter();
+  const params  = useParams();
+  const router  = useRouter();
+  const toast   = useToast();
+  const confirm = useConfirm();
   const id = params.id as string;
 
   const [quotation, setQuotation] = useState<Quotation | null>(null);
@@ -58,6 +59,33 @@ export default function QuotationDetailPage() {
   useEffect(() => { fetchQuotation(); }, [fetchQuotation]);
 
   const handleStatusChange = async (status: QuotationStatus) => {
+    // Irreversible-ish status transitions — require explicit confirmation.
+    const confirmCopy: Partial<Record<QuotationStatus, { title: string; message: string; confirmLabel: string; variant: "danger" | "warning" | "info" }>> = {
+      SENT: {
+        title: "Send quotation?",
+        message: "Mark this quotation as sent to the client. You won't be able to edit it afterwards without reverting status.",
+        confirmLabel: "Mark as Sent",
+        variant: "info",
+      },
+      APPROVED: {
+        title: "Approve quotation?",
+        message: "Approving locks the quotation and allows conversion to a project.",
+        confirmLabel: "Approve",
+        variant: "info",
+      },
+      REJECTED: {
+        title: "Reject quotation?",
+        message: "This will mark the quotation as rejected. You can still reopen it later.",
+        confirmLabel: "Reject",
+        variant: "danger",
+      },
+    };
+    const copy = confirmCopy[status];
+    if (copy) {
+      const ok = await confirm(copy);
+      if (!ok) return;
+    }
+
     setActionLoading(status);
     try {
       if (status === "SENT") {
@@ -76,8 +104,15 @@ export default function QuotationDetailPage() {
   };
 
   const handleDelete = async () => {
-    if (!confirm("Delete this quotation? This cannot be undone.")) return;
+    const ok = await confirm({
+      title: "Delete quotation?",
+      message: "This quotation and all its line items will be permanently deleted.",
+      confirmLabel: "Delete Quotation",
+      variant: "danger",
+    });
+    if (!ok) return;
     await fetch(`/api/quotations/${id}`, { method: "DELETE" });
+    toast.success("Quotation deleted");
     router.push("/quotations");
   };
 
@@ -118,6 +153,8 @@ export default function QuotationDetailPage() {
         })),
       }, settings);
       await openPrintPdf(html);
+    } catch (err) {
+      toast.error("Failed to generate PDF", err instanceof Error ? err.message : undefined);
     } finally {
       setPdfLoading(false);
     }
@@ -182,7 +219,7 @@ export default function QuotationDetailPage() {
             </div>
             <div className="flex items-center gap-4 mt-1.5 text-xs text-gray-500">
               <span className="font-mono">{quotation.number}</span>
-              {quotation.client && (
+              {quotation.client?.id && (
                 <Link href={`/clients/${quotation.client.id}`} className="hover:text-indigo-600 transition-colors">
                   {quotation.client.name}{quotation.client.companyName && ` · ${quotation.client.companyName}`}
                 </Link>
@@ -275,7 +312,7 @@ export default function QuotationDetailPage() {
           )}
           <span className="flex items-center gap-1.5">
             <DollarSign className="w-3.5 h-3.5 text-gray-400" />
-            {fmt(total, quotation.currency)} · {quotation.lineItems.length} item{quotation.lineItems.length !== 1 ? "s" : ""}
+            {formatMoney(total, quotation.currency)} · {quotation.lineItems.length} item{quotation.lineItems.length !== 1 ? "s" : ""}
           </span>
           <span className={`px-2 py-0.5 rounded text-xs font-medium ${
             quotation.pricingType === "RETAINER" ? "bg-purple-50 text-purple-700" :
@@ -334,10 +371,10 @@ export default function QuotationDetailPage() {
                       {item.pricingType !== "FIXED" ? `${Number(item.quantity)} ${item.unit || ""}`.trim() : "—"}
                     </td>
                     <td className="px-3 py-4 text-right text-sm text-gray-600">
-                      {fmt(Number(item.unitPrice), quotation.currency)}
+                      {formatMoney(Number(item.unitPrice), quotation.currency)}
                     </td>
                     <td className="px-6 py-4 text-right text-sm font-medium text-gray-900">
-                      {fmt(Number(item.subtotal), quotation.currency)}
+                      {formatMoney(Number(item.subtotal), quotation.currency)}
                     </td>
                   </tr>
                 ))}
@@ -350,25 +387,25 @@ export default function QuotationDetailPage() {
               <div className="max-w-xs ml-auto space-y-1.5 text-sm">
                 <div className="flex justify-between text-gray-600">
                   <span>Subtotal</span>
-                  <span>{fmt(subtotal, quotation.currency)}</span>
+                  <span>{formatMoney(subtotal, quotation.currency)}</span>
                 </div>
                 {discountAmount > 0 && (
                   <div className="flex justify-between text-emerald-600">
                     <span>
                       Discount{quotation.discountType === "PERCENT" && ` (${discountValue}%)`}
                     </span>
-                    <span>− {fmt(discountAmount, quotation.currency)}</span>
+                    <span>− {formatMoney(discountAmount, quotation.currency)}</span>
                   </div>
                 )}
                 {taxRate > 0 && (
                   <div className="flex justify-between text-gray-600">
                     <span>Tax ({taxRate}%)</span>
-                    <span>{fmt(taxAmount, quotation.currency)}</span>
+                    <span>{formatMoney(taxAmount, quotation.currency)}</span>
                   </div>
                 )}
                 <div className="flex justify-between font-bold text-base text-gray-900 pt-2 border-t border-gray-300">
                   <span>Total</span>
-                  <span className="text-indigo-700">{fmt(total, quotation.currency)}</span>
+                  <span className="text-indigo-700">{formatMoney(total, quotation.currency)}</span>
                 </div>
               </div>
             </div>

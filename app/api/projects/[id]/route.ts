@@ -1,13 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth, requireRole } from "@/lib/auth";
+import { apiError, handleApiError, ApiError } from "@/lib/api-errors";
+import { checkRateLimit, WRITE_RATE_LIMITS } from "@/lib/rate-limit";
 
 type Params = { params: Promise<{ id: string }> };
 
 // GET /api/projects/[id] — full project detail
-export async function GET(_req: NextRequest, { params }: Params) {
-  const { id } = await params;
-
+export async function GET(req: NextRequest, { params }: Params) {
   try {
+    await requireAuth(req);
+    const { id } = await params;
+
     const project = await prisma.project.findUnique({
       where: { id },
       include: {
@@ -17,14 +21,11 @@ export async function GET(_req: NextRequest, { params }: Params) {
       },
     });
 
-    if (!project) {
-      return NextResponse.json({ error: "Project not found" }, { status: 404 });
-    }
+    if (!project) throw new ApiError("Project not found", 404);
 
-    // Compute progress
     const [total, done] = await Promise.all([
-      prisma.task.count({ where: { projectId: id } }),
-      prisma.task.count({ where: { projectId: id, status: "DONE" } }),
+      prisma.task.count({ where: { projectId: id, deletedAt: null } }),
+      prisma.task.count({ where: { projectId: id, status: "DONE", deletedAt: null } }),
     ]);
 
     return NextResponse.json({
@@ -32,16 +33,17 @@ export async function GET(_req: NextRequest, { params }: Params) {
       progress: total > 0 ? Math.round((done / total) * 100) : 0,
     });
   } catch (error) {
-    console.error("[GET /api/projects/[id]]", error);
-    return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
+    return handleApiError(error, "GET /api/projects/[id]");
   }
 }
 
 // PATCH /api/projects/[id] — update project
 export async function PATCH(req: NextRequest, { params }: Params) {
-  const { id } = await params;
-
   try {
+    const user = await requireAuth(req);
+    requireRole(user, ["ADMIN", "MANAGER"]);
+    const { id } = await params;
+
     const body = await req.json();
     const {
       name, description, type, serviceType, recurringFrequency, status,
@@ -70,8 +72,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     });
 
     const [total, done] = await Promise.all([
-      prisma.task.count({ where: { projectId: id } }),
-      prisma.task.count({ where: { projectId: id, status: "DONE" } }),
+      prisma.task.count({ where: { projectId: id, deletedAt: null } }),
+      prisma.task.count({ where: { projectId: id, status: "DONE", deletedAt: null } }),
     ]);
 
     return NextResponse.json({
@@ -80,18 +82,22 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     });
   } catch (error: unknown) {
     if ((error as { code?: string }).code === "P2025") {
-      return NextResponse.json({ error: "Project not found" }, { status: 404 });
+      return apiError("Project not found", 404);
     }
-    console.error("[PATCH /api/projects/[id]]", error);
-    return NextResponse.json({ error: "Failed to update project" }, { status: 500 });
+    return handleApiError(error, "PATCH /api/projects/[id]");
   }
 }
 
 // DELETE /api/projects/[id] — cancel/archive
-export async function DELETE(_req: NextRequest, { params }: Params) {
-  const { id } = await params;
-
+export async function DELETE(req: NextRequest, { params }: Params) {
   try {
+    const user = await requireAuth(req);
+    requireRole(user, ["ADMIN", "MANAGER"]);
+
+    const rl = checkRateLimit(req, `projects:delete:${user.id}`, WRITE_RATE_LIMITS.heavy);
+    if (!rl.allowed) return apiError("Too many requests, please slow down", 429);
+
+    const { id } = await params;
     await prisma.project.update({
       where: { id },
       data: { status: "CANCELLED" },
@@ -99,9 +105,8 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
     return NextResponse.json({ success: true });
   } catch (error: unknown) {
     if ((error as { code?: string }).code === "P2025") {
-      return NextResponse.json({ error: "Project not found" }, { status: 404 });
+      return apiError("Project not found", 404);
     }
-    console.error("[DELETE /api/projects/[id]]", error);
-    return NextResponse.json({ error: "Failed to archive project" }, { status: 500 });
+    return handleApiError(error, "DELETE /api/projects/[id]");
   }
 }

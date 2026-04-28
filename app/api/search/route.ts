@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-// GET /api/search?q=term — global search across projects, clients, tasks, files
+// GET /api/search?q=term — global search across projects, clients, tasks, files, messages
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const q = searchParams.get("q")?.trim() ?? "";
@@ -9,7 +9,7 @@ export async function GET(req: NextRequest) {
   if (!q || q.length < 2) return NextResponse.json({ results: [] });
 
   try {
-    const [projects, clients, tasks, files] = await Promise.all([
+    const [projects, clients, tasks, files, messages] = await Promise.all([
       prisma.project.findMany({
         where: {
           OR: [
@@ -49,6 +49,17 @@ export async function GET(req: NextRequest) {
         select: { id: true, name: true, mimeType: true, project: { select: { id: true, name: true } } },
         take: 5,
       }),
+      prisma.chatMessage.findMany({
+        where: {
+          deletedAt: null,
+          body: { contains: q, mode: "insensitive" },
+        },
+        select: {
+          id: true, body: true,
+          channel: { select: { name: true } },
+        },
+        take: 5,
+      }),
     ]);
 
     const results = [
@@ -81,6 +92,13 @@ export async function GET(req: NextRequest) {
         label: f.name,
         sublabel: f.project?.name,
         href: `/files`,
+      })),
+      ...messages.map((m) => ({
+        id: m.id,
+        type: "message" as const,
+        label: m.body.length > 60 ? m.body.slice(0, 60) + "…" : m.body,
+        sublabel: m.channel.name,
+        href: `/messages`,
       })),
     ];
 

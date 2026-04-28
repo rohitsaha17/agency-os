@@ -1,5 +1,3 @@
-Loaded Prisma config from prisma.config.ts.
-
 -- CreateSchema
 CREATE SCHEMA IF NOT EXISTS "public";
 
@@ -560,6 +558,7 @@ CREATE TABLE "company_settings" (
     "letterheadWebsite" TEXT,
     "letterheadColor" TEXT NOT NULL DEFAULT '#6366f1',
     "letterheadTemplate" TEXT NOT NULL DEFAULT 'CLASSIC',
+    "letterheadConfig" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 

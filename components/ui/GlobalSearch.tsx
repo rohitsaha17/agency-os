@@ -1,13 +1,13 @@
 "use client";
-
+// v2 — unique keys on mixed-type results
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   Search, X, FolderKanban, Users, CheckSquare, HardDrive,
-  ChevronRight,
+  MessageSquare, ChevronRight,
 } from "lucide-react";
 
-type ResultType = "client" | "project" | "task" | "file";
+type ResultType = "client" | "project" | "task" | "file" | "message";
 
 interface SearchResult {
   id: string;
@@ -22,7 +22,8 @@ const TYPE_META: Record<ResultType, { label: string; icon: React.ReactNode; colo
   client:  { label: "Client",  icon: <Users className="w-3.5 h-3.5" />,      color: "text-amber-600 bg-amber-50" },
   project: { label: "Project", icon: <FolderKanban className="w-3.5 h-3.5" />, color: "text-indigo-600 bg-indigo-50" },
   task:    { label: "Task",    icon: <CheckSquare className="w-3.5 h-3.5" />, color: "text-emerald-600 bg-emerald-50" },
-  file:    { label: "File",    icon: <HardDrive className="w-3.5 h-3.5" />,   color: "text-gray-600 bg-gray-100" },
+  file:    { label: "File",    icon: <HardDrive className="w-3.5 h-3.5" />,      color: "text-gray-600 bg-gray-100" },
+  message: { label: "Message", icon: <MessageSquare className="w-3.5 h-3.5" />, color: "text-sky-600 bg-sky-50" },
 };
 
 export function GlobalSearch() {
@@ -32,6 +33,7 @@ export function GlobalSearch() {
   const [loading, setLoading] = useState(false);
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
   const router = useRouter();
 
   // Open on Cmd+K / Ctrl+K
@@ -58,13 +60,31 @@ export function GlobalSearch() {
 
   const search = useCallback(async (q: string) => {
     if (q.length < 2) { setResults([]); return; }
+
+    // Cancel any in-flight request
+    if (abortRef.current) abortRef.current.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     setLoading(true);
     try {
-      const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+      const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`, {
+        signal: controller.signal,
+      });
       const data = await res.json();
-      setResults(data.results ?? []);
-      setActive(0);
-    } finally { setLoading(false); }
+      // Only apply results if this request is still current
+      if (abortRef.current === controller) {
+        setResults(data.results ?? []);
+        setActive(0);
+      }
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
+      // Swallow other errors — keep stale results / show none
+    } finally {
+      if (abortRef.current === controller) {
+        setLoading(false);
+      }
+    }
   }, []);
 
   useEffect(() => {
@@ -78,8 +98,17 @@ export function GlobalSearch() {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "ArrowDown") { e.preventDefault(); setActive((a) => Math.min(a + 1, results.length - 1)); }
-    if (e.key === "ArrowUp")   { e.preventDefault(); setActive((a) => Math.max(a - 1, 0)); }
+    const n = results.length;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      if (n === 0) return;
+      setActive((a) => (a + 1) % n); // wrap: last → 0
+    }
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      if (n === 0) return;
+      setActive((a) => (a - 1 + n) % n); // wrap: 0 → last
+    }
     if (e.key === "Enter" && results[active]) navigate(results[active].href);
   };
 
@@ -124,7 +153,7 @@ export function GlobalSearch() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Search clients, projects, tasks, files…"
+              placeholder="Search clients, projects, tasks, files, messages…"
               className="flex-1 text-sm text-gray-900 placeholder-gray-400 outline-none bg-transparent"
             />
             {query && (
@@ -160,7 +189,7 @@ export function GlobalSearch() {
             )}
 
             {!loading && results.length > 0 && (
-              (["client", "project", "task", "file"] as ResultType[]).map((type) => {
+              (["client", "project", "task", "file", "message"] as ResultType[]).map((type) => {
                 const items = grouped[type];
                 if (!items?.length) return null;
                 const meta = TYPE_META[type];
@@ -176,7 +205,7 @@ export function GlobalSearch() {
                       const isActive = idx === active;
                       return (
                         <button
-                          key={r.id}
+                          key={`${r.type}-${r.id}`}
                           onClick={() => navigate(r.href)}
                           onMouseEnter={() => setActive(idx)}
                           className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${

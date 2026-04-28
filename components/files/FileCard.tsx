@@ -143,6 +143,8 @@ export function FileCard({ file, onClick, view = "grid" }: FileCardProps) {
           <img
             src={file.url}
             alt={file.name}
+            loading="lazy"
+            decoding="async"
             className="w-full h-full object-cover"
           />
         ) : (

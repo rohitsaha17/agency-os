@@ -21,12 +21,12 @@ export async function GET(req: NextRequest, { params }: Params) {
       where,
       orderBy: { createdAt: "asc" },
       include: {
-        author: { select: { id: true, name: true, avatarUrl: true } },
+        author: { select: { id: true, name: true, avatarUrl: true, role: true } },
         task: { select: { id: true, title: true } },
         replies: {
           orderBy: { createdAt: "asc" },
           include: {
-            author: { select: { id: true, name: true, avatarUrl: true } },
+            author: { select: { id: true, name: true, avatarUrl: true, role: true } },
           },
         },
       },
@@ -79,7 +79,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     const comment = await prisma.fileComment.create({
       data: {
         fileId: id,
-        authorName: authorName ?? "Anonymous",
+        authorName: authorName || "Team Member",
         body: commentBody.trim(),
         posX: posX ?? null,
         posY: posY ?? null,
@@ -89,12 +89,12 @@ export async function POST(req: NextRequest, { params }: Params) {
         versionId: versionId ?? null,
       },
       include: {
-        author: { select: { id: true, name: true, avatarUrl: true } },
+        author: { select: { id: true, name: true, avatarUrl: true, role: true } },
         task: { select: { id: true, title: true } },
         replies: {
           orderBy: { createdAt: "asc" },
           include: {
-            author: { select: { id: true, name: true, avatarUrl: true } },
+            author: { select: { id: true, name: true, avatarUrl: true, role: true } },
           },
         },
       },

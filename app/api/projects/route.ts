@@ -1,133 +1,157 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
+import { apiError, handleApiError, ApiError } from "@/lib/api-errors";
+import { parsePagination, paginationMeta } from "@/lib/pagination";
+import { checkRateLimit, WRITE_RATE_LIMITS } from "@/lib/rate-limit";
 
 // GET /api/projects — list all projects with optional filters
 export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  const search = searchParams.get("q") ?? "";
-  const status = searchParams.get("status") ?? undefined;
-  const type = searchParams.get("type") ?? undefined;
-  const clientId = searchParams.get("clientId") ?? undefined;
-
   try {
-    const projects = await prisma.project.findMany({
-      where: {
-        ...(clientId && { clientId }),
-        ...(status && { status: status as never }),
-        ...(type && { type: type as never }),
-        ...(search && {
-          OR: [
-            { name: { contains: search, mode: "insensitive" } },
-            { description: { contains: search, mode: "insensitive" } },
-          ],
-        }),
-      },
-      include: {
-        client: { select: { id: true, name: true, logoUrl: true } },
-        _count: { select: { tasks: true } },
-      },
-      orderBy: { createdAt: "desc" },
-    });
+    await requireAuth(req);
 
-    // Compute progress for each project
+    const { searchParams } = new URL(req.url);
+    const search = searchParams.get("q") ?? "";
+    const status = searchParams.get("status") ?? undefined;
+    const type = searchParams.get("type") ?? undefined;
+    const clientId = searchParams.get("clientId") ?? undefined;
+    const pagination = parsePagination(searchParams);
+
+    const where = {
+      ...(clientId && { clientId }),
+      ...(status && { status: status as never }),
+      ...(type && { type: type as never }),
+      ...(search && {
+        OR: [
+          { name: { contains: search, mode: "insensitive" as const } },
+          { description: { contains: search, mode: "insensitive" as const } },
+        ],
+      }),
+    };
+
+    const [projects, total] = await Promise.all([
+      prisma.project.findMany({
+        where,
+        include: {
+          client: { select: { id: true, name: true, logoUrl: true } },
+          _count: { select: { tasks: true } },
+        },
+        orderBy: { createdAt: "desc" },
+        skip: pagination.paginated ? pagination.skip : undefined,
+        take: pagination.paginated ? pagination.take : undefined,
+      }),
+      pagination.paginated ? prisma.project.count({ where }) : Promise.resolve(0),
+    ]);
+
+    // Compute progress per project with a SINGLE groupBy that counts both
+    // total and DONE tasks, merged in-app — avoids the old 2-groupBy pattern.
     const projectIds = projects.map((p) => p.id);
-    const taskCounts = await prisma.task.groupBy({
-      by: ["projectId"],
-      where: { projectId: { in: projectIds } },
-      _count: { id: true },
+    const grouped = projectIds.length
+      ? await prisma.task.groupBy({
+          by: ["projectId", "status"],
+          where: { projectId: { in: projectIds }, deletedAt: null },
+          _count: { _all: true },
+        })
+      : [];
+
+    const totals = new Map<string, number>();
+    const dones  = new Map<string, number>();
+    for (const row of grouped) {
+      totals.set(row.projectId, (totals.get(row.projectId) ?? 0) + row._count._all);
+      if (row.status === "DONE") {
+        dones.set(row.projectId, (dones.get(row.projectId) ?? 0) + row._count._all);
+      }
+    }
+
+    const result = projects.map((p) => {
+      const t = totals.get(p.id) ?? 0;
+      const d = dones.get(p.id) ?? 0;
+      return { ...p, progress: t > 0 ? Math.round((d / t) * 100) : 0 };
     });
-    const doneCounts = await prisma.task.groupBy({
-      by: ["projectId"],
-      where: { projectId: { in: projectIds }, status: "DONE" },
-      _count: { id: true },
-    });
 
-    const totalMap = Object.fromEntries(taskCounts.map((t) => [t.projectId, t._count.id]));
-    const doneMap = Object.fromEntries(doneCounts.map((t) => [t.projectId, t._count.id]));
-
-    const result = projects.map((p) => ({
-      ...p,
-      progress:
-        totalMap[p.id] > 0
-          ? Math.round(((doneMap[p.id] ?? 0) / totalMap[p.id]) * 100)
-          : 0,
-    }));
-
+    if (pagination.paginated) {
+      return NextResponse.json({
+        data: result,
+        pagination: paginationMeta(pagination, total),
+      });
+    }
     return NextResponse.json(result);
   } catch (error) {
-    console.error("[GET /api/projects]", error);
-    return NextResponse.json(
-      { error: "Database unavailable. Please configure PostgreSQL." },
-      { status: 503 }
-    );
+    return handleApiError(error, "GET /api/projects");
   }
 }
 
 // POST /api/projects — create a new project
 export async function POST(req: NextRequest) {
   try {
+    const user = await requireAuth(req);
+
+    const rl = checkRateLimit(req, `projects:create:${user.id}`, WRITE_RATE_LIMITS.heavy);
+    if (!rl.allowed) {
+      return apiError("Too many requests, please slow down", 429);
+    }
+
     const body = await req.json();
     const {
       clientId, name, description, type, serviceType, recurringFrequency, status,
       startDate, endDate, budget, currency,
     } = body;
 
-    if (!clientId?.trim()) {
-      return NextResponse.json({ error: "Client is required" }, { status: 400 });
-    }
-    if (!name?.trim()) {
-      return NextResponse.json({ error: "Project name is required" }, { status: 400 });
-    }
+    if (!clientId?.trim()) throw new ApiError("Client is required", 400);
+    if (!name?.trim()) throw new ApiError("Project name is required", 400);
 
-    // Check for duplicate project name under the same client
+    // Duplicate-name guard outside the transaction is fine — the transaction
+    // only needs to atomically create the project + its channels.
     const existing = await prisma.project.findFirst({
       where: { clientId, name: { equals: name.trim(), mode: "insensitive" } },
     });
     if (existing) {
-      return NextResponse.json(
-        { error: `A project named "${name.trim()}" already exists for this client` },
-        { status: 409 }
+      throw new ApiError(
+        `A project named "${name.trim()}" already exists for this client`,
+        409
       );
     }
 
-    const project = await prisma.project.create({
-      data: {
-        clientId,
-        name: name.trim(),
-        description: description?.trim() || null,
-        type: type || "ONE_TIME",
-        serviceType: serviceType?.trim() || null,
-        recurringFrequency: recurringFrequency?.trim() || null,
-        status: status || "DRAFT",
-        startDate: startDate ? new Date(startDate) : null,
-        endDate: endDate ? new Date(endDate) : null,
-        budget: budget ? parseFloat(budget) : null,
-        currency: currency || "USD",
-      },
-      include: {
-        client: { select: { id: true, name: true, logoUrl: true } },
-        _count: { select: { tasks: true } },
-      },
-    });
+    const project = await prisma.$transaction(async (tx) => {
+      const created = await tx.project.create({
+        data: {
+          clientId,
+          name: name.trim(),
+          description: description?.trim() || null,
+          type: type || "ONE_TIME",
+          serviceType: serviceType?.trim() || null,
+          recurringFrequency: recurringFrequency?.trim() || null,
+          status: status || "DRAFT",
+          startDate: startDate ? new Date(startDate) : null,
+          endDate: endDate ? new Date(endDate) : null,
+          budget: budget ? parseFloat(budget) : null,
+          currency: currency || "USD",
+        },
+        include: {
+          client: { select: { id: true, name: true, logoUrl: true } },
+          _count: { select: { tasks: true } },
+        },
+      });
 
-    // Auto-create project channels (team + client) — non-blocking
-    try {
-      const slug = project.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-      await prisma.channel.createMany({
+      // Auto-create project channels (team + client) — part of the same
+      // transaction so a project is never left without its channels.
+      const slug = created.name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "");
+      await tx.channel.createMany({
         data: [
-          { name: `${slug}-team`,   description: `Internal team channel for ${project.name}`, type: "PROJECT_INTERNAL", projectId: project.id },
-          { name: `${slug}-client`, description: `Client communication for ${project.name}`,  type: "PROJECT_CLIENT",   projectId: project.id },
+          { name: `${slug}-team`,   description: `Internal team channel for ${created.name}`, type: "PROJECT_INTERNAL", projectId: created.id },
+          { name: `${slug}-client`, description: `Client communication for ${created.name}`,  type: "PROJECT_CLIENT",   projectId: created.id },
         ],
         skipDuplicates: true,
       });
-    } catch (channelErr) {
-      // Channel creation is best-effort — don't fail the project creation
-      console.warn("[POST /api/projects] Could not auto-create channels:", channelErr);
-    }
+
+      return created;
+    });
 
     return NextResponse.json({ ...project, progress: 0 }, { status: 201 });
   } catch (error) {
-    console.error("[POST /api/projects]", error);
-    return NextResponse.json({ error: "Failed to create project" }, { status: 500 });
+    return handleApiError(error, "POST /api/projects");
   }
 }

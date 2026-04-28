@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Plus, Search, FileText, CheckCircle2, Clock, AlertCircle, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import type { Contract, ContractType, ContractStatus, Project, ClientSummary } from "@/types";
@@ -31,6 +32,7 @@ function formatDate(d: string) {
 const STATUS_ORDER: ContractStatus[] = ["DRAFT", "SENT", "PARTIALLY_SIGNED", "FULLY_SIGNED", "EXPIRED", "TERMINATED"];
 
 export default function ContractsPage() {
+  const router = useRouter();
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -201,7 +203,7 @@ export default function ContractsPage() {
                   const signed = contract.parties.filter((p) => p.signedAt).length;
                   return (
                     <tr key={contract.id} className="hover:bg-gray-50 transition-colors cursor-pointer"
-                      onClick={() => window.location.href = `/contracts/${contract.id}`}
+                      onClick={() => router.push(`/contracts/${contract.id}`)}
                     >
                       <td className="px-5 py-3.5 font-medium text-gray-900">{contract.title}</td>
                       <td className="px-5 py-3.5 text-gray-500">{TYPE_LABELS[contract.type]}</td>

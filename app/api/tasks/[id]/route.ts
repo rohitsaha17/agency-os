@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth, requireRole } from "@/lib/auth";
+import { apiError, handleApiError, ApiError } from "@/lib/api-errors";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -11,25 +13,34 @@ const TASK_INCLUDE = {
   _count: { select: { children: true } },
 } as const;
 
+// Max depth for recursive task-tree walks — prevents runaway recursion
+// if a cycle is ever introduced in the hierarchy (shouldn't happen, but
+// cheap insurance against a pathological data shape).
+const MAX_RECURSION_DEPTH = 10;
+
 // GET /api/tasks/[id] — fetch single task with all relations
-export async function GET(_req: NextRequest, { params }: Params) {
-  const { id } = await params;
+export async function GET(req: NextRequest, { params }: Params) {
   try {
+    await requireAuth(req);
+    const { id } = await params;
+
     const task = await prisma.task.findUnique({
       where: { id, deletedAt: null },
       include: TASK_INCLUDE,
     });
-    if (!task) return NextResponse.json({ error: "Task not found" }, { status: 404 });
+    if (!task) throw new ApiError("Task not found", 404);
     return NextResponse.json(serializeTask(task));
-  } catch {
-    return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
+  } catch (error) {
+    return handleApiError(error, "GET /api/tasks/[id]");
   }
 }
 
 // PATCH /api/tasks/[id] — update task fields and/or assignees
 export async function PATCH(req: NextRequest, { params }: Params) {
-  const { id } = await params;
   try {
+    await requireAuth(req);
+    const { id } = await params;
+
     const body = await req.json();
     const {
       title, description, status, priority, dueDate,
@@ -65,49 +76,51 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
     // Cascade DONE status to all children if requested
     if (status === "DONE" && cascadeToChildren) {
-      await cascadeStatusDown(id, "DONE");
+      await cascadeStatusDown(id, "DONE", 0);
     }
 
     // If status changed, recompute parent's progress and potentially auto-complete parent
     if (status !== undefined && task.parentId) {
-      await recomputeAncestorProgress(task.parentId);
+      await recomputeAncestorProgress(task.parentId, 0);
     }
 
     return NextResponse.json(serializeTask(task));
   } catch (error: unknown) {
     if ((error as { code?: string }).code === "P2025") {
-      return NextResponse.json({ error: "Task not found" }, { status: 404 });
+      return apiError("Task not found", 404);
     }
-    console.error("[PATCH /api/tasks/[id]]", error);
-    return NextResponse.json({ error: "Failed to update task" }, { status: 500 });
+    return handleApiError(error, "PATCH /api/tasks/[id]");
   }
 }
 
 // DELETE /api/tasks/[id] — soft delete
-export async function DELETE(_req: NextRequest, { params }: Params) {
-  const { id } = await params;
+export async function DELETE(req: NextRequest, { params }: Params) {
   try {
+    const user = await requireAuth(req);
+    requireRole(user, ["ADMIN", "MANAGER"]);
+    const { id } = await params;
+
     // Soft-delete this task and all its descendants
-    await softDeleteDescendants(id);
+    await softDeleteDescendants(id, 0);
     return NextResponse.json({ success: true });
   } catch (error: unknown) {
     if ((error as { code?: string }).code === "P2025") {
-      return NextResponse.json({ error: "Task not found" }, { status: 404 });
+      return apiError("Task not found", 404);
     }
-    console.error("[DELETE /api/tasks/[id]]", error);
-    return NextResponse.json({ error: "Failed to delete task" }, { status: 500 });
+    return handleApiError(error, "DELETE /api/tasks/[id]");
   }
 }
 
 // ── Helpers ──────────────────────────────────────────────────
 
-async function softDeleteDescendants(taskId: string): Promise<void> {
+async function softDeleteDescendants(taskId: string, depth: number): Promise<void> {
+  if (depth >= MAX_RECURSION_DEPTH) return;
   const children = await prisma.task.findMany({
     where: { parentId: taskId, deletedAt: null },
     select: { id: true },
   });
   for (const child of children) {
-    await softDeleteDescendants(child.id);
+    await softDeleteDescendants(child.id, depth + 1);
   }
   await prisma.task.update({
     where: { id: taskId },
@@ -115,8 +128,9 @@ async function softDeleteDescendants(taskId: string): Promise<void> {
   });
 }
 
-// Cascade a status update down to all children recursively
-async function cascadeStatusDown(taskId: string, status: string): Promise<void> {
+// Cascade a status update down to all children recursively (capped at MAX_RECURSION_DEPTH).
+async function cascadeStatusDown(taskId: string, status: string, depth: number): Promise<void> {
+  if (depth >= MAX_RECURSION_DEPTH) return;
   const children = await prisma.task.findMany({
     where: { parentId: taskId, deletedAt: null },
     select: { id: true },
@@ -126,11 +140,12 @@ async function cascadeStatusDown(taskId: string, status: string): Promise<void> 
       where: { id: child.id },
       data: { status: status as never, progress: status === "DONE" ? 100 : undefined },
     });
-    await cascadeStatusDown(child.id, status);
+    await cascadeStatusDown(child.id, status, depth + 1);
   }
 }
 
-async function recomputeAncestorProgress(taskId: string): Promise<void> {
+async function recomputeAncestorProgress(taskId: string, depth: number): Promise<void> {
+  if (depth >= MAX_RECURSION_DEPTH) return;
   const children = await prisma.task.findMany({
     where: { parentId: taskId, deletedAt: null },
     select: { id: true, status: true, progress: true },
@@ -153,20 +168,25 @@ async function recomputeAncestorProgress(taskId: string): Promise<void> {
   });
 
   if (updated.parentId) {
-    await recomputeAncestorProgress(updated.parentId);
+    await recomputeAncestorProgress(updated.parentId, depth + 1);
   }
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function serializeTask(task: any) {
+  // Defensive null-safety: include may be narrowed (or an assignee's user
+  // relation may be missing on a stale fixture), so guard every optional hop.
+  const assignees = Array.isArray(task?.assignees) ? task.assignees : [];
   return {
     ...task,
-    dueDate: task.dueDate?.toISOString() ?? null,
-    createdAt: task.createdAt.toISOString(),
-    updatedAt: task.updatedAt.toISOString(),
-    assignees: task.assignees.map((a: { userId: string; user: unknown }) => ({
-      userId: a.userId,
-      user: a.user,
+    dueDate: task?.dueDate?.toISOString() ?? null,
+    createdAt: task?.createdAt?.toISOString?.() ?? null,
+    updatedAt: task?.updatedAt?.toISOString?.() ?? null,
+    managerName: task?.manager?.name ?? null,
+    primaryAssigneeName: assignees?.[0]?.user?.name ?? null,
+    assignees: assignees.map((a: { userId: string; user: unknown }) => ({
+      userId: a?.userId ?? null,
+      user: a?.user ?? null,
     })),
   };
 }

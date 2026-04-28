@@ -6,8 +6,9 @@ import {
   AlertCircle, Clock, CheckCircle2, Ban, FolderKanban,
   TrendingUp, Users, FileText, HardDrive, ArrowRight,
   RefreshCw, Calendar, ChevronRight, Zap, MessageSquare,
-  Upload, LayoutGrid,
+  Upload, LayoutGrid, Receipt, UserPlus, BarChart3,
 } from "lucide-react";
+import { DashboardInsights } from "@/components/ai/DashboardInsights";
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -23,6 +24,9 @@ interface DashboardStats {
   completionRate: number;
   monthCompletionRate: number;
   completedThisMonth: number;
+  expensesThisMonth: number;
+  expenseCount: number;
+  pendingExpenses: number;
 }
 
 interface TaskStats {
@@ -119,22 +123,23 @@ const PRIORITY_COLORS: Record<string, string> = {
 
 // ── Sub-components ────────────────────────────────────────────
 
-function StatCard({ icon, label, value, sub, color, href }: {
+function StatCard({ icon, label, value, sub, color, href, accent = false }: {
   icon: React.ReactNode; label: string; value: string | number;
-  sub?: string; color: string; href?: string;
+  sub?: string; color: string; href?: string; accent?: boolean;
 }) {
   const inner = (
-    <div className={`bg-white border rounded-2xl px-5 py-4 flex items-center gap-4 transition-all ${
-      href ? "hover:shadow-md hover:border-indigo-200 cursor-pointer" : ""
-    } border-gray-200`}>
-      <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${color}`}>
+    <div className={`bg-white border rounded-2xl px-5 py-4 flex items-center gap-4 transition-all group ${
+      href ? "hover:shadow-md hover:border-indigo-200 hover:-translate-y-0.5 cursor-pointer" : ""
+    } ${accent ? "border-indigo-200 bg-gradient-to-br from-indigo-50/50 to-white" : "border-gray-200"}`}>
+      <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm ${color} transition-transform group-hover:scale-105`}>
         {icon}
       </div>
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <p className="text-xs font-medium text-gray-500 truncate">{label}</p>
         <p className="text-2xl font-bold text-gray-900 leading-tight">{value}</p>
         {sub && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}
       </div>
+      {href && <ArrowRight className="w-4 h-4 text-gray-200 group-hover:text-indigo-400 transition-colors flex-shrink-0" />}
     </div>
   );
   return href ? <Link href={href}>{inner}</Link> : inner;
@@ -234,10 +239,10 @@ function UrgentPanel({ items }: { items: UrgentItem[] }) {
 
   return (
     <div className="space-y-1.5">
-      {items.map((item) => {
+      {items.map((item, idx) => {
         const sev = SEVERITY[item.severity];
         return (
-          <Link key={item.id} href={item.link}>
+          <Link key={`${item.type}-${item.id}-${idx}`} href={item.link}>
             <div className={`flex items-start gap-2.5 p-3 rounded-xl border-l-4 ${sev.border} ${sev.bg} hover:opacity-90 transition-opacity`}>
               {sev.icon}
               <div className="flex-1 min-w-0">
@@ -349,7 +354,7 @@ function UpcomingDeadlines({ tasks, projects }: {
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 px-1">{day}</p>
           <div className="space-y-1">
             {items.map((item) => (
-              <Link key={item.id} href={item.link}>
+              <Link key={`${item.type}-${item.id}`} href={item.link}>
                 <div className="flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-gray-50 transition-colors">
                   {item.type === "project"
                     ? <FolderKanban className="w-3.5 h-3.5 text-indigo-400 flex-shrink-0" />
@@ -446,19 +451,25 @@ function SectionCard({ title, subtitle, action, children, className = "" }: {
 
 function QuickActions() {
   const actions = [
-    { label: "New Project",    href: "/projects",    icon: <FolderKanban className="w-4 h-4" />, color: "bg-indigo-50 text-indigo-700 hover:bg-indigo-100" },
-    { label: "New Quotation",  href: "/quotations/new", icon: <FileText className="w-4 h-4" />,     color: "bg-purple-50 text-purple-700 hover:bg-purple-100" },
-    { label: "Upload File",    href: "/files",        icon: <HardDrive className="w-4 h-4" />,     color: "bg-sky-50 text-sky-700 hover:bg-sky-100" },
-    { label: "View Calendar",  href: "/calendar",    icon: <Calendar className="w-4 h-4" />,       color: "bg-emerald-50 text-emerald-700 hover:bg-emerald-100" },
+    { label: "New Project",    href: "/projects",       icon: <FolderKanban className="w-4 h-4" />, color: "bg-indigo-50 text-indigo-600 hover:bg-indigo-100 hover:shadow-sm border border-indigo-100" },
+    { label: "New Quotation",  href: "/quotations/new", icon: <FileText className="w-4 h-4" />,      color: "bg-purple-50 text-purple-600 hover:bg-purple-100 hover:shadow-sm border border-purple-100" },
+    { label: "Add Client",     href: "/clients",        icon: <UserPlus className="w-4 h-4" />,      color: "bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:shadow-sm border border-emerald-100" },
+    { label: "New Invoice",    href: "/invoices",       icon: <Receipt className="w-4 h-4" />,       color: "bg-amber-50 text-amber-600 hover:bg-amber-100 hover:shadow-sm border border-amber-100" },
+    { label: "Upload Files",   href: "/files",          icon: <HardDrive className="w-4 h-4" />,     color: "bg-sky-50 text-sky-600 hover:bg-sky-100 hover:shadow-sm border border-sky-100" },
+    { label: "View Calendar",  href: "/calendar",       icon: <Calendar className="w-4 h-4" />,      color: "bg-pink-50 text-pink-600 hover:bg-pink-100 hover:shadow-sm border border-pink-100" },
+    { label: "Contracts",      href: "/contracts",      icon: <FileText className="w-4 h-4" />,      color: "bg-orange-50 text-orange-600 hover:bg-orange-100 hover:shadow-sm border border-orange-100" },
+    { label: "Expenses",       href: "/expenses",       icon: <BarChart3 className="w-4 h-4" />,     color: "bg-teal-50 text-teal-600 hover:bg-teal-100 hover:shadow-sm border border-teal-100" },
   ];
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+    <div className="grid grid-cols-4 sm:grid-cols-8 gap-2.5">
       {actions.map((a) => (
         <Link key={a.label} href={a.href}>
-          <div className={`flex flex-col items-center gap-2 p-4 rounded-2xl border border-transparent ${a.color} transition-colors cursor-pointer`}>
-            {a.icon}
-            <span className="text-xs font-semibold text-center leading-tight">{a.label}</span>
+          <div className={`flex flex-col items-center gap-2 p-3 rounded-2xl ${a.color} transition-all cursor-pointer group`}>
+            <div className="w-8 h-8 flex items-center justify-center rounded-xl bg-white/70 group-hover:bg-white/90 transition-colors">
+              {a.icon}
+            </div>
+            <span className="text-xs font-medium text-center leading-tight">{a.label}</span>
           </div>
         </Link>
       ))}
@@ -528,21 +539,79 @@ export default function DashboardPage() {
   // ── Loading skeleton ──────────────────────────────────────
 
   if (loading) {
+    const Shimmer = ({ className }: { className: string }) => (
+      <div className={`bg-gray-100 rounded animate-pulse ${className}`} />
+    );
     return (
       <div className="flex flex-col h-full">
-        <div className="bg-white border-b border-gray-200 px-4 sm:px-6 lg:px-8 py-4 sm:py-5 animate-pulse">
-          <div className="h-6 bg-gray-200 rounded w-64 mb-1" />
-          <div className="h-4 bg-gray-100 rounded w-48" />
+        <div className="bg-white border-b border-gray-200 px-4 sm:px-6 lg:px-8 py-4 sm:py-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <Shimmer className="h-6 w-56 mb-2" />
+              <Shimmer className="h-3.5 w-40" />
+            </div>
+            <Shimmer className="h-4 w-28" />
+          </div>
         </div>
-        <div className="flex-1 px-4 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-6 overflow-auto">
+        <div className="flex-1 px-4 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-5 overflow-auto">
+          {/* Stat cards skeleton */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-            {[1,2,3,4,5].map((i) => <div key={i} className="h-24 bg-white border border-gray-200 rounded-2xl animate-pulse" />)}
+            {[1,2,3,4,5].map((i) => (
+              <div key={i} className="bg-white border border-gray-200 rounded-2xl px-5 py-4 flex items-center gap-4">
+                <Shimmer className="w-11 h-11 rounded-xl flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <Shimmer className="h-3 w-20 mb-2" />
+                  <Shimmer className="h-7 w-12 mb-1.5" />
+                  <Shimmer className="h-2.5 w-16" />
+                </div>
+              </div>
+            ))}
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-            {[1,2,3].map((i) => <div key={i} className="h-56 bg-white border border-gray-200 rounded-2xl animate-pulse" />)}
+          {/* Quick actions skeleton */}
+          <div className="bg-white border border-gray-200 rounded-2xl px-5 py-4">
+            <Shimmer className="h-4 w-28 mb-3" />
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {[1,2,3,4].map((i) => <Shimmer key={i} className="h-20 rounded-2xl" />)}
+            </div>
           </div>
+          {/* Middle row skeleton */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+            {[1,2,3].map((i) => (
+              <div key={i} className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+                <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+                  <div>
+                    <Shimmer className="h-4 w-32 mb-1.5" />
+                    <Shimmer className="h-3 w-20" />
+                  </div>
+                </div>
+                <div className="p-5 space-y-3">
+                  {[1,2,3,4].map((j) => <Shimmer key={j} className="h-10 rounded-xl" />)}
+                </div>
+              </div>
+            ))}
+          </div>
+          {/* Bottom row skeleton */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            {[1,2].map((i) => <div key={i} className="h-64 bg-white border border-gray-200 rounded-2xl animate-pulse" />)}
+            {[1,2].map((i) => (
+              <div key={i} className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+                <div className="px-5 py-4 border-b border-gray-100">
+                  <Shimmer className="h-4 w-36 mb-1.5" />
+                  <Shimmer className="h-3 w-24" />
+                </div>
+                <div className="p-5 space-y-3">
+                  {[1,2,3,4,5].map((j) => (
+                    <div key={j} className="flex items-center gap-3">
+                      <Shimmer className="w-8 h-8 rounded-full flex-shrink-0" />
+                      <div className="flex-1">
+                        <Shimmer className="h-3.5 w-48 mb-1.5" />
+                        <Shimmer className="h-2.5 w-32" />
+                      </div>
+                      <Shimmer className="h-3 w-10" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -647,7 +716,7 @@ export default function DashboardPage() {
       <div className="flex-1 px-4 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-5 overflow-auto">
 
         {/* ── Row 1: Stats ───────────────────────────────────── */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
           <StatCard
             icon={<FolderKanban className="w-5 h-5 text-indigo-600" />}
             label="Active Projects"
@@ -681,6 +750,14 @@ export default function DashboardPage() {
             href="/quotations"
           />
           <StatCard
+            icon={<Receipt className="w-5 h-5 text-amber-600" />}
+            label="Expenses (Month)"
+            value={fmt(stats.expensesThisMonth)}
+            sub={stats.pendingExpenses > 0 ? `${stats.pendingExpenses} pending` : `${stats.expenseCount} this month`}
+            color={stats.pendingExpenses > 0 ? "bg-amber-50" : "bg-gray-50"}
+            href="/expenses"
+          />
+          <StatCard
             icon={<Users className="w-5 h-5 text-emerald-600" />}
             label="Active Clients"
             value={stats.activeClients}
@@ -697,6 +774,32 @@ export default function DashboardPage() {
           </div>
           <QuickActions />
         </div>
+
+        {/* ── AI Insights ────────────────────────────────────── */}
+        <DashboardInsights
+          stats={{
+            activeProjects: stats.activeProjects,
+            overdueTasksCount: stats.overdueTasksCount,
+            blockedTasksCount: stats.blockedTasksCount,
+            completionRate: stats.completionRate,
+            expensesThisMonth: stats.expensesThisMonth,
+            pipelineValue: stats.pipelineValue,
+            activeClients: stats.activeClients,
+          }}
+          projectHealth={projectHealth.map((p) => ({
+            name: p.name,
+            progress: p.progress,
+            overdue: p.overdue,
+            blocked: p.blocked,
+            total: p.total,
+            daysLeft: p.daysLeft,
+            endDate: p.endDate,
+          }))}
+          upcomingDeadlines={[
+            ...upcomingDeadlines.tasks.map((t) => ({ title: t.title, dueDate: t.dueDate, type: "task" })),
+            ...upcomingDeadlines.projects.map((p) => ({ title: p.name, dueDate: p.endDate, type: "project" })),
+          ]}
+        />
 
         {/* ── Row 3: Urgent + Task breakdown + Performance ──── */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">

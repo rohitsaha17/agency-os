@@ -7,7 +7,8 @@ import {
   ChevronLeft, Edit2, Trash2, Plus, Star, Mail, Phone,
   Globe, MapPin, Building2, FileText, FolderOpen,
   ExternalLink, Check, X, Pencil, Receipt, HardDrive, ChevronRight,
-  Link2, HardDriveIcon, Image,
+  Link2, HardDriveIcon, Image, MessageSquare, Hash, Upload,
+  DollarSign, Clock, CheckCircle2, AlertCircle, Send, Users,
 } from "lucide-react";
 import { BrandAssetsEditor } from "@/components/clients/BrandAssetsEditor";
 import type { BrandColor, BrandAsset, ClientLink } from "@/types";
@@ -18,10 +19,14 @@ import { Modal } from "@/components/ui/Modal";
 import { ClientForm } from "@/components/clients/ClientForm";
 import { ProjectForm } from "@/components/projects/ProjectForm";
 import { QuotationBuilder } from "@/components/quotations/QuotationBuilder";
-import { Client, ContactFormData, ClientContact, ProjectStatus, ProjectType, Quotation, AssetFile, ContractType, ContractPartyType, Stakeholder, User } from "@/types";
+import { useToast } from "@/components/ui/Toast";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { useCurrentUser } from "@/lib/useCurrentUser";
+import { Client, ContactFormData, ClientContact, ProjectStatus, ProjectType, Quotation, AssetFile, ContractType, ContractPartyType, Stakeholder, User, Invoice, InvoiceStatus, Channel, ChatMessage } from "@/types";
+import { ClientHealthCard } from "@/components/ai/ClientHealthCard";
 
 // ── helpers ──────────────────────────────────────────────────
-type Tab = "overview" | "contacts" | "brand" | "tax" | "projects" | "quotations" | "files" | "contracts";
+type Tab = "overview" | "contacts" | "brand" | "tax" | "projects" | "quotations" | "files" | "contracts" | "chat" | "invoices";
 
 const PROJECT_STATUS_COLOR: Record<ProjectStatus, string> = {
   DRAFT: "bg-gray-100 text-gray-600",
@@ -157,7 +162,11 @@ function ContactModal({
 // ── Main Page ─────────────────────────────────────────────────
 export default function ClientDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const router = useRouter();
+  const router  = useRouter();
+  const toast   = useToast();
+  const confirm = useConfirm();
+  const { user: currentUser } = useCurrentUser();
+  const canManageChannels = currentUser?.role === "ADMIN" || currentUser?.role === "MANAGER";
   const [client, setClient] = useState<Client | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -175,6 +184,19 @@ export default function ClientDetailPage() {
   const [filesLoaded, setFilesLoaded] = useState(false);
   const [clientContracts, setClientContracts] = useState<import("@/types").Contract[]>([]);
   const [contractsLoaded, setContractsLoaded] = useState(false);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [invoicesLoaded, setInvoicesLoaded] = useState(false);
+  const [channels, setChannels] = useState<Channel[]>([]);
+  const [channelsLoaded, setChannelsLoaded] = useState(false);
+  const [activeChannel, setActiveChannel] = useState<Channel | null>(null);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatLoading, setChatLoading] = useState(false);
+  const [composeText, setComposeText] = useState("");
+  const [sendingMessage, setSendingMessage] = useState(false);
+  const [showCreateChannel, setShowCreateChannel] = useState(false);
+  const [newChannelName, setNewChannelName] = useState("");
+  const [newChannelMemberIds, setNewChannelMemberIds] = useState<string[]>([]);
+  const [teamUsers, setTeamUsers] = useState<{ id: string; name: string; role: string }[]>([]);
 
   // Inline create modals
   const [projectModalOpen, setProjectModalOpen] = useState(false);
@@ -222,7 +244,25 @@ export default function ClientDetailPage() {
         .then((r) => r.json())
         .then((d) => { setClientContracts(Array.isArray(d) ? d : d.contracts ?? []); setContractsLoaded(true); });
     }
-  }, [tab, id, quotationsLoaded, filesLoaded, contractsLoaded]);
+    if (tab === "invoices" && !invoicesLoaded) {
+      fetch(`/api/invoices?clientId=${id}`)
+        .then((r) => r.json())
+        .then((d) => { if (Array.isArray(d)) setInvoices(d); setInvoicesLoaded(true); });
+    }
+    if (tab === "chat" && !channelsLoaded) {
+      fetch(`/api/channels?clientId=${id}`)
+        .then((r) => r.json())
+        .then((d) => {
+          const list = Array.isArray(d) ? d : [];
+          setChannels(list);
+          if (list.length > 0 && !activeChannel) setActiveChannel(list[0]);
+          setChannelsLoaded(true);
+        });
+      if (teamUsers.length === 0) {
+        fetch("/api/users").then(r => r.json()).then(d => setTeamUsers(Array.isArray(d) ? d : d.users ?? [])).catch(() => {});
+      }
+    }
+  }, [tab, id, quotationsLoaded, filesLoaded, contractsLoaded, invoicesLoaded, channelsLoaded, activeChannel, teamUsers]);
 
   // Load stakeholders + users when contract modal opens
   useEffect(() => {
@@ -265,12 +305,19 @@ export default function ClientDetailPage() {
     if (!clientContractForm.title.trim()) { setClientContractError("Title is required"); return; }
     if (clientContractParties.some((p) => !p.name.trim())) { setClientContractError("All parties need a name"); return; }
     setClientContractSaving(true); setClientContractError(null);
-    const res = await fetch("/api/contracts", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...clientContractForm, clientId: id, parties: clientContractParties }),
-    });
-    setClientContractSaving(false);
-    if (res.ok) {
+    try {
+      const res = await fetch("/api/contracts", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...clientContractForm, clientId: id, parties: clientContractParties }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        const msg = data?.error || "Failed to create contract";
+        setClientContractError(msg);
+        toast.error(msg);
+        return;
+      }
+      toast.success("Contract created");
       setContractModalOpen(false);
       setClientContractForm(EMPTY_CONTRACT_FORM);
       setClientContractParties([{ ...EMPTY_CLIENT_PARTY }]);
@@ -279,22 +326,170 @@ export default function ClientDetailPage() {
       fetch(`/api/contracts?clientId=${id}`)
         .then((r) => r.json())
         .then((d) => { setClientContracts(Array.isArray(d) ? d : d.contracts ?? []); setContractsLoaded(true); });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to create contract";
+      setClientContractError(msg);
+      toast.error(msg);
+    } finally {
+      setClientContractSaving(false);
+    }
+  };
+
+  // ── Invoice helpers ──
+  const handleInvoiceMarkPaid = async (invoiceId: string) => {
+    const ok = await confirm({
+      title: "Mark invoice as paid?",
+      message: "This will mark the invoice as paid and record today as the payment date.",
+      confirmLabel: "Mark Paid",
+      variant: "warning",
+    });
+    if (!ok) return;
+    try {
+      const res = await fetch(`/api/invoices/${invoiceId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "PAID", paidAt: new Date().toISOString() }),
+      });
+      if (res.ok) {
+        toast.success("Invoice marked as paid");
+        setInvoices((prev) => prev.map((inv) => inv.id === invoiceId ? { ...inv, status: "PAID" as InvoiceStatus } : inv));
+      } else {
+        toast.error("Failed to update invoice");
+      }
+    } catch {
+      toast.error("Failed to update invoice");
+    }
+  };
+
+  // ── Chat helpers ──
+  const fetchMessages = useCallback(async (channelId: string) => {
+    setChatLoading(true);
+    try {
+      const res = await fetch(`/api/channels/${channelId}/messages`);
+      if (res.ok) {
+        const data = await res.json();
+        setChatMessages(Array.isArray(data) ? data : data.messages ?? []);
+      }
+    } finally {
+      setChatLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeChannel) fetchMessages(activeChannel.id);
+  }, [activeChannel, fetchMessages]);
+
+  const handleSendMessage = async () => {
+    if (!composeText.trim() || !activeChannel) return;
+    setSendingMessage(true);
+    try {
+      const res = await fetch(`/api/channels/${activeChannel.id}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ body: composeText.trim(), authorName: "You" }),
+      });
+      if (res.ok) {
+        setComposeText("");
+        fetchMessages(activeChannel.id);
+      }
+    } finally {
+      setSendingMessage(false);
+    }
+  };
+
+  const handleCreateChannel = async () => {
+    if (!newChannelName.trim()) return;
+    try {
+      const res = await fetch("/api/channels", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newChannelName.trim(),
+          type: "CLIENT",
+          clientId: id,
+          ...(newChannelMemberIds.length > 0 ? { memberIds: newChannelMemberIds } : {}),
+        }),
+      });
+      if (res.ok) {
+        const created = await res.json();
+        setChannels((prev) => [...prev, created]);
+        setActiveChannel(created);
+        setNewChannelName("");
+        setNewChannelMemberIds([]);
+        setShowCreateChannel(false);
+      } else {
+        toast.error("Failed to create channel");
+      }
+    } catch {
+      toast.error("Failed to create channel");
+    }
+  };
+
+  const handleDeleteChannel = async (channelId: string, channelName: string) => {
+    const ok = await confirm({
+      title: "Delete channel?",
+      message: `"${channelName}" and all its messages will be permanently deleted.`,
+      confirmLabel: "Delete Channel",
+      variant: "danger",
+    });
+    if (!ok) return;
+    const res = await fetch(`/api/channels/${channelId}`, { method: "DELETE" });
+    if (res.ok) {
+      toast.success("Channel deleted");
+      setChannels(prev => prev.filter(c => c.id !== channelId));
+      if (activeChannel?.id === channelId) {
+        setActiveChannel(channels.find(c => c.id !== channelId) ?? null);
+      }
+    } else {
+      toast.error("Failed to delete channel");
     }
   };
 
   const handleArchive = async () => {
-    if (!confirm("Archive this client? They will no longer appear in active lists.")) return;
+    const ok = await confirm({
+      title: "Archive client?",
+      message: "This client will be archived and no longer appear in active lists. Their projects and data will be preserved.",
+      confirmLabel: "Archive Client",
+      variant: "warning",
+    });
+    if (!ok) return;
     setArchiving(true);
-    await fetch(`/api/clients/${id}`, { method: "DELETE" });
-    router.push("/clients");
+    try {
+      const res = await fetch(`/api/clients/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        toast.error("Failed to archive client");
+        return;
+      }
+      toast.success("Client archived");
+      router.push("/clients");
+    } catch {
+      toast.error("Failed to archive client");
+    } finally {
+      setArchiving(false);
+    }
   };
 
   const handleDeleteContact = async (contactId: string) => {
-    if (!confirm("Remove this contact?")) return;
-    await fetch(`/api/clients/${id}/contacts/${contactId}`, { method: "DELETE" });
-    setClient((prev) =>
-      prev ? { ...prev, contacts: prev.contacts.filter((c) => c.id !== contactId) } : prev
-    );
+    const ok = await confirm({
+      title: "Remove contact?",
+      message: "This contact will be permanently removed from the client.",
+      confirmLabel: "Remove",
+      variant: "danger",
+    });
+    if (!ok) return;
+    try {
+      const res = await fetch(`/api/clients/${id}/contacts/${contactId}`, { method: "DELETE" });
+      if (!res.ok) {
+        toast.error("Failed to remove contact");
+        return;
+      }
+      toast.success("Contact removed");
+      setClient((prev) =>
+        prev ? { ...prev, contacts: prev.contacts.filter((c) => c.id !== contactId) } : prev
+      );
+    } catch {
+      toast.error("Failed to remove contact");
+    }
   };
 
   const handleSaveBrand = async () => {
@@ -349,7 +544,9 @@ export default function ClientDetailPage() {
     { id: "tax",         label: "Tax & Billing" },
     { id: "projects",    label: `Projects (${client.projects.length})` },
     { id: "quotations",  label: "Quotations" },
+    { id: "invoices",    label: "Invoices" },
     { id: "files",       label: "Files" },
+    { id: "chat",        label: "Chat" },
     { id: "contracts",   label: "Contracts" },
   ];
 
@@ -442,6 +639,26 @@ export default function ClientDetailPage() {
                 ) : null
               )}
             </div>
+
+            {/* AI Client Health */}
+            <ClientHealthCard data={{
+              clientName: client.name,
+              projectCount: client.projects.length,
+              activeProjects: client.projects.filter((p: any) => p.status === "ACTIVE").length,
+              completedProjects: client.projects.filter((p: any) => p.status === "COMPLETED").length,
+              totalRevenue: invoices
+                .filter((inv) => inv.status === "PAID")
+                .reduce((sum, inv) => sum + (inv.lineItems ?? []).reduce((s, li) => s + Number(li.unitPrice) * Number(li.quantity), 0), 0),
+              overdueTasksCount: 0, // Would need task data
+              avgProjectProgress: client.projects.length > 0
+                ? Math.round(client.projects.reduce((sum: number, p: any) => sum + (p.progress || 0), 0) / client.projects.length)
+                : 0,
+              lastActivityDate: client.updatedAt,
+              contractsActive: clientContracts.filter((c) => c.status === "FULLY_SIGNED" || c.status === "PARTIALLY_SIGNED").length,
+              unpaidInvoices: invoices.filter((inv) => inv.status === "SENT" || inv.status === "OVERDUE").length,
+              expenseTotal: 0,
+              communicationFrequency: client.projects.some((p: any) => p.status === "ACTIVE") ? "medium" : "low",
+            }} />
 
             {clientLinks.length > 0 && (
               <div className="bg-white border border-gray-200 rounded-xl p-5">
@@ -750,50 +967,472 @@ export default function ClientDetailPage() {
         )}
 
         {/* ── FILES ── */}
-        {tab === "files" && (
-          <div className="max-w-3xl space-y-4">
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-gray-500">{files.length} file{files.length !== 1 ? "s" : ""}</p>
-              <Link href={`/files?clientId=${id}`}>
-                <Button size="sm" icon={<Plus className="w-3.5 h-3.5" />}>Upload Files</Button>
-              </Link>
-            </div>
+        {tab === "files" && (() => {
+          const commonFiles = files.filter((f) => !f.projectId);
+          const projectFiles = files.filter((f) => !!f.projectId);
+          const projectGroups = projectFiles.reduce<Record<string, { name: string; files: AssetFile[] }>>((acc, f) => {
+            const pId = f.projectId!;
+            if (!acc[pId]) acc[pId] = { name: f.project?.name ?? "Project", files: [] };
+            acc[pId].files.push(f);
+            return acc;
+          }, {});
 
-            {!filesLoaded ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {[1,2,3].map((i) => (
-                  <div key={i} className="bg-white border border-gray-200 rounded-xl aspect-square animate-pulse" />
-                ))}
+          const FileCard = ({ f }: { f: AssetFile }) => (
+            <Link
+              key={f.id}
+              href="/files"
+              className="bg-white border border-gray-200 rounded-xl overflow-hidden hover:border-indigo-300 transition-colors group"
+            >
+              {f.mimeCategory === "image" && f.url ? (
+                <img src={f.url} alt={f.name} className="w-full h-28 object-cover" />
+              ) : (
+                <div className="w-full h-28 bg-gray-50 flex items-center justify-center">
+                  <HardDrive className="w-8 h-8 text-gray-300" />
+                </div>
+              )}
+              <div className="px-3 py-2">
+                <p className="text-xs font-medium text-gray-800 truncate">{f.name}</p>
+                <p className="text-xs text-gray-400 mt-0.5">{f.status}</p>
               </div>
-            ) : files.length === 0 ? (
-              <div className="bg-white border border-gray-200 rounded-xl p-10 text-center">
-                <HardDrive className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-                <p className="text-sm text-gray-500">No files uploaded yet.</p>
-                <Link href={`/files?clientId=${id}`} className="mt-3 inline-block text-sm text-indigo-600 hover:underline">
-                  Go to Files
+            </Link>
+          );
+
+          return (
+            <div className="max-w-3xl space-y-4">
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-gray-500">{files.length} file{files.length !== 1 ? "s" : ""}</p>
+                <Link href={`/files?clientId=${id}`}>
+                  <Button size="sm" icon={<Plus className="w-3.5 h-3.5" />}>Upload Files</Button>
                 </Link>
               </div>
-            ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {files.map((f) => (
-                  <Link
-                    key={f.id}
-                    href="/files"
-                    className="bg-white border border-gray-200 rounded-xl overflow-hidden hover:border-indigo-300 transition-colors group"
+
+              {/* Upload zone */}
+              <Link
+                href={`/files?clientId=${id}`}
+                className="block border-2 border-dashed border-gray-200 rounded-xl p-6 text-center hover:border-indigo-300 hover:bg-indigo-50/30 transition-colors cursor-pointer"
+              >
+                <Upload className="w-6 h-6 text-gray-300 mx-auto mb-2" />
+                <p className="text-sm text-gray-500">Drop files here or click to upload</p>
+                <p className="text-xs text-gray-400 mt-1">Files will be linked to this client</p>
+              </Link>
+
+              {!filesLoaded ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {[1,2,3].map((i) => (
+                    <div key={i} className="bg-white border border-gray-200 rounded-xl aspect-square animate-pulse" />
+                  ))}
+                </div>
+              ) : files.length === 0 ? (
+                <div className="bg-white border border-gray-200 rounded-xl p-10 text-center">
+                  <HardDrive className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                  <p className="text-sm text-gray-500">No files uploaded yet.</p>
+                  <Link href={`/files?clientId=${id}`} className="mt-3 inline-block text-sm text-indigo-600 hover:underline">
+                    Go to Files
+                  </Link>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {/* Client Common Files */}
+                  {commonFiles.length > 0 && (
+                    <div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <FolderOpen className="w-4 h-4 text-gray-400" />
+                        <h3 className="text-sm font-medium text-gray-700">Client Common</h3>
+                        <span className="text-xs text-gray-400">({commonFiles.length})</span>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        {commonFiles.map((f) => <FileCard key={f.id} f={f} />)}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Per-Project File Groups */}
+                  {Object.entries(projectGroups).map(([pId, group]) => (
+                    <div key={pId}>
+                      <div className="flex items-center gap-2 mb-3">
+                        <FolderOpen className="w-4 h-4 text-indigo-400" />
+                        <Link href={`/projects/${pId}`} className="text-sm font-medium text-gray-700 hover:text-indigo-600 transition-colors">
+                          {group.name}
+                        </Link>
+                        <span className="text-xs text-gray-400">({group.files.length})</span>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        {group.files.map((f) => <FileCard key={f.id} f={f} />)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* ── INVOICES ── */}
+        {tab === "invoices" && (() => {
+          const totalInvoiced = invoices.reduce((sum, inv) => sum + inv.lineItems.reduce((s, li) => s + li.quantity * li.unitPrice, 0), 0);
+          const paidInvoices = invoices.filter((inv) => inv.status === "PAID");
+          const totalPaid = paidInvoices.reduce((sum, inv) => sum + inv.lineItems.reduce((s, li) => s + li.quantity * li.unitPrice, 0), 0);
+          const totalOutstanding = totalInvoiced - totalPaid;
+          const INVOICE_STATUS_COLOR: Record<InvoiceStatus, string> = {
+            DRAFT: "bg-gray-100 text-gray-600",
+            SENT: "bg-blue-50 text-blue-700",
+            PAID: "bg-emerald-50 text-emerald-700",
+            OVERDUE: "bg-red-50 text-red-600",
+            CANCELLED: "bg-gray-100 text-gray-500",
+          };
+
+          return (
+            <div className="max-w-3xl space-y-4">
+              {/* Summary cards */}
+              <div className="grid grid-cols-3 gap-3">
+                {[
+                  { label: "Total Invoiced", value: totalInvoiced, icon: DollarSign, color: "text-gray-700" },
+                  { label: "Paid", value: totalPaid, icon: CheckCircle2, color: "text-emerald-600" },
+                  { label: "Outstanding", value: totalOutstanding, icon: AlertCircle, color: "text-amber-600" },
+                ].map(({ label, value, icon: Icon, color }) => (
+                  <div key={label} className="bg-white border border-gray-200 rounded-xl px-4 py-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Icon className={`w-3.5 h-3.5 ${color}`} />
+                      <span className="text-xs text-gray-500">{label}</span>
+                    </div>
+                    <p className={`text-lg font-semibold ${color}`}>
+                      {new Intl.NumberFormat("en-US", { style: "currency", currency: invoices[0]?.currency ?? "USD", maximumFractionDigits: 0 }).format(value)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-gray-500">{invoices.length} invoice{invoices.length !== 1 ? "s" : ""}</p>
+                <Link href={`/invoices?clientId=${id}`}>
+                  <Button size="sm" icon={<Plus className="w-3.5 h-3.5" />}>New Invoice</Button>
+                </Link>
+              </div>
+
+              {!invoicesLoaded ? (
+                <div className="space-y-2">
+                  {[1,2,3].map((i) => (
+                    <div key={i} className="bg-white border border-gray-200 rounded-xl h-14 animate-pulse" />
+                  ))}
+                </div>
+              ) : invoices.length === 0 ? (
+                <div className="bg-white border border-gray-200 rounded-xl p-10 text-center">
+                  <DollarSign className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                  <p className="text-sm text-gray-500">No invoices yet.</p>
+                  <Link href={`/invoices?clientId=${id}`} className="mt-3 inline-block text-sm text-indigo-600 hover:underline">
+                    Create first invoice
+                  </Link>
+                </div>
+              ) : (
+                <div className="overflow-x-auto bg-white border border-gray-200 rounded-xl overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-100">
+                        <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500">Invoice #</th>
+                        <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500">Project</th>
+                        <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500">Status</th>
+                        <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500">Due Date</th>
+                        <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500">Amount</th>
+                        <th className="px-4 py-3 text-xs font-semibold text-gray-500 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {invoices.map((inv) => {
+                        const amount = inv.lineItems.reduce((s, li) => s + li.quantity * li.unitPrice, 0);
+                        return (
+                          <tr key={inv.id} className="hover:bg-gray-50 transition-colors">
+                            <td className="px-4 py-3">
+                              <Link href={`/invoices/${inv.id}`} className="font-medium text-gray-900 hover:text-indigo-600 font-mono text-xs">
+                                {inv.invoiceNumber}
+                              </Link>
+                            </td>
+                            <td className="px-4 py-3 text-gray-500 text-xs">
+                              {inv.project ? (
+                                <Link href={`/projects/${inv.project.id}`} className="hover:text-indigo-600 transition-colors">
+                                  {inv.project.name}
+                                </Link>
+                              ) : (
+                                <span className="text-gray-400">--</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${INVOICE_STATUS_COLOR[inv.status]}`}>
+                                {inv.status.charAt(0) + inv.status.slice(1).toLowerCase()}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-gray-400 text-xs">
+                              {inv.dueDate ? new Date(inv.dueDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "--"}
+                            </td>
+                            <td className="px-4 py-3 text-right font-semibold text-gray-700 text-sm">
+                              {new Intl.NumberFormat("en-US", { style: "currency", currency: inv.currency, maximumFractionDigits: 0 }).format(amount)}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              {inv.status !== "PAID" && (
+                                <button
+                                  onClick={() => handleInvoiceMarkPaid(inv.id)}
+                                  className="px-2 py-1 text-[11px] font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-md transition-colors inline-flex items-center gap-1"
+                                >
+                                  <CheckCircle2 className="w-3 h-3" /> Mark Paid
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* ── CHAT ── */}
+        {tab === "chat" && (
+          <div className="max-w-3xl space-y-4">
+            {!channelsLoaded ? (
+              <div className="space-y-2">
+                {[1,2,3].map((i) => (
+                  <div key={i} className="bg-white border border-gray-200 rounded-xl h-14 animate-pulse" />
+                ))}
+              </div>
+            ) : channels.length === 0 ? (
+              <div className="bg-white border border-gray-200 rounded-xl p-10 text-center">
+                <MessageSquare className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                <p className="text-sm text-gray-500">No channels for this client yet.</p>
+                {!showCreateChannel ? (
+                  <button
+                    onClick={() => setShowCreateChannel(true)}
+                    className="mt-3 inline-flex items-center gap-1.5 text-sm text-indigo-600 hover:text-indigo-700 font-medium"
                   >
-                    {f.mimeCategory === "image" && f.url ? (
-                      <img src={f.url} alt={f.name} className="w-full h-28 object-cover" />
-                    ) : (
-                      <div className="w-full h-28 bg-gray-50 flex items-center justify-center">
-                        <HardDrive className="w-8 h-8 text-gray-300" />
+                    <Plus className="w-4 h-4" /> New Channel
+                  </button>
+                ) : (
+                  <div className="mt-4 space-y-3">
+                    <div className="flex items-center gap-2 justify-center">
+                      <input
+                        type="text"
+                        value={newChannelName}
+                        onChange={(e) => setNewChannelName(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && handleCreateChannel()}
+                        placeholder="Channel name"
+                        className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 w-48"
+                        autoFocus
+                      />
+                      <button
+                        onClick={handleCreateChannel}
+                        disabled={!newChannelName.trim()}
+                        className="px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                      >
+                        Create
+                      </button>
+                      <button
+                        onClick={() => { setShowCreateChannel(false); setNewChannelName(""); setNewChannelMemberIds([]); }}
+                        className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                    {teamUsers.length > 0 && (
+                      <div className="flex items-center gap-1.5 flex-wrap justify-center">
+                        <Users className="w-3.5 h-3.5 text-gray-400" />
+                        <span className="text-[11px] text-gray-500">Members:</span>
+                        {teamUsers.map(u => (
+                          <button
+                            key={u.id}
+                            type="button"
+                            onClick={() => setNewChannelMemberIds(prev =>
+                              prev.includes(u.id) ? prev.filter(uid => uid !== u.id) : [...prev, u.id]
+                            )}
+                            className={`px-2 py-0.5 text-[11px] rounded-full border transition-colors ${
+                              newChannelMemberIds.includes(u.id)
+                                ? "bg-indigo-100 border-indigo-300 text-indigo-700"
+                                : "border-gray-200 text-gray-500 hover:bg-gray-50"
+                            }`}
+                          >
+                            {u.name}
+                          </button>
+                        ))}
                       </div>
                     )}
-                    <div className="px-3 py-2">
-                      <p className="text-xs font-medium text-gray-800 truncate">{f.name}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">{f.status}</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="flex gap-4 h-[500px]">
+                {/* Channel list sidebar */}
+                <div className="w-56 flex-shrink-0 bg-white border border-gray-200 rounded-xl overflow-hidden flex flex-col">
+                  <div className="px-3 py-2.5 border-b border-gray-100 flex items-center justify-between">
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Channels</p>
+                    <button
+                      onClick={() => setShowCreateChannel(!showCreateChannel)}
+                      className="text-indigo-600 hover:text-indigo-700"
+                      title="New Channel"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  {showCreateChannel && (
+                    <div className="px-3 py-2 border-b border-gray-100 space-y-2">
+                      <input
+                        type="text"
+                        value={newChannelName}
+                        onChange={(e) => setNewChannelName(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && handleCreateChannel()}
+                        placeholder="Channel name"
+                        className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        autoFocus
+                      />
+                      {teamUsers.length > 0 && (
+                        <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto">
+                          {teamUsers.map(u => (
+                            <button
+                              key={u.id}
+                              type="button"
+                              onClick={() => setNewChannelMemberIds(prev =>
+                                prev.includes(u.id) ? prev.filter(uid => uid !== u.id) : [...prev, u.id]
+                              )}
+                              className={`px-1.5 py-0.5 text-[10px] rounded-full border transition-colors ${
+                                newChannelMemberIds.includes(u.id)
+                                  ? "bg-indigo-100 border-indigo-300 text-indigo-700"
+                                  : "border-gray-200 text-gray-500"
+                              }`}
+                            >
+                              {u.name}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      <div className="flex gap-1.5">
+                        <button
+                          onClick={handleCreateChannel}
+                          disabled={!newChannelName.trim()}
+                          className="flex-1 px-2 py-1 text-xs bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50"
+                        >
+                          Create
+                        </button>
+                        <button
+                          onClick={() => { setShowCreateChannel(false); setNewChannelName(""); setNewChannelMemberIds([]); }}
+                          className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700"
+                        >
+                          Cancel
+                        </button>
+                      </div>
                     </div>
-                  </Link>
-                ))}
+                  )}
+                  <div className="flex-1 overflow-y-auto">
+                    {channels.map((ch) => {
+                      const typeIcon = ch.type === "CLIENT"
+                        ? <Building2 className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                        : <Hash className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />;
+                      return (
+                        <button
+                          key={ch.id}
+                          onClick={() => setActiveChannel(ch)}
+                          className={`group/ch w-full text-left px-3 py-2.5 flex items-center gap-2 transition-colors ${
+                            activeChannel?.id === ch.id
+                              ? "bg-indigo-50 text-indigo-700"
+                              : "text-gray-700 hover:bg-gray-50"
+                          }`}
+                        >
+                          {typeIcon}
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-medium truncate">{ch.name}</p>
+                            {ch.lastMessage && (
+                              <p className="text-[10px] text-gray-400 truncate mt-0.5">{ch.lastMessage.body}</p>
+                            )}
+                          </div>
+                          {ch._count?.messages ? (
+                            <span className="text-[10px] text-gray-400 flex-shrink-0">{ch._count.messages}</span>
+                          ) : null}
+                          {canManageChannels && (
+                            <span
+                              role="button"
+                              onClick={(e) => { e.stopPropagation(); handleDeleteChannel(ch.id, ch.name); }}
+                              className="hidden group-hover/ch:block text-gray-400 hover:text-red-500 flex-shrink-0"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Message area */}
+                <div className="flex-1 bg-white border border-gray-200 rounded-xl overflow-hidden flex flex-col">
+                  {activeChannel ? (
+                    <>
+                      {/* Channel header */}
+                      <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
+                        <Hash className="w-4 h-4 text-gray-400" />
+                        <span className="text-sm font-medium text-gray-800">{activeChannel.name}</span>
+                        {activeChannel.description && (
+                          <span className="text-xs text-gray-400 ml-2 truncate">{activeChannel.description}</span>
+                        )}
+                      </div>
+
+                      {/* Messages */}
+                      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+                        {chatLoading ? (
+                          <div className="flex items-center justify-center py-8">
+                            <div className="w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+                          </div>
+                        ) : chatMessages.length === 0 ? (
+                          <div className="flex flex-col items-center justify-center py-8 text-center">
+                            <MessageSquare className="w-6 h-6 text-gray-300 mb-2" />
+                            <p className="text-xs text-gray-400">No messages yet. Start the conversation.</p>
+                          </div>
+                        ) : (
+                          chatMessages.map((msg) => (
+                            <div key={msg.id} className="flex gap-2.5">
+                              <div className="w-7 h-7 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                                <span className="text-[10px] font-bold text-indigo-600">
+                                  {msg.authorName.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase()}
+                                </span>
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-baseline gap-2">
+                                  <span className="text-xs font-medium text-gray-800">{msg.authorName}</span>
+                                  <span className="text-[10px] text-gray-400">
+                                    {new Date(msg.createdAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+                                  </span>
+                                </div>
+                                <p className="text-sm text-gray-600 mt-0.5 break-words">{msg.body}</p>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+
+                      {/* Compose */}
+                      <div className="px-4 py-3 border-t border-gray-100">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={composeText}
+                            onChange={(e) => setComposeText(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } }}
+                            placeholder={`Message #${activeChannel.name}...`}
+                            className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          />
+                          <button
+                            onClick={handleSendMessage}
+                            disabled={sendingMessage || !composeText.trim()}
+                            className="p-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          >
+                            <Send className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex-1 flex items-center justify-center">
+                      <p className="text-sm text-gray-400">Select a channel to view messages</p>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>

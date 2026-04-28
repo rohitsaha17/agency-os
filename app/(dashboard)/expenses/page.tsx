@@ -2,9 +2,12 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { Plus, Search, TrendingDown, RefreshCw, CheckCircle2, Clock, XCircle, Filter } from "lucide-react";
+import { Plus, Search, TrendingDown, RefreshCw, CheckCircle2, Clock, XCircle, Filter, Paperclip, Upload, Sparkles, Loader2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
+import { useToast } from "@/components/ui/Toast";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { useDebounce } from "@/lib/hooks";
 import type { Expense, ExpenseCategory, ExpenseStatus, Project, Stakeholder, ClientSummary } from "@/types";
 
 const CATEGORY_LABELS: Record<ExpenseCategory, string> = {
@@ -52,6 +55,9 @@ const EMPTY_FORM = {
 };
 
 export default function ExpensesPage() {
+  const toast   = useToast();
+  const confirm = useConfirm();
+
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -62,21 +68,64 @@ export default function ExpensesPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [projects, setProjects] = useState<Pick<Project, "id" | "name">[]>([]);
   const [allProjectsFull, setAllProjectsFull] = useState<(Pick<Project, "id" | "name"> & { clientId?: string })[]>([]);
   const [clients, setClients] = useState<Pick<ClientSummary, "id" | "name" | "companyName">[]>([]);
   const [stakeholders, setStakeholders] = useState<Pick<Stakeholder, "id" | "name" | "type">[]>([]);
 
+  // Receipt OCR state
+  const [ocrScanning, setOcrScanning] = useState(false);
+  const [ocrResult, setOcrResult] = useState<{
+    vendor?: string; amount?: number; currency?: string; date?: string;
+    category?: ExpenseCategory; lineItems?: { description: string; amount: number }[];
+    notes?: string; confidence?: string;
+  } | null>(null);
+  const [ocrVerified, setOcrVerified] = useState(false);
+
+  const handleReceiptOCR = async (file: File) => {
+    setOcrScanning(true);
+    setOcrResult(null);
+    setOcrVerified(false);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/ai/receipt-ocr", { method: "POST", body: fd });
+      if (res.ok) {
+        const data = await res.json();
+        setOcrResult(data);
+        // Pre-fill form but DON'T auto-accept — user must verify
+        setForm((prev) => ({
+          ...prev,
+          title: data.vendor ? `${data.vendor}` : prev.title,
+          amount: data.amount ? String(data.amount) : prev.amount,
+          currency: data.currency || prev.currency,
+          date: data.date || prev.date,
+          category: data.category || prev.category,
+          notes: data.notes || prev.notes,
+        }));
+      } else {
+        toast.error("Failed to scan receipt. Please fill in details manually.");
+      }
+    } catch {
+      toast.error("Receipt scan failed. Please fill in details manually.");
+    } finally {
+      setOcrScanning(false);
+    }
+  };
+
+  const debouncedSearch = useDebounce(search, 300);
+
   const fetchExpenses = useCallback(async () => {
     setLoading(true);
     const params = new URLSearchParams();
-    if (search) params.set("search", search);
+    if (debouncedSearch) params.set("search", debouncedSearch);
     if (filterCategory) params.set("category", filterCategory);
     if (filterStatus) params.set("status", filterStatus);
     const res = await fetch(`/api/expenses?${params}`);
     if (res.ok) setExpenses(await res.json());
     setLoading(false);
-  }, [search, filterCategory, filterStatus]);
+  }, [debouncedSearch, filterCategory, filterStatus]);
 
   useEffect(() => { fetchExpenses(); }, [fetchExpenses]);
 
@@ -104,26 +153,64 @@ export default function ExpensesPage() {
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
+    let receiptUrl = form.receiptUrl;
+    // Upload receipt file if selected. On failure, clear the staged file,
+    // surface a toast, and abort so the user can retry/fix rather than
+    // silently saving an expense with no receipt attached.
+    if (receiptFile) {
+      const fd = new FormData();
+      fd.append("file", receiptFile);
+      try {
+        const uploadRes = await fetch("/api/files", { method: "POST", body: fd });
+        if (uploadRes.ok) {
+          const uploaded = await uploadRes.json();
+          receiptUrl = uploaded.url || uploaded.fileUrl || "";
+        } else {
+          setReceiptFile(null);
+          toast.error("Receipt upload failed. Please try again.");
+          setSaving(false);
+          return;
+        }
+      } catch {
+        setReceiptFile(null);
+        toast.error("Receipt upload failed. Please try again.");
+        setSaving(false);
+        return;
+      }
+    }
     const res = await fetch("/api/expenses", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
+      body: JSON.stringify({ ...form, receiptUrl }),
     });
     setSaving(false);
-    if (res.ok) { setAddOpen(false); setForm(EMPTY_FORM); fetchExpenses(); }
+    if (res.ok) {
+      toast.success("Expense added");
+      setAddOpen(false); setForm(EMPTY_FORM); setReceiptFile(null); fetchExpenses();
+    } else {
+      toast.error("Failed to add expense");
+    }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Delete this expense?")) return;
+    const ok = await confirm({
+      title: "Delete expense?",
+      message: "This expense record will be permanently removed.",
+      confirmLabel: "Delete",
+      variant: "danger",
+    });
+    if (!ok) return;
     await fetch(`/api/expenses/${id}`, { method: "DELETE" });
+    toast.success("Expense deleted");
     fetchExpenses();
   };
 
   const handleStatusChange = async (id: string, status: ExpenseStatus) => {
-    await fetch(`/api/expenses/${id}`, {
+    const res = await fetch(`/api/expenses/${id}`, {
       method: "PATCH", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status }),
     });
-    fetchExpenses();
+    if (res.ok) fetchExpenses();
+    else toast.error("Failed to update status");
   };
 
   // Build a projectId → clientId lookup from the full projects list
@@ -396,6 +483,98 @@ export default function ExpensesPage() {
                 placeholder="Optional notes..."
                 className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
               />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Receipt / Attachment</label>
+              <div className="flex items-center gap-2">
+                <label className="flex items-center gap-1.5 px-3 py-2 text-sm border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors text-gray-600">
+                  <Upload className="w-3.5 h-3.5" />
+                  {receiptFile ? receiptFile.name : "Upload receipt"}
+                  <input
+                    type="file"
+                    accept="image/*,.pdf"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0] ?? null;
+                      setReceiptFile(f);
+                      if (f && f.type.startsWith("image/")) {
+                        handleReceiptOCR(f);
+                      }
+                    }}
+                  />
+                </label>
+                {receiptFile && (
+                  <button type="button" onClick={() => { setReceiptFile(null); setOcrResult(null); setOcrVerified(false); }} className="text-xs text-red-500 hover:text-red-700">Remove</button>
+                )}
+              </div>
+              {ocrScanning && (
+                <div className="mt-2 flex items-center gap-2 text-xs text-indigo-600 bg-indigo-50 px-3 py-2 rounded-lg">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  Scanning receipt with AI...
+                </div>
+              )}
+              {ocrResult && !ocrVerified && (
+                <div className="mt-2 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                  <div className="flex items-start gap-2 mb-2">
+                    <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-xs font-semibold text-amber-900">AI extracted the following — please verify before saving</p>
+                      <p className="text-[11px] text-amber-700 mt-0.5">
+                        Confidence: <span className="font-medium">{ocrResult.confidence || "medium"}</span> — Always double-check amounts and dates
+                      </p>
+                    </div>
+                  </div>
+                  <div className="space-y-1 text-xs text-amber-800 pl-6">
+                    {ocrResult.vendor && <p>Vendor: <span className="font-medium">{ocrResult.vendor}</span></p>}
+                    {ocrResult.amount && <p>Amount: <span className="font-medium">{ocrResult.currency || "USD"} {ocrResult.amount}</span></p>}
+                    {ocrResult.date && <p>Date: <span className="font-medium">{ocrResult.date}</span></p>}
+                    {ocrResult.category && <p>Category: <span className="font-medium">{CATEGORY_LABELS[ocrResult.category] || ocrResult.category}</span></p>}
+                    {ocrResult.lineItems && ocrResult.lineItems.length > 0 && (
+                      <div className="mt-1">
+                        <p className="font-medium mb-0.5">Line items:</p>
+                        {ocrResult.lineItems.map((item, i) => (
+                          <p key={i} className="pl-2">- {item.description}: {ocrResult.currency || "USD"} {item.amount}</p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex gap-2 mt-2 pl-6">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        // Revalidate required fields before marking verified so
+                        // the submit button truly reflects a ready-to-save form.
+                        const missing: string[] = [];
+                        if (!form.title.trim()) missing.push("title");
+                        if (!form.amount || Number(form.amount) <= 0) missing.push("amount");
+                        if (!form.date) missing.push("date");
+                        if (missing.length) {
+                          toast.error(`Please fill in required fields: ${missing.join(", ")}`);
+                          return;
+                        }
+                        setOcrVerified(true);
+                        toast.success("OCR data verified — form fields updated");
+                      }}
+                      className="text-xs px-3 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors font-medium"
+                    >
+                      Looks correct
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setOcrResult(null); }}
+                      className="text-xs px-3 py-1.5 bg-white border border-amber-300 text-amber-800 rounded-lg hover:bg-amber-100 transition-colors"
+                    >
+                      Ignore & fill manually
+                    </button>
+                  </div>
+                </div>
+              )}
+              {ocrVerified && (
+                <div className="mt-2 flex items-center gap-1.5 text-xs text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-lg">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> AI-extracted data verified — review fields above
+                </div>
+              )}
             </div>
 
             <div className="flex items-center gap-2">

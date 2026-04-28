@@ -53,7 +53,9 @@ export default function ProjectsPage() {
   }, [search, statusFilter, typeFilter]);
 
   useEffect(() => {
-    const t = setTimeout(fetchProjects, search ? 300 : 0);
+    // Debounce all filter-driven refetches. 300ms for search-as-you-type,
+    // 150ms for status/type/etc. so rapid clicks don't spam the API.
+    const t = setTimeout(fetchProjects, search ? 300 : 150);
     return () => clearTimeout(t);
   }, [fetchProjects, search]);
 

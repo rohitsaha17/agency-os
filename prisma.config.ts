@@ -6,13 +6,20 @@ import dotenv from "dotenv";
 // where env vars are injected directly and no .env file exists.
 dotenv.config({ path: path.resolve(__dirname, ".env") });
 
-// Use process.env directly so a missing DATABASE_URL doesn't throw at
-// config-load time (which would break `prisma generate` during install
-// on Vercel before runtime env vars are wired up). Migrate commands
-// will surface a clearer error later if the URL is actually needed.
-export default defineConfig({
+const databaseUrl = process.env.DATABASE_URL;
+
+// Only declare the migrate datasourceUrl when DATABASE_URL is actually
+// set. Including it as an empty string makes Prisma 7 treat the property
+// as "missing" and reject `db push` / `migrate`. Omitting it entirely
+// when unset lets `prisma generate` run during `npm install` (when env
+// vars may not yet be wired up), while still giving migrate commands a
+// real URL at build/runtime when the env var IS set.
+const config: Parameters<typeof defineConfig>[0] = {
   schema: "prisma/schema.prisma",
-  migrate: {
-    datasourceUrl: process.env.DATABASE_URL ?? "",
-  },
-} as Parameters<typeof defineConfig>[0]);
+};
+
+if (databaseUrl) {
+  config.migrate = { datasourceUrl: databaseUrl };
+}
+
+export default defineConfig(config);

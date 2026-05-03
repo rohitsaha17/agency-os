@@ -14,12 +14,9 @@ const databaseUrl = process.env.DATABASE_URL;
 // when unset lets `prisma generate` run during `npm install` (when env
 // vars may not yet be wired up), while still giving migrate commands a
 // real URL at build/runtime when the env var IS set.
-const config: Parameters<typeof defineConfig>[0] = {
+const config = {
   schema: "prisma/schema.prisma",
-};
-
-if (databaseUrl) {
-  config.migrate = { datasourceUrl: databaseUrl };
-}
+  ...(databaseUrl ? { migrate: { datasourceUrl: databaseUrl } } : {}),
+} as Parameters<typeof defineConfig>[0];
 
 export default defineConfig(config);

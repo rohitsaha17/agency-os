@@ -450,26 +450,33 @@ function SectionCard({ title, subtitle, action, children, className = "" }: {
 // ── Quick Actions ─────────────────────────────────────────────
 
 function QuickActions() {
+  // Each action uses a single accent class — light-mode pale + dark-mode tinted —
+  // controlled by .dark overrides in globals.css. Icon container and text use
+  // accent text color so they stay legible in both themes.
   const actions = [
-    { label: "New Project",    href: "/projects",       icon: <FolderKanban className="w-4 h-4" />, color: "bg-indigo-50 text-indigo-600 hover:bg-indigo-100 hover:shadow-sm border border-indigo-100" },
-    { label: "New Quotation",  href: "/quotations/new", icon: <FileText className="w-4 h-4" />,      color: "bg-purple-50 text-purple-600 hover:bg-purple-100 hover:shadow-sm border border-purple-100" },
-    { label: "Add Client",     href: "/clients",        icon: <UserPlus className="w-4 h-4" />,      color: "bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:shadow-sm border border-emerald-100" },
-    { label: "New Invoice",    href: "/invoices",       icon: <Receipt className="w-4 h-4" />,       color: "bg-amber-50 text-amber-600 hover:bg-amber-100 hover:shadow-sm border border-amber-100" },
-    { label: "Upload Files",   href: "/files",          icon: <HardDrive className="w-4 h-4" />,     color: "bg-sky-50 text-sky-600 hover:bg-sky-100 hover:shadow-sm border border-sky-100" },
-    { label: "View Calendar",  href: "/calendar",       icon: <Calendar className="w-4 h-4" />,      color: "bg-pink-50 text-pink-600 hover:bg-pink-100 hover:shadow-sm border border-pink-100" },
-    { label: "Contracts",      href: "/contracts",      icon: <FileText className="w-4 h-4" />,      color: "bg-orange-50 text-orange-600 hover:bg-orange-100 hover:shadow-sm border border-orange-100" },
-    { label: "Expenses",       href: "/expenses",       icon: <BarChart3 className="w-4 h-4" />,     color: "bg-teal-50 text-teal-600 hover:bg-teal-100 hover:shadow-sm border border-teal-100" },
+    { label: "New Project",    href: "/projects",       icon: <FolderKanban className="w-5 h-5" />, accent: "bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border-indigo-200 dark:border-indigo-500/30" },
+    { label: "New Quotation",  href: "/quotations/new", icon: <FileText className="w-5 h-5" />,    accent: "bg-purple-50 text-purple-600 hover:bg-purple-100 border-purple-200 dark:border-purple-500/30" },
+    { label: "Add Client",     href: "/clients",        icon: <UserPlus className="w-5 h-5" />,    accent: "bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border-emerald-200 dark:border-emerald-500/30" },
+    { label: "New Invoice",    href: "/invoices",       icon: <Receipt className="w-5 h-5" />,     accent: "bg-amber-50 text-amber-600 hover:bg-amber-100 border-amber-200 dark:border-amber-500/30" },
+    { label: "Upload Files",   href: "/files",          icon: <HardDrive className="w-5 h-5" />,   accent: "bg-sky-50 text-sky-600 hover:bg-sky-100 border-sky-200 dark:border-sky-500/30" },
+    { label: "View Calendar",  href: "/calendar",       icon: <Calendar className="w-5 h-5" />,    accent: "bg-pink-50 text-pink-600 hover:bg-pink-100 border-pink-200 dark:border-pink-500/30" },
+    { label: "Contracts",      href: "/contracts",      icon: <FileText className="w-5 h-5" />,    accent: "bg-orange-50 text-orange-600 hover:bg-orange-100 border-orange-200 dark:border-orange-500/30" },
+    { label: "Expenses",       href: "/expenses",       icon: <BarChart3 className="w-5 h-5" />,   accent: "bg-teal-50 text-teal-600 hover:bg-teal-100 border-teal-200 dark:border-teal-500/30" },
   ];
 
   return (
     <div className="grid grid-cols-4 sm:grid-cols-8 gap-2.5">
       {actions.map((a) => (
         <Link key={a.label} href={a.href}>
-          <div className={`flex flex-col items-center gap-2 p-3 rounded-2xl ${a.color} transition-all cursor-pointer group`}>
-            <div className="w-8 h-8 flex items-center justify-center rounded-xl bg-white/70 group-hover:bg-white/90 transition-colors">
+          <div
+            className={`flex flex-col items-center gap-2 p-3 rounded-2xl border ${a.accent} transition-all cursor-pointer group hover:shadow-sm hover:scale-[1.02] active:scale-[0.98]`}
+          >
+            <div className="w-9 h-9 flex items-center justify-center rounded-xl bg-white shadow-sm group-hover:shadow group-hover:bg-white dark:bg-slate-800 dark:group-hover:bg-slate-700 dark:ring-1 dark:ring-white/5 transition-all">
               {a.icon}
             </div>
-            <span className="text-xs font-medium text-center leading-tight">{a.label}</span>
+            <span className="text-xs font-semibold text-center leading-tight">
+              {a.label}
+            </span>
           </div>
         </Link>
       ))}

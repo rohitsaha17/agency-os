@@ -152,12 +152,18 @@ function ProjectContainerCard({
   project: ProjectContainer;
   onClick: (id: string) => void;
 }) {
+  // Map every ProjectStatus enum value to a distinct semantic color
+  // so badges aren't all generic gray.
   const statusColor =
-    project.status === "COMPLETED"
-      ? "bg-emerald-500/15 text-emerald-400"
-      : project.status === "IN_PROGRESS"
-        ? "bg-blue-500/15 text-blue-400"
-        : "bg-slate-700 text-slate-400";
+    project.status === "ACTIVE"
+      ? "bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/30"
+      : project.status === "COMPLETED"
+        ? "bg-blue-500/20 text-blue-300 ring-1 ring-blue-500/30"
+        : project.status === "ON_HOLD"
+          ? "bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/30"
+          : project.status === "CANCELLED"
+            ? "bg-red-500/20 text-red-300 ring-1 ring-red-500/30"
+            : "bg-slate-600/40 text-slate-300 ring-1 ring-slate-500/30"; // DRAFT
 
   return (
     <button

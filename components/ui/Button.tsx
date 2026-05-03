@@ -6,13 +6,13 @@ type Size = "sm" | "md" | "lg";
 
 const variantStyles: Record<Variant, string> = {
   primary:
-    "bg-indigo-600 text-white hover:bg-indigo-700 border-transparent shadow-sm",
+    "bg-indigo-600 text-white hover:bg-indigo-500 active:bg-indigo-700 border-transparent shadow-sm hover:shadow",
   secondary:
-    "bg-white text-gray-700 hover:bg-gray-50 border-gray-300 shadow-sm dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 dark:border-slate-600",
+    "bg-white text-gray-700 hover:bg-gray-50 active:bg-gray-100 border-gray-300 shadow-sm dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700 dark:active:bg-slate-600 dark:border-slate-600",
   danger:
-    "bg-red-600 text-white hover:bg-red-700 border-transparent shadow-sm",
+    "bg-red-600 text-white hover:bg-red-500 active:bg-red-700 border-transparent shadow-sm hover:shadow",
   ghost:
-    "bg-transparent text-gray-600 hover:bg-gray-100 border-transparent dark:text-slate-400 dark:hover:bg-white/[0.06] dark:hover:text-slate-200",
+    "bg-transparent text-gray-600 hover:bg-gray-100 active:bg-gray-200 border-transparent dark:text-slate-300 dark:hover:bg-white/[0.06] dark:hover:text-white dark:active:bg-white/[0.1]",
 };
 
 const sizeStyles: Record<Size, string> = {
@@ -43,9 +43,11 @@ export function Button({
     <button
       disabled={disabled || loading}
       className={`
-        inline-flex items-center gap-2 font-medium rounded-lg border
-        transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1
-        disabled:opacity-50 disabled:cursor-not-allowed
+        inline-flex items-center justify-center gap-2 font-medium rounded-lg border
+        transition-all duration-150 ease-out
+        focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-slate-950
+        active:scale-[0.98]
+        disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100
         ${variantStyles[variant]} ${sizeStyles[size]} ${className}
       `}
       {...props}

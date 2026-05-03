@@ -111,6 +111,17 @@
 .dark .bg-gray-50\/50             { background-color: rgba(30, 41, 59, 0.5); }
 .dark .bg-gray-100\/80            { background-color: rgba(30, 41, 59, 0.8); }
 
+/* Translucent white surfaces — used as light "chip" backgrounds inside
+   colored cards. In dark mode they become foggy and wash out icons,
+   so map them to slate-900/slate-800 with matching opacity. */
+.dark .bg-white\/70               { background-color: rgba(15, 23, 42, 0.7); }
+.dark .bg-white\/80               { background-color: rgba(15, 23, 42, 0.8); }
+.dark .bg-white\/90               { background-color: rgba(15, 23, 42, 0.9); }
+.dark .bg-white\/60               { background-color: rgba(15, 23, 42, 0.6); }
+.dark .bg-white\/50               { background-color: rgba(15, 23, 42, 0.5); }
+.dark .group:hover .group-hover\:bg-white\/90 { background-color: rgba(30, 41, 59, 0.95); }
+.dark .group:hover .group-hover\:bg-white\/80 { background-color: rgba(30, 41, 59, 0.9); }
+
 /* ── Borders ─────────────────────────────────────────────── */
 .dark .border-gray-50             { border-color: #0f172a; }
 .dark .border-gray-100            { border-color: #1e293b; }
@@ -421,3 +432,48 @@
 .dark .card-hover:hover {
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 }
+
+/* ═════════════════════════════════════════════════════════════
+   BUTTON BASELINE — applies to every <button> that isn't .raw
+   Gives unstyled inline buttons a consistent press / focus feel
+   without overriding their authored colors.
+   ═════════════════════════════════════════════════════════════ */
+button:not(:disabled):not(.raw) {
+  transition: background-color 150ms ease, color 150ms ease,
+              border-color 150ms ease, box-shadow 150ms ease,
+              transform 100ms ease, opacity 150ms ease;
+}
+button:not(:disabled):not(.raw):active {
+  transform: scale(0.98);
+}
+button:disabled {
+  cursor: not-allowed;
+}
+
+/* Visible focus ring — keyboard-only, never on click */
+button:focus-visible:not(.raw),
+a:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+.dark button:focus-visible:not(.raw),
+.dark a:focus-visible {
+  outline-color: #818cf8;
+}
+
+/* ═════════════════════════════════════════════════════════════
+   ICON-ONLY BUTTONS — improve visibility in dark mode
+   Many pages use small icon buttons with text-slate-400 / text-gray-400.
+   On hover they become near-invisible. Boost the hover contrast.
+   ═════════════════════════════════════════════════════════════ */
+.dark .text-slate-500.hover\:text-slate-300:hover,
+.dark .text-slate-400.hover\:text-slate-200:hover {
+  color: #f1f5f9; /* slate-100 — guaranteed legible */
+}
+
+/* ═════════════════════════════════════════════════════════════
+   LINK / ANCHOR HOVER — consistent across pages
+   ═════════════════════════════════════════════════════════════ */
+a:not(.raw):hover { opacity: 0.92; }
+.dark a:not(.raw):hover { opacity: 1; }

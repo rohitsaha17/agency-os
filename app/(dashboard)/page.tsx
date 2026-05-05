@@ -8,8 +8,6 @@ import {
   RefreshCw, Calendar, ChevronRight, Zap, MessageSquare,
   Upload, LayoutGrid, Receipt, UserPlus, BarChart3,
 } from "lucide-react";
-import { DashboardInsights } from "@/components/ai/DashboardInsights";
-
 // ── Types ─────────────────────────────────────────────────────
 
 interface DashboardStats {
@@ -781,32 +779,6 @@ export default function DashboardPage() {
           </div>
           <QuickActions />
         </div>
-
-        {/* ── AI Insights ────────────────────────────────────── */}
-        <DashboardInsights
-          stats={{
-            activeProjects: stats.activeProjects,
-            overdueTasksCount: stats.overdueTasksCount,
-            blockedTasksCount: stats.blockedTasksCount,
-            completionRate: stats.completionRate,
-            expensesThisMonth: stats.expensesThisMonth,
-            pipelineValue: stats.pipelineValue,
-            activeClients: stats.activeClients,
-          }}
-          projectHealth={projectHealth.map((p) => ({
-            name: p.name,
-            progress: p.progress,
-            overdue: p.overdue,
-            blocked: p.blocked,
-            total: p.total,
-            daysLeft: p.daysLeft,
-            endDate: p.endDate,
-          }))}
-          upcomingDeadlines={[
-            ...upcomingDeadlines.tasks.map((t) => ({ title: t.title, dueDate: t.dueDate, type: "task" })),
-            ...upcomingDeadlines.projects.map((p) => ({ title: p.name, dueDate: p.endDate, type: "project" })),
-          ]}
-        />
 
         {/* ── Row 3: Urgent + Task breakdown + Performance ──── */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">

@@ -1,17 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Upload, CheckCircle, XCircle, Loader2, FolderUp, Sparkles, Tag, Link2, Folder, Building2, Briefcase } from "lucide-react";
+import { Upload, CheckCircle, XCircle, Loader2, FolderUp, Link2, Folder, Building2, Briefcase } from "lucide-react";
 import type { AssetFile } from "@/types";
 
 // ── types ──────────────────────────────────────────────────────
-
-interface AISuggestion {
-  suggestedTags: string[];
-  suggestedDescription: string;
-  category: string;
-  confidence: string;
-}
 
 interface UploadItem {
   id: string;
@@ -19,9 +12,6 @@ interface UploadItem {
   progress: "uploading" | "done" | "error";
   errorMsg?: string;
   result?: AssetFile;
-  aiSuggestion?: AISuggestion;
-  aiLoading?: boolean;
-  aiApplied?: boolean;
 }
 
 interface LinkOption {
@@ -130,44 +120,11 @@ export function FileUploadZone({
 
         setItems((prev) =>
           prev.map((item) =>
-            item.id === id ? { ...item, progress: "done", result, aiLoading: true } : item
+            item.id === id ? { ...item, progress: "done", result } : item
           )
         );
 
         onUploaded?.(result);
-
-        // Trigger AI classification in background
-        try {
-          const classifyRes = await fetch("/api/ai/classify-file", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              fileName: file.name,
-              mimeType: file.type,
-              projectName: projectId ? undefined : undefined,
-            }),
-          });
-          if (classifyRes.ok) {
-            const suggestion: AISuggestion = await classifyRes.json();
-            setItems((prev) =>
-              prev.map((item) =>
-                item.id === id ? { ...item, aiSuggestion: suggestion, aiLoading: false } : item
-              )
-            );
-          } else {
-            setItems((prev) =>
-              prev.map((item) =>
-                item.id === id ? { ...item, aiLoading: false } : item
-              )
-            );
-          }
-        } catch {
-          setItems((prev) =>
-            prev.map((item) =>
-              item.id === id ? { ...item, aiLoading: false } : item
-            )
-          );
-        }
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Upload failed";
         setItems((prev) =>
@@ -215,29 +172,6 @@ export function FileUploadZone({
     [handleFiles]
   );
 
-  const handleApplyAI = useCallback(async (itemId: string) => {
-    const item = items.find((i) => i.id === itemId);
-    if (!item?.result?.id || !item.aiSuggestion) return;
-    try {
-      await fetch(`/api/files/${item.result.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          description: item.aiSuggestion.suggestedDescription,
-        }),
-      });
-      setItems((prev) =>
-        prev.map((i) => (i.id === itemId ? { ...i, aiApplied: true } : i))
-      );
-    } catch { /* ignore */ }
-  }, [items]);
-
-  const handleDismissAI = useCallback((itemId: string) => {
-    setItems((prev) =>
-      prev.map((i) => (i.id === itemId ? { ...i, aiSuggestion: undefined } : i))
-    );
-  }, []);
-
   // ── compact mode ───────────────────────────────────────────
 
   if (compact) {
@@ -261,7 +195,7 @@ export function FileUploadZone({
         {items.length > 0 && (
           <div className="mt-3 space-y-1">
             {items.map((item) => (
-              <UploadRow key={item.id} item={item} onApplyAI={handleApplyAI} onDismissAI={handleDismissAI} />
+              <UploadRow key={item.id} item={item} />
             ))}
           </div>
         )}
@@ -371,7 +305,7 @@ export function FileUploadZone({
       {items.length > 0 && (
         <div className="space-y-1">
           {items.map((item) => (
-            <UploadRow key={item.id} item={item} onApplyAI={handleApplyAI} onDismissAI={handleDismissAI} />
+            <UploadRow key={item.id} item={item} />
           ))}
         </div>
       )}
@@ -381,11 +315,7 @@ export function FileUploadZone({
 
 // ── UploadRow sub-component ────────────────────────────────────
 
-function UploadRow({ item, onApplyAI, onDismissAI }: {
-  item: UploadItem;
-  onApplyAI?: (itemId: string) => void;
-  onDismissAI?: (itemId: string) => void;
-}) {
+function UploadRow({ item }: { item: UploadItem }) {
   return (
     <div className="bg-slate-800 rounded-lg px-4 py-2.5">
       <div className="flex items-center gap-3">
@@ -404,61 +334,14 @@ function UploadRow({ item, onApplyAI, onDismissAI }: {
           {item.progress === "uploading" && (
             <Loader2 className="w-4 h-4 text-indigo-400 animate-spin" />
           )}
-          {item.progress === "done" && !item.aiLoading && (
+          {item.progress === "done" && (
             <CheckCircle className="w-4 h-4 text-emerald-400" />
-          )}
-          {item.aiLoading && (
-            <div className="flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-indigo-400 animate-pulse" />
-              <span className="text-[10px] text-indigo-400">Classifying...</span>
-            </div>
           )}
           {item.progress === "error" && (
             <XCircle className="w-4 h-4 text-red-400" />
           )}
         </div>
       </div>
-
-      {/* AI Suggestion Banner */}
-      {item.aiSuggestion && !item.aiApplied && (
-        <div className="mt-2 bg-indigo-900/50 border border-indigo-700/50 rounded-lg p-2.5">
-          <div className="flex items-start gap-2 mb-1.5">
-            <Sparkles className="w-3.5 h-3.5 text-indigo-400 flex-shrink-0 mt-0.5" />
-            <p className="text-xs text-indigo-300 font-medium">AI suggests tags & description</p>
-          </div>
-          {item.aiSuggestion.suggestedDescription && (
-            <p className="text-xs text-slate-400 pl-5.5 mb-1.5 ml-5">{item.aiSuggestion.suggestedDescription}</p>
-          )}
-          {item.aiSuggestion.suggestedTags.length > 0 && (
-            <div className="flex flex-wrap gap-1 ml-5 mb-2">
-              {item.aiSuggestion.suggestedTags.map((tag) => (
-                <span key={tag} className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] bg-indigo-800/60 text-indigo-300 rounded font-medium">
-                  <Tag className="w-2.5 h-2.5" />{tag}
-                </span>
-              ))}
-            </div>
-          )}
-          <div className="flex gap-2 ml-5">
-            <button
-              onClick={() => onApplyAI?.(item.id)}
-              className="text-[11px] px-2 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition-colors font-medium"
-            >
-              Apply suggestions
-            </button>
-            <button
-              onClick={() => onDismissAI?.(item.id)}
-              className="text-[11px] px-2 py-1 text-slate-400 hover:text-slate-200 transition-colors"
-            >
-              Dismiss
-            </button>
-          </div>
-        </div>
-      )}
-      {item.aiApplied && (
-        <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-emerald-400 ml-1">
-          <CheckCircle className="w-3 h-3" /> AI tags applied
-        </div>
-      )}
     </div>
   );
 }

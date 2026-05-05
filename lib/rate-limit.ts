@@ -67,19 +67,6 @@ export function getRateLimitKey(req: Request, prefix: string): string {
 }
 
 /**
- * Pre-configured rate limits for different AI endpoints.
- *
- * Chatbot: 20 req/min (conversational, most likely to be spammed)
- * Heavy AI: 10 req/min (contract drafts, receipt OCR — expensive)
- * Light AI: 30 req/min (estimates, classify, insights — cheaper)
- */
-export const AI_RATE_LIMITS = {
-  chat:    { limit: 20, windowSeconds: 60 },
-  heavy:   { limit: 10, windowSeconds: 60 },
-  light:   { limit: 30, windowSeconds: 60 },
-} as const;
-
-/**
  * Pre-configured rate limits for write endpoints.
  *
  * heavy: expensive writes (uploads, project creation, bulk deletes) — 20/min

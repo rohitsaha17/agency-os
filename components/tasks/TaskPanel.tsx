@@ -5,7 +5,7 @@ import {
   X, ChevronDown, Trash2, ExternalLink,
   MessageSquare, GitBranch, Clock, Settings2,
   CheckCircle2, Circle, Timer, Eye, EyeOff, Ban, AlertCircle,
-  Activity, Paperclip, Send, Users, Sparkles, Loader2,
+  Activity, Paperclip, Send, Users, Loader2,
 } from "lucide-react";
 import { PriorityBadge } from "./PriorityBadge";
 import { CommentThread } from "./CommentThread";
@@ -117,32 +117,6 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
   const [dirty, setDirty] = useState(false);
   const [showCascade, setShowCascade] = useState(false);
   const [pendingStatus, setPendingStatus] = useState<TaskStatus | null>(null);
-  const [aiEstimating, setAiEstimating] = useState(false);
-  const [aiEstimate, setAiEstimate] = useState<{ estimatedHours: number; reasoning: string; confidence: string } | null>(null);
-
-  const handleAIEstimate = async () => {
-    setAiEstimating(true);
-    setAiEstimate(null);
-    try {
-      const res = await fetch("/api/ai/estimate-hours", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          taskTitle: title,
-          taskDescription: description,
-          priority,
-          hasSubtasks: (task.children?.length ?? 0) > 0,
-          parentTaskTitle: allTasks.find((t) => t.id === task.parentId)?.title,
-        }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setAiEstimate(data);
-      }
-    } catch { /* ignore */ }
-    finally { setAiEstimating(false); }
-  };
-
   useEffect(() => {
     fetch("/api/users").then((r) => r.json()).then((data) => { if (Array.isArray(data)) setUsers(data); });
   }, []);
@@ -345,50 +319,12 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
                   className="w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
               </div>
 
-              {/* AI Hour Estimation */}
               <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-medium text-gray-500">Estimated Hours</label>
-                  <button
-                    onClick={handleAIEstimate}
-                    disabled={aiEstimating}
-                    className="flex items-center gap-1 text-[11px] text-indigo-600 hover:text-indigo-800 font-medium transition-colors disabled:opacity-50"
-                  >
-                    {aiEstimating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
-                    AI Estimate
-                  </button>
-                </div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Estimated Hours</label>
                 <input type="number" step="0.5" min="0" value={estimated}
                   onChange={(e) => { setEstimated(e.target.value); markDirty(); }}
                   placeholder="e.g. 4"
                   className="w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                {aiEstimate && (
-                  <div className="mt-2 bg-indigo-50 border border-indigo-200 rounded-lg p-2.5">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs font-medium text-indigo-900">
-                        AI suggests: {aiEstimate.estimatedHours}h
-                      </span>
-                      <span className="text-[10px] text-indigo-500">
-                        {aiEstimate.confidence} confidence
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-indigo-700 leading-relaxed mb-2">{aiEstimate.reasoning}</p>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => { setEstimated(aiEstimate.estimatedHours.toString()); markDirty(); setAiEstimate(null); }}
-                        className="text-[11px] px-2.5 py-1 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium"
-                      >
-                        Apply {aiEstimate.estimatedHours}h
-                      </button>
-                      <button
-                        onClick={() => setAiEstimate(null)}
-                        className="text-[11px] px-2.5 py-1 text-indigo-600 hover:text-indigo-800 transition-colors"
-                      >
-                        Dismiss
-                      </button>
-                    </div>
-                  </div>
-                )}
               </div>
 
               <div className="grid grid-cols-1 gap-3">

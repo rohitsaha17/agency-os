@@ -23,7 +23,6 @@ import { useToast } from "@/components/ui/Toast";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useCurrentUser } from "@/lib/useCurrentUser";
 import { Client, ContactFormData, ClientContact, ProjectStatus, ProjectType, Quotation, AssetFile, ContractType, ContractPartyType, Stakeholder, User, Invoice, InvoiceStatus, Channel, ChatMessage } from "@/types";
-import { ClientHealthCard } from "@/components/ai/ClientHealthCard";
 
 // ── helpers ──────────────────────────────────────────────────
 type Tab = "overview" | "contacts" | "brand" | "tax" | "projects" | "quotations" | "files" | "contracts" | "chat" | "invoices";
@@ -639,26 +638,6 @@ export default function ClientDetailPage() {
                 ) : null
               )}
             </div>
-
-            {/* AI Client Health */}
-            <ClientHealthCard data={{
-              clientName: client.name,
-              projectCount: client.projects.length,
-              activeProjects: client.projects.filter((p: any) => p.status === "ACTIVE").length,
-              completedProjects: client.projects.filter((p: any) => p.status === "COMPLETED").length,
-              totalRevenue: invoices
-                .filter((inv) => inv.status === "PAID")
-                .reduce((sum, inv) => sum + (inv.lineItems ?? []).reduce((s, li) => s + Number(li.unitPrice) * Number(li.quantity), 0), 0),
-              overdueTasksCount: 0, // Would need task data
-              avgProjectProgress: client.projects.length > 0
-                ? Math.round(client.projects.reduce((sum: number, p: any) => sum + (p.progress || 0), 0) / client.projects.length)
-                : 0,
-              lastActivityDate: client.updatedAt,
-              contractsActive: clientContracts.filter((c) => c.status === "FULLY_SIGNED" || c.status === "PARTIALLY_SIGNED").length,
-              unpaidInvoices: invoices.filter((inv) => inv.status === "SENT" || inv.status === "OVERDUE").length,
-              expenseTotal: 0,
-              communicationFrequency: client.projects.some((p: any) => p.status === "ACTIVE") ? "medium" : "low",
-            }} />
 
             {clientLinks.length > 0 && (
               <div className="bg-white border border-gray-200 rounded-xl p-5">

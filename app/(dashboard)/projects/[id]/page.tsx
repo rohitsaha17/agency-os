@@ -5,10 +5,10 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
   ChevronRight, Plus, Calendar, DollarSign, CheckSquare,
-  LayoutGrid, List, Edit3, RefreshCw, Zap, Wand2, FileText,
+  LayoutGrid, List, Edit3, RefreshCw, Zap, FileText,
   TrendingDown, Scroll, Clock, CheckCircle2, XCircle, Paperclip,
   Upload, Download, Image, Film, File as FileIcon, Grid3X3,
-  MessageSquare, Receipt, Send, Hash, ExternalLink, Trash2, Users, Sparkles, Loader2,
+  MessageSquare, Receipt, Send, Hash, ExternalLink, Trash2, Users, Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/Badge";
@@ -28,8 +28,6 @@ import { SERVICE_TYPES, RECURRING_FREQUENCIES } from "@/components/projects/Proj
 import { useCurrentUser } from "@/lib/useCurrentUser";
 import { useToast } from "@/components/ui/Toast";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
-import { TaskGeneratorWizard } from "@/components/projects/TaskGeneratorWizard";
-import { ProjectHealthCard } from "@/components/ai/ProjectHealthCard";
 
 type QuotationStub = { id: string; number: string; title: string; total: number; status: QuotationStatus };
 type PageTab = "tasks" | "files" | "expenses" | "contracts" | "chat" | "invoices" | "tax";
@@ -181,7 +179,6 @@ export default function ProjectDetailPage() {
 
   // Modals
   const [editProjectOpen, setEditProjectOpen] = useState(false);
-  const [wizardOpen, setWizardOpen] = useState(false);
   const [taskModal, setTaskModal] = useState<{
     open: boolean; defaultStatus?: TaskStatus; parentTask?: Task | null;
   }>({ open: false });
@@ -202,10 +199,6 @@ export default function ProjectDetailPage() {
   const [contractClients, setContractClients] = useState<{ id: string; name: string; companyName: string | null }[]>([]);
   const [contractStakeholders, setContractStakeholders] = useState<{ id: string; name: string }[]>([]);
   const [contractUsers, setContractUsers] = useState<{ id: string; name: string; email: string }[]>([]);
-
-  // AI contract draft
-  const [aiDraftLoading, setAiDraftLoading] = useState(false);
-  const [aiDraftResult, setAiDraftResult] = useState<{ title: string; content: string; clauses: { heading: string; body: string }[]; notes: string } | null>(null);
 
   const fetchProject = useCallback(async () => {
     try {
@@ -558,43 +551,6 @@ export default function ProjectDetailPage() {
     }
   };
 
-  const handleAIDraft = async () => {
-    setAiDraftLoading(true);
-    setAiDraftResult(null);
-    try {
-      const parties = contractParties
-        .filter((p) => p.name.trim())
-        .map((p) => ({ name: p.name, role: p.partyType }));
-      const res = await fetch("/api/ai/draft-contract", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: contractForm.type,
-          parties: parties.length > 0 ? parties : [{ name: "Party A", role: "CLIENT" }],
-          projectName: project?.name,
-          projectDescription: project?.description,
-          value: contractForm.value ? parseFloat(contractForm.value) : undefined,
-          currency: contractForm.currency,
-          startDate: contractForm.startDate,
-          endDate: contractForm.endDate,
-        }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setAiDraftResult(data);
-        // Pre-fill title if empty
-        if (!contractForm.title.trim() && data.title) {
-          setContractForm((f) => ({ ...f, title: data.title }));
-        }
-        // Pre-fill notes with the AI content
-        if (data.content) {
-          setContractForm((f) => ({ ...f, notes: data.content }));
-        }
-      }
-    } catch { /* ignore */ }
-    finally { setAiDraftLoading(false); }
-  };
-
   const allFlat = flattenTasks(tasks);
   const taskCounts = {
     total: allFlat.length,
@@ -677,9 +633,6 @@ export default function ProjectDetailPage() {
           </div>
 
           <div className="flex items-center gap-2 flex-shrink-0">
-            <Button variant="ghost" size="sm" icon={<Wand2 className="w-3.5 h-3.5" />} onClick={() => setWizardOpen(true)}>
-              AI Generate Tasks
-            </Button>
             <Button
               variant="secondary" size="sm"
               icon={pdfLoading ? undefined : <Download className="w-3.5 h-3.5" />}
@@ -760,28 +713,6 @@ export default function ProjectDetailPage() {
       <div className="flex-1 px-4 sm:px-6 lg:px-8 py-4 sm:py-6 overflow-auto">
         {/* ── TASKS TAB ── */}
         {pageTab === "tasks" && (<>
-        {/* AI Project Health */}
-        {project && allFlat.length > 0 && (
-          <div className="mb-5">
-            <ProjectHealthCard data={{
-              projectName: project.name,
-              type: project.type as "ONE_TIME" | "RETAINER",
-              progress: project.progress,
-              totalTasks: taskCounts.total,
-              completedTasks: taskCounts.done,
-              overdueTasks: allFlat.filter((t) => t.dueDate && new Date(t.dueDate) < new Date() && t.status !== "DONE").length,
-              blockedTasks: allFlat.filter((t) => t.status === "BLOCKED").length,
-              budget: project.budget ? Number(project.budget) : null,
-              expensesTotal: expenseSummary?.total ?? 0,
-              startDate: project.startDate,
-              endDate: project.endDate,
-              daysElapsed: project.startDate ? Math.max(0, Math.floor((Date.now() - new Date(project.startDate).getTime()) / 86400000)) : 0,
-              daysRemaining: project.endDate ? Math.max(0, Math.ceil((new Date(project.endDate).getTime() - Date.now()) / 86400000)) : null,
-              teamSize: [...new Set(allFlat.flatMap((t) => t.assignees.map((a) => a.userId)))].length,
-              recentVelocity: allFlat.filter((t) => t.status === "DONE" && t.updatedAt && (Date.now() - new Date(t.updatedAt).getTime()) < 7 * 86400000).length,
-            }} />
-          </div>
-        )}
         <div className="flex items-center mb-5">
           <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1">
             {(["list", "kanban"] as ViewMode[]).map((v) => (
@@ -797,24 +728,6 @@ export default function ProjectDetailPage() {
           </div>
         </div>
 
-        {!tasksLoading && allFlat.length === 0 && (
-          <div className="mb-5 p-5 rounded-xl border-2 border-dashed border-indigo-200 bg-indigo-50/50 flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-indigo-100 flex items-center justify-center flex-shrink-0">
-                <Wand2 className="w-4 h-4 text-indigo-600" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-indigo-900">AI-powered task generation</p>
-                <p className="text-xs text-indigo-600 mt-0.5">
-                  Describe your project and let AI create a complete task breakdown with subtasks, priorities, and timelines.
-                </p>
-              </div>
-            </div>
-            <Button size="sm" icon={<Sparkles className="w-3.5 h-3.5" />} onClick={() => setWizardOpen(true)}>
-              Generate Tasks
-            </Button>
-          </div>
-        )}
 
         {tasksLoading ? (
           <div className="space-y-2">
@@ -1684,20 +1597,6 @@ export default function ProjectDetailPage() {
         </Modal>
       )}
 
-      {/* AI Task Generator Wizard */}
-      <TaskGeneratorWizard
-        open={wizardOpen}
-        onClose={() => setWizardOpen(false)}
-        projectId={id}
-        projectName={project?.name}
-        projectType={project?.type as "ONE_TIME" | "RETAINER" | undefined}
-        projectServiceType={project?.serviceType || undefined}
-        projectDescription={project?.description || undefined}
-        clientIndustry={undefined}
-        startDate={project?.startDate}
-        onTasksCreated={fetchTasks}
-      />
-
       {/* Task Create Modal */}
       {taskModal.open && (
         <TaskModal
@@ -1965,46 +1864,13 @@ export default function ProjectDetailPage() {
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">Notes / Contract Content</label>
             <textarea value={contractForm.notes} onChange={(e) => setContractForm((f) => ({ ...f, notes: e.target.value }))} rows={4}
-              placeholder="Key terms, special clauses... or use AI to generate a draft"
+              placeholder="Key terms, special clauses..."
               className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
             />
           </div>
 
-          {/* AI Draft */}
-          <div className="bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200 rounded-xl p-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-indigo-500" />
-                <div>
-                  <p className="text-xs font-medium text-indigo-900">AI Contract Draft</p>
-                  <p className="text-[11px] text-indigo-600">Generate professional clauses based on type & parties</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={handleAIDraft}
-                disabled={aiDraftLoading}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
-              >
-                {aiDraftLoading ? <><Loader2 className="w-3 h-3 animate-spin" /> Drafting...</> : <><Sparkles className="w-3 h-3" /> Generate Draft</>}
-              </button>
-            </div>
-            {aiDraftResult && (
-              <div className="mt-3 bg-white rounded-lg border border-indigo-100 p-3 max-h-40 overflow-y-auto">
-                <p className="text-xs font-semibold text-gray-700 mb-1">{aiDraftResult.title}</p>
-                {aiDraftResult.clauses?.slice(0, 3).map((c, i) => (
-                  <div key={i} className="mb-1.5">
-                    <p className="text-[11px] font-medium text-gray-600">{c.heading}</p>
-                    <p className="text-[11px] text-gray-500 leading-relaxed">{c.body.slice(0, 150)}...</p>
-                  </div>
-                ))}
-                <p className="text-[10px] text-amber-600 mt-2 italic">This is an AI-generated draft. Please review with legal counsel before use.</p>
-              </div>
-            )}
-          </div>
-
           <div className="flex gap-3 pt-1">
-            <Button type="button" variant="secondary" onClick={() => { setContractModalOpen(false); setContractForm(EMPTY_CONTRACT_FORM); setContractParties([{ ...EMPTY_PARTY }]); setAiDraftResult(null); }}>Cancel</Button>
+            <Button type="button" variant="secondary" onClick={() => { setContractModalOpen(false); setContractForm(EMPTY_CONTRACT_FORM); setContractParties([{ ...EMPTY_PARTY }]); }}>Cancel</Button>
             <Button type="submit" loading={contractSaving}>Create Contract</Button>
           </div>
         </form>

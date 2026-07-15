@@ -9,6 +9,9 @@ export type AuthUser = {
   email: string;
   role: UserRole;
   avatarUrl: string | null;
+  /** The organization this user belongs to. All tenant-scoped queries
+   *  MUST filter by this id. */
+  organizationId: string;
 };
 
 /**
@@ -18,8 +21,8 @@ export type AuthUser = {
  *   1. `x-user-id` header
  *   2. Existing `getCurrentUser()` helper (cookie / dev-fallback)
  *
- * Throws `ApiError(401)` when no user can be resolved — catch with
- * `handleApiError()` to return a consistent 401 response.
+ * Throws `ApiError(401)` when no user can be resolved.
+ * The returned user has `organizationId` — always filter tenant data by it.
  */
 export async function requireAuth(req: Request): Promise<AuthUser> {
   const headerUserId = req.headers.get("x-user-id");
@@ -27,12 +30,14 @@ export async function requireAuth(req: Request): Promise<AuthUser> {
   if (headerUserId) {
     const user = await prisma.user.findUnique({
       where: { id: headerUserId },
-      select: { id: true, name: true, email: true, role: true, avatarUrl: true },
+      select: {
+        id: true, name: true, email: true, role: true,
+        avatarUrl: true, organizationId: true,
+      },
     });
     if (user) return user as AuthUser;
   }
 
-  // Fall back to existing resolver (cookie / dev-mode admin fallback)
   const user = await getCurrentUser(req);
   if (!user) {
     throw new ApiError("Authentication required", 401, "UNAUTHORIZED");
@@ -44,7 +49,7 @@ export async function requireAuth(req: Request): Promise<AuthUser> {
  * Enforce that the authenticated user has one of the allowed roles.
  * Throws `ApiError(403)` otherwise.
  *
- * Use on destructive routes: `requireRole(user, ["ADMIN", "MANAGER"])`.
+ * Use on destructive routes: `requireRole(user, ["OWNER", "ADMIN"])`.
  */
 export function requireRole(user: AuthUser, roles: UserRole[]): void {
   if (!roles.includes(user.role)) {

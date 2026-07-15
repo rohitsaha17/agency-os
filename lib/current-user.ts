@@ -7,20 +7,18 @@ import { cookies } from "next/headers";
  * Priority:
  *   1. `x-user-id` header (set by middleware or client)
  *   2. `userId` cookie
- *   3. Fallback: first ADMIN user in DB (dev convenience)
+ *   3. Fallback: first OWNER/ADMIN user in DB (dev convenience)
  *
- * Returns the user object with role, or null if not found.
- * This will be replaced by NextAuth session once auth is wired.
+ * Returns the user with organizationId, or null if not found.
+ * Every tenant-scoped query MUST filter by the returned organizationId.
  */
 export async function getCurrentUser(req?: Request) {
   let userId: string | null = null;
 
-  // 1. Check header
   if (req) {
     userId = req.headers.get("x-user-id");
   }
 
-  // 2. Check cookie
   if (!userId) {
     try {
       const cookieStore = await cookies();
@@ -30,19 +28,26 @@ export async function getCurrentUser(req?: Request) {
     }
   }
 
-  // 3. Fallback: first admin user (dev only)
+  // 3. Fallback: first OWNER (then ADMIN) — dev convenience so the app
+  //    works before real auth is wired.
   if (!userId) {
-    const admin = await prisma.user.findFirst({
-      where: { role: "ADMIN", isActive: true },
-      select: { id: true, name: true, email: true, role: true, avatarUrl: true },
+    const owner = await prisma.user.findFirst({
+      where: { role: { in: ["OWNER", "ADMIN"] }, isActive: true },
+      orderBy: { role: "asc" }, // OWNER comes before ADMIN alphabetically
+      select: {
+        id: true, name: true, email: true, role: true, avatarUrl: true,
+        organizationId: true,
+      },
     });
-    return admin;
+    return owner;
   }
 
-  // Look up the user
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, name: true, email: true, role: true, avatarUrl: true },
+    select: {
+      id: true, name: true, email: true, role: true, avatarUrl: true,
+      organizationId: true,
+    },
   });
 
   return user;

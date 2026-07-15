@@ -70,10 +70,11 @@ export interface TaxRegistration {
 
 // ── Users ────────────────────────────────────────────────────
 
-export type UserRole = "ADMIN" | "MANAGER" | "MEMBER";
+export type UserRole = "OWNER" | "ADMIN" | "MANAGER" | "MEMBER";
 
 export interface User {
   id: string;
+  organizationId: string;
   name: string;
   email: string;
   avatarUrl: string | null;
@@ -834,9 +835,15 @@ export interface LetterheadConfig {
   font: "sans" | "serif";
 }
 
-export interface CompanySettings {
+/**
+ * The Organization is the multi-tenant root. Every user, client, project,
+ * invoice, etc. belongs to exactly one Organization. Its details (name,
+ * logo, address, tax IDs) are used as the agency letterhead on all PDFs.
+ */
+export interface Organization {
   id: string;
   name: string;
+  slug: string | null;
   email: string | null;
   phone: string | null;
   website: string | null;
@@ -847,6 +854,7 @@ export interface CompanySettings {
   currency: string;
   timezone: string;
   dateFormat: string;
+  taxRegistrations: TaxRegistration[] | null;
   letterheadLogoUrl: string | null;
   letterheadHeader: string | null;
   letterheadFooter: string | null;
@@ -861,12 +869,15 @@ export interface CompanySettings {
   updatedAt: string;
 }
 
+/** @deprecated Kept only for backwards compat during migration. Use Organization. */
+export type CompanySettings = Organization;
+
 export interface TeamUser {
   id: string;
   name: string;
   email: string;
   avatarUrl: string | null;
-  role: "ADMIN" | "MANAGER" | "MEMBER";
+  role: UserRole;
   isActive: boolean;
   createdAt: string;
 }

@@ -4,10 +4,16 @@ import { useState, useEffect } from "react";
 
 export interface CurrentUser {
   id: string;
+  organizationId: string;
   name: string;
   email: string;
-  role: "ADMIN" | "MANAGER" | "MEMBER";
+  role: "OWNER" | "ADMIN" | "MANAGER" | "MEMBER";
   avatarUrl: string | null;
+  organization?: {
+    id: string;
+    name: string;
+    logoUrl: string | null;
+  } | null;
 }
 
 let cachedUser: CurrentUser | null = null;

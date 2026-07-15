@@ -2,8 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
+import { handleApiError, ApiError } from "@/lib/api-errors";
 
 type Params = { params: Promise<{ id: string }> };
+
+async function assertChannelInOrg(channelId: string, organizationId: string) {
+  const channel = await prisma.channel.findFirst({
+    where: { id: channelId, organizationId },
+    select: { id: true },
+  });
+  if (!channel) throw new ApiError("Channel not found", 404);
+}
 
 const MSG_INCLUDE = {
   author: { select: { id: true, name: true, avatarUrl: true } },
@@ -30,6 +40,9 @@ function serializeMsg(m: any) {
 export async function GET(req: NextRequest, { params }: Params) {
   const { id: channelId } = await params;
   try {
+    const user = await requireAuth(req);
+    await assertChannelInOrg(channelId, user.organizationId);
+
     const { searchParams } = new URL(req.url);
     const before = searchParams.get("before");
     const limit  = Math.min(parseInt(searchParams.get("limit") ?? "50"), 100);
@@ -48,8 +61,7 @@ export async function GET(req: NextRequest, { params }: Params) {
 
     return NextResponse.json(messages.map(serializeMsg));
   } catch (err) {
-    console.error("[GET /api/channels/[id]/messages]", err);
-    return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
+    return handleApiError(err, "GET /api/channels/[id]/messages");
   }
 }
 
@@ -57,6 +69,9 @@ export async function GET(req: NextRequest, { params }: Params) {
 export async function POST(req: NextRequest, { params }: Params) {
   const { id: channelId } = await params;
   try {
+    const user = await requireAuth(req);
+    await assertChannelInOrg(channelId, user.organizationId);
+
     const contentType = req.headers.get("content-type") ?? "";
 
     let body = "";
@@ -97,6 +112,7 @@ export async function POST(req: NextRequest, { params }: Params) {
 
         const created = await prisma.file.create({
           data: {
+            organizationId: user.organizationId,
             name: (file as File).name,
             mimeType: mime,
             mimeCategory,
@@ -117,12 +133,17 @@ export async function POST(req: NextRequest, { params }: Params) {
     }
 
     if (!body?.trim() && uploadedFileIds.length === 0) {
-      return NextResponse.json({ error: "Message body or attachment required" }, { status: 400 });
+      throw new ApiError("Message body or attachment required", 400);
     }
 
-    // Verify channel exists
-    const channel = await prisma.channel.findUnique({ where: { id: channelId }, select: { id: true } });
-    if (!channel) return NextResponse.json({ error: "Channel not found" }, { status: 404 });
+    // If taskId given, verify it's in this org.
+    if (taskId) {
+      const task = await prisma.task.findFirst({
+        where: { id: taskId, organizationId: user.organizationId },
+        select: { id: true },
+      });
+      if (!task) throw new ApiError("Task not found", 404);
+    }
 
     const message = await prisma.chatMessage.create({
       data: {
@@ -143,7 +164,6 @@ export async function POST(req: NextRequest, { params }: Params) {
 
     return NextResponse.json(serializeMsg(message), { status: 201 });
   } catch (err) {
-    console.error("[POST /api/channels/[id]/messages]", err);
-    return NextResponse.json({ error: "Failed to send message" }, { status: 500 });
+    return handleApiError(err, "POST /api/channels/[id]/messages");
   }
 }

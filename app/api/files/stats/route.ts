@@ -1,32 +1,37 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
+import { handleApiError } from "@/lib/api-errors";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    // Get file counts grouped by project
+    const user = await requireAuth(req);
+    const orgId = user.organizationId;
+
+    // Get file counts grouped by project (scoped to org)
     const projectFiles = await prisma.file.groupBy({
       by: ["projectId"],
-      where: { projectId: { not: null } },
+      where: { organizationId: orgId, projectId: { not: null } },
       _count: { id: true },
     });
 
-    // Get file counts grouped by client
+    // Get file counts grouped by client (scoped to org)
     const clientFiles = await prisma.file.groupBy({
       by: ["clientId"],
-      where: { clientId: { not: null } },
+      where: { organizationId: orgId, clientId: { not: null } },
       _count: { id: true },
     });
 
-    // Count unlinked files (no project, no client)
+    // Count unlinked files (no project, no client) in this org
     const unlinkedCount = await prisma.file.count({
-      where: { projectId: null, clientId: null },
+      where: { organizationId: orgId, projectId: null, clientId: null },
     });
 
-    // Get project names
+    // Get project names (already org-scoped via projectIds we produced)
     const projectIds = projectFiles.map((p) => p.projectId!);
     const projectDetails = projectIds.length
       ? await prisma.project.findMany({
-          where: { id: { in: projectIds } },
+          where: { id: { in: projectIds }, organizationId: orgId },
           select: { id: true, name: true, status: true, client: { select: { id: true, name: true, companyName: true } } },
         })
       : [];
@@ -35,7 +40,7 @@ export async function GET() {
     const clientIds = clientFiles.map((c) => c.clientId!);
     const clientDetails = clientIds.length
       ? await prisma.client.findMany({
-          where: { id: { in: clientIds } },
+          where: { id: { in: clientIds }, organizationId: orgId },
           select: { id: true, name: true, companyName: true },
         })
       : [];
@@ -54,6 +59,7 @@ export async function GET() {
         };
       })
       .filter(Boolean)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .sort((a: any, b: any) => b.fileCount - a.fileCount);
 
     // Build client containers
@@ -68,10 +74,11 @@ export async function GET() {
         };
       })
       .filter(Boolean)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .sort((a: any, b: any) => b.fileCount - a.fileCount);
 
-    // Get folder count
-    const folderCount = await prisma.folder.count();
+    // Get folder count (scoped to org)
+    const folderCount = await prisma.folder.count({ where: { organizationId: orgId } });
 
     return NextResponse.json({
       byProject,
@@ -83,7 +90,6 @@ export async function GET() {
         unlinkedCount,
     });
   } catch (err) {
-    console.error("[GET /api/files/stats]", err);
-    return NextResponse.json({ error: "Failed to fetch stats" }, { status: 500 });
+    return handleApiError(err, "GET /api/files/stats");
   }
 }

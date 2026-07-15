@@ -54,10 +54,13 @@ export async function openPrintPdf(html: string): Promise<void> {
 }
 
 /**
- * Fetch the company/letterhead settings from the API.
+ * Fetch the current Organization's letterhead settings from the API.
+ * The endpoint is scoped by the logged-in user's `organizationId`, so
+ * the PDF always renders the caller's own agency letterhead — never
+ * another tenant's.
  */
 export async function fetchSettings() {
   const res = await fetch("/api/settings/company");
-  if (!res.ok) throw new Error("Failed to load letterhead settings");
+  if (!res.ok) throw new Error("Failed to load organization letterhead");
   return res.json();
 }

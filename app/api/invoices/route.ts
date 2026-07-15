@@ -15,7 +15,7 @@ const INCLUDE = {
 
 export async function GET(req: NextRequest) {
   try {
-    await requireAuth(req);
+    const user = await requireAuth(req);
 
     const { searchParams } = new URL(req.url);
     const clientId   = searchParams.get("clientId");
@@ -25,6 +25,7 @@ export async function GET(req: NextRequest) {
     const pagination = parsePagination(searchParams);
 
     const where = {
+      organizationId: user.organizationId,
       ...(clientId  ? { clientId }  : {}),
       ...(projectId ? { projectId } : {}),
       ...(status    ? { status: status as never } : {}),
@@ -55,14 +56,15 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// ── Auto-generate invoice number ──────────────────────────────
+// ── Auto-generate invoice number (scoped per organization) ────
 async function nextInvoiceNumber(
-  tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
+  tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
+  organizationId: string
 ): Promise<string> {
   const year = new Date().getFullYear();
   const prefix = `INV-${year}-`;
   const latest = await tx.invoice.findFirst({
-    where:   { invoiceNumber: { startsWith: prefix } },
+    where:   { organizationId, invoiceNumber: { startsWith: prefix } },
     orderBy: { invoiceNumber: "desc" },
     select:  { invoiceNumber: true },
   });
@@ -94,19 +96,43 @@ export async function POST(req: NextRequest) {
 
     if (!clientId) throw new ApiError("clientId is required", 400);
 
+    // Verify the client (and optionally project/quotation) belong to this org
+    // before creating the invoice.
+    const client = await prisma.client.findFirst({
+      where: { id: clientId, organizationId: user.organizationId },
+      select: { id: true },
+    });
+    if (!client) throw new ApiError("Client not found", 404);
+
+    if (projectId) {
+      const project = await prisma.project.findFirst({
+        where: { id: projectId, organizationId: user.organizationId },
+        select: { id: true },
+      });
+      if (!project) throw new ApiError("Project not found", 404);
+    }
+    const quotationRef = quotationId || fromQuotationId;
+    if (quotationRef) {
+      const q = await prisma.quotation.findFirst({
+        where: { id: quotationRef, organizationId: user.organizationId },
+        select: { id: true },
+      });
+      if (!q) throw new ApiError("Quotation not found", 404);
+    }
+
     // Wrap the whole create (invoice number lookup + invoice + line items) in a
     // single transaction so a mid-flight failure doesn't leave orphan rows or
     // claim an invoice number that wasn't actually used.
     const invoice = await prisma.$transaction(async (tx) => {
-      const invoiceNumber = await nextInvoiceNumber(tx);
+      const invoiceNumber = await nextInvoiceNumber(tx, user.organizationId);
 
       let resolvedLineItems = lineItems as {
         description: string; quantity: number; unitPrice: number; unit?: string; order?: number;
       }[] | undefined;
 
       if (fromQuotationId && !resolvedLineItems?.length) {
-        const quotation = await tx.quotation.findUnique({
-          where: { id: fromQuotationId },
+        const quotation = await tx.quotation.findFirst({
+          where: { id: fromQuotationId, organizationId: user.organizationId },
           include: { lineItems: { orderBy: { order: "asc" } } },
         });
         if (quotation) {
@@ -122,6 +148,7 @@ export async function POST(req: NextRequest) {
 
       return tx.invoice.create({
         data: {
+          organizationId: user.organizationId,
           invoiceNumber,
           clientId,
           projectId:   projectId   || null,

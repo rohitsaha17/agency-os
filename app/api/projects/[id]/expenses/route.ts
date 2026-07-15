@@ -1,26 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
+import { handleApiError, ApiError } from "@/lib/api-errors";
 
 type Params = { params: Promise<{ id: string }> };
 
 // GET /api/projects/[id]/expenses — expenses + budget vs actual summary
-export async function GET(_req: NextRequest, { params }: Params) {
+export async function GET(req: NextRequest, { params }: Params) {
   const { id: projectId } = await params;
   try {
-    const [expenses, project] = await Promise.all([
-      prisma.expense.findMany({
-        where: { projectId },
-        orderBy: { date: "desc" },
-        include: {
-          stakeholder: { select: { id: true, name: true, type: true } },
-          user: { select: { id: true, name: true } },
-        },
-      }),
-      prisma.project.findUnique({
-        where: { id: projectId },
-        select: { budget: true, currency: true },
-      }),
-    ]);
+    const user = await requireAuth(req);
+
+    // Ensure the project belongs to the caller's org before returning any data.
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, organizationId: user.organizationId },
+      select: { budget: true, currency: true },
+    });
+    if (!project) throw new ApiError("Project not found", 404);
+
+    const expenses = await prisma.expense.findMany({
+      where: { projectId, organizationId: user.organizationId },
+      orderBy: { date: "desc" },
+      include: {
+        stakeholder: { select: { id: true, name: true, type: true } },
+        user: { select: { id: true, name: true } },
+      },
+    });
 
     const totalSpent = expenses
       .filter((e) => e.status !== "REJECTED")
@@ -34,14 +39,13 @@ export async function GET(_req: NextRequest, { params }: Params) {
       expenses,
       summary: {
         total: totalSpent,
-        budget: project?.budget ? Number(project.budget) : null,
-        remaining: project?.budget ? Number(project.budget) - totalSpent : null,
+        budget: project.budget ? Number(project.budget) : null,
+        remaining: project.budget ? Number(project.budget) - totalSpent : null,
         reimbursable: reimbursableTotal,
-        currency: project?.currency || "USD",
+        currency: project.currency || "USD",
       },
     });
   } catch (error) {
-    console.error("[GET /api/projects/[id]/expenses]", error);
-    return NextResponse.json({ error: "Failed to load project expenses" }, { status: 500 });
+    return handleApiError(error, "GET /api/projects/[id]/expenses");
   }
 }

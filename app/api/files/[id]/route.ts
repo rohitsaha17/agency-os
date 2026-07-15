@@ -1,16 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
+import { handleApiError, ApiError } from "@/lib/api-errors";
 
 type Params = { params: Promise<{ id: string }> };
 
 // ── GET /api/files/[id] ────────────────────────────────────────
 
-export async function GET(_req: NextRequest, { params }: Params) {
+export async function GET(req: NextRequest, { params }: Params) {
   try {
+    const user = await requireAuth(req);
     const { id } = await params;
 
-    const file = await prisma.file.findUnique({
-      where: { id },
+    const file = await prisma.file.findFirst({
+      where: { id, organizationId: user.organizationId },
       include: {
         uploadedBy: { select: { id: true, name: true, avatarUrl: true } },
         client: { select: { id: true, name: true } },
@@ -39,13 +42,12 @@ export async function GET(_req: NextRequest, { params }: Params) {
     });
 
     if (!file) {
-      return NextResponse.json({ error: "File not found" }, { status: 404 });
+      throw new ApiError("File not found", 404);
     }
 
     return NextResponse.json(file);
   } catch (err) {
-    console.error("[GET /api/files/[id]]", err);
-    return NextResponse.json({ error: "Failed to fetch file" }, { status: 500 });
+    return handleApiError(err, "GET /api/files/[id]");
   }
 }
 
@@ -53,7 +55,15 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
 export async function PATCH(req: NextRequest, { params }: Params) {
   try {
+    const user = await requireAuth(req);
     const { id } = await params;
+
+    const existing = await prisma.file.findFirst({
+      where: { id, organizationId: user.organizationId },
+      select: { id: true },
+    });
+    if (!existing) throw new ApiError("File not found", 404);
+
     const body = await req.json();
 
     const { name, description, status, isShared, clientId, projectId, taskId, tagIds } =
@@ -105,20 +115,26 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
     return NextResponse.json(updated);
   } catch (err) {
-    console.error("[PATCH /api/files/[id]]", err);
-    return NextResponse.json({ error: "Failed to update file" }, { status: 500 });
+    return handleApiError(err, "PATCH /api/files/[id]");
   }
 }
 
 // ── DELETE /api/files/[id] ─────────────────────────────────────
 
-export async function DELETE(_req: NextRequest, { params }: Params) {
+export async function DELETE(req: NextRequest, { params }: Params) {
   try {
+    const user = await requireAuth(req);
     const { id } = await params;
+
+    const existing = await prisma.file.findFirst({
+      where: { id, organizationId: user.organizationId },
+      select: { id: true },
+    });
+    if (!existing) throw new ApiError("File not found", 404);
+
     await prisma.file.delete({ where: { id } });
     return NextResponse.json({ success: true });
   } catch (err) {
-    console.error("[DELETE /api/files/[id]]", err);
-    return NextResponse.json({ error: "Failed to delete file" }, { status: 500 });
+    return handleApiError(err, "DELETE /api/files/[id]");
   }
 }

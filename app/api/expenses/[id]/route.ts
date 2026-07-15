@@ -1,30 +1,39 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
+import { handleApiError, ApiError } from "@/lib/api-errors";
 
 type Params = { params: Promise<{ id: string }> };
 
-export async function GET(_req: NextRequest, { params }: Params) {
+export async function GET(req: NextRequest, { params }: Params) {
   const { id } = await params;
   try {
-    const expense = await prisma.expense.findUnique({
-      where: { id },
+    const user = await requireAuth(req);
+    const expense = await prisma.expense.findFirst({
+      where: { id, organizationId: user.organizationId },
       include: {
         project: { select: { id: true, name: true } },
         stakeholder: { select: { id: true, name: true, type: true } },
         user: { select: { id: true, name: true } },
       },
     });
-    if (!expense) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (!expense) throw new ApiError("Not found", 404);
     return NextResponse.json(expense);
   } catch (error) {
-    console.error("[GET /api/expenses/[id]]", error);
-    return NextResponse.json({ error: "Failed to load expense" }, { status: 500 });
+    return handleApiError(error, "GET /api/expenses/[id]");
   }
 }
 
 export async function PATCH(req: NextRequest, { params }: Params) {
   const { id } = await params;
   try {
+    const user = await requireAuth(req);
+    const existing = await prisma.expense.findFirst({
+      where: { id, organizationId: user.organizationId },
+      select: { id: true },
+    });
+    if (!existing) throw new ApiError("Not found", 404);
+
     const body = await req.json();
     const {
       title, description, category, amount, currency,
@@ -57,18 +66,23 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     });
     return NextResponse.json(expense);
   } catch (error) {
-    console.error("[PATCH /api/expenses/[id]]", error);
-    return NextResponse.json({ error: "Failed to update expense" }, { status: 500 });
+    return handleApiError(error, "PATCH /api/expenses/[id]");
   }
 }
 
-export async function DELETE(_req: NextRequest, { params }: Params) {
+export async function DELETE(req: NextRequest, { params }: Params) {
   const { id } = await params;
   try {
+    const user = await requireAuth(req);
+    const existing = await prisma.expense.findFirst({
+      where: { id, organizationId: user.organizationId },
+      select: { id: true },
+    });
+    if (!existing) throw new ApiError("Not found", 404);
+
     await prisma.expense.delete({ where: { id } });
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("[DELETE /api/expenses/[id]]", error);
-    return NextResponse.json({ error: "Failed to delete expense" }, { status: 500 });
+    return handleApiError(error, "DELETE /api/expenses/[id]");
   }
 }

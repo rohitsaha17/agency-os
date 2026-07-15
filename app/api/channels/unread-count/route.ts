@@ -1,20 +1,23 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
 
 /**
  * GET /api/channels/unread-count
  *
- * Returns the total number of unread messages across all non-archived channels.
+ * Returns the total number of unread messages across all non-archived channels
+ * in the caller's organization.
  * "Unread" = messages created after the most recent `lastReadAt` of any member,
  * falling back to counting ALL messages if no member has a `lastReadAt` set.
  *
  * This is a lightweight endpoint designed to be polled by the sidebar badge.
  */
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const user = await requireAuth(req);
     // Fetch all non-archived channels with their members' lastReadAt and message counts
     const channels = await prisma.channel.findMany({
-      where: { isArchived: false },
+      where: { organizationId: user.organizationId, isArchived: false },
       select: {
         id: true,
         members: {

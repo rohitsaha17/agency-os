@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
+import { handleApiError, ApiError } from "@/lib/api-errors";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -15,24 +17,33 @@ const CONTRACT_INCLUDE = {
   },
 } as const;
 
-export async function GET(_req: NextRequest, { params }: Params) {
+export async function GET(req: NextRequest, { params }: Params) {
   const { id } = await params;
   try {
-    const contract = await prisma.contract.findUnique({
-      where: { id },
+    const user = await requireAuth(req);
+    const contract = await prisma.contract.findFirst({
+      where: { id, organizationId: user.organizationId },
       include: CONTRACT_INCLUDE,
     });
-    if (!contract) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (!contract) throw new ApiError("Not found", 404);
     return NextResponse.json(contract);
   } catch (error) {
-    console.error("[GET /api/contracts/[id]]", error);
-    return NextResponse.json({ error: "Failed to load contract" }, { status: 500 });
+    return handleApiError(error, "GET /api/contracts/[id]");
   }
 }
 
 export async function PATCH(req: NextRequest, { params }: Params) {
   const { id } = await params;
   try {
+    const user = await requireAuth(req);
+
+    // Verify org ownership before mutating.
+    const existing = await prisma.contract.findFirst({
+      where: { id, organizationId: user.organizationId },
+      select: { id: true },
+    });
+    if (!existing) throw new ApiError("Not found", 404);
+
     const body = await req.json();
     const { title, type, status, projectId, clientId, fileId, startDate, endDate, value, currency, notes } = body;
 
@@ -55,18 +66,23 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     });
     return NextResponse.json(contract);
   } catch (error) {
-    console.error("[PATCH /api/contracts/[id]]", error);
-    return NextResponse.json({ error: "Failed to update contract" }, { status: 500 });
+    return handleApiError(error, "PATCH /api/contracts/[id]");
   }
 }
 
-export async function DELETE(_req: NextRequest, { params }: Params) {
+export async function DELETE(req: NextRequest, { params }: Params) {
   const { id } = await params;
   try {
+    const user = await requireAuth(req);
+    const existing = await prisma.contract.findFirst({
+      where: { id, organizationId: user.organizationId },
+      select: { id: true },
+    });
+    if (!existing) throw new ApiError("Not found", 404);
+
     await prisma.contract.delete({ where: { id } });
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("[DELETE /api/contracts/[id]]", error);
-    return NextResponse.json({ error: "Failed to delete contract" }, { status: 500 });
+    return handleApiError(error, "DELETE /api/contracts/[id]");
   }
 }

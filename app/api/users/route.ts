@@ -1,14 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
+import { handleApiError, ApiError } from "@/lib/api-errors";
 
 // GET /api/users
 export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  const includeInactive = searchParams.get("includeInactive") === "true";
-
   try {
+    const user = await requireAuth(req);
+    const { searchParams } = new URL(req.url);
+    const includeInactive = searchParams.get("includeInactive") === "true";
+
     const users = await prisma.user.findMany({
-      where: includeInactive ? {} : { isActive: true },
+      where: {
+        organizationId: user.organizationId,
+        ...(includeInactive ? {} : { isActive: true }),
+      },
       select: {
         id: true, name: true, email: true, avatarUrl: true,
         role: true, isActive: true, createdAt: true,
@@ -16,25 +22,33 @@ export async function GET(req: NextRequest) {
       orderBy: { name: "asc" },
     });
     return NextResponse.json(users);
-  } catch {
-    return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
+  } catch (error) {
+    return handleApiError(error, "GET /api/users");
   }
 }
 
-// POST /api/users — create / invite a new team member
+// POST /api/users — create / invite a new team member (into the caller's org)
 export async function POST(req: NextRequest) {
   try {
+    const user = await requireAuth(req);
     const { name, email, role } = await req.json();
-    if (!name?.trim()) return NextResponse.json({ error: "Name is required" }, { status: 400 });
-    if (!email?.trim()) return NextResponse.json({ error: "Email is required" }, { status: 400 });
+    if (!name?.trim()) throw new ApiError("Name is required", 400);
+    if (!email?.trim()) throw new ApiError("Email is required", 400);
 
-    const existing = await prisma.user.findUnique({ where: { email } });
-    if (existing) return NextResponse.json({ error: "A user with this email already exists" }, { status: 409 });
+    const normalizedEmail = email.trim().toLowerCase();
 
-    const user = await prisma.user.create({
+    // Uniqueness is scoped per organization (see @@unique in schema).
+    const existing = await prisma.user.findFirst({
+      where: { organizationId: user.organizationId, email: normalizedEmail },
+      select: { id: true },
+    });
+    if (existing) throw new ApiError("A user with this email already exists", 409);
+
+    const created = await prisma.user.create({
       data: {
+        organizationId: user.organizationId,
         name:  name.trim(),
-        email: email.trim().toLowerCase(),
+        email: normalizedEmail,
         role:  role ?? "MEMBER",
       },
       select: {
@@ -43,9 +57,8 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    return NextResponse.json(user, { status: 201 });
+    return NextResponse.json(created, { status: 201 });
   } catch (error) {
-    console.error("[POST /api/users]", error);
-    return NextResponse.json({ error: "Failed to create user" }, { status: 500 });
+    return handleApiError(error, "POST /api/users");
   }
 }

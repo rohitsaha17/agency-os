@@ -8,7 +8,7 @@ import { parsePagination, paginationMeta, DEFAULT_PAGE_SIZE } from "@/lib/pagina
 // Query params: projectId, clientId, status, priority, assigneeId, q (search), includeCompleted, page, pageSize
 export async function GET(req: NextRequest) {
   try {
-    await requireAuth(req);
+    const user = await requireAuth(req);
 
     const { searchParams } = new URL(req.url);
     const projectId       = searchParams.get("projectId") ?? undefined;
@@ -21,6 +21,7 @@ export async function GET(req: NextRequest) {
     const pagination = parsePagination(searchParams);
 
     const where = {
+      organizationId: user.organizationId,
       deletedAt: null,
       ...(projectId  && { projectId }),
       ...(status     && { status: status as never }),

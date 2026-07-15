@@ -1,14 +1,16 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
+import { handleApiError, ApiError } from "@/lib/api-errors";
 
 // ── Helpers ──────────────────────────────────────────────────
 
-// Generate sequential quotation number: QUO-YYYY-NNN
-async function generateNumber(): Promise<string> {
+// Generate sequential quotation number, unique per organization: QUO-YYYY-NNN
+async function generateNumber(organizationId: string): Promise<string> {
   const year = new Date().getFullYear();
   const prefix = `QUO-${year}-`;
   const latest = await prisma.quotation.findFirst({
-    where: { number: { startsWith: prefix } },
+    where: { organizationId, number: { startsWith: prefix } },
     orderBy: { number: "desc" },
     select: { number: true },
   });
@@ -40,12 +42,14 @@ function computeTotals(
 
 export async function GET(req: Request) {
   try {
+    const user = await requireAuth(req);
     const { searchParams } = new URL(req.url);
     const clientId = searchParams.get("clientId");
     const status = searchParams.get("status");
 
     const quotations = await prisma.quotation.findMany({
       where: {
+        organizationId: user.organizationId,
         ...(clientId && { clientId }),
         ...(status && { status: status as never }),
       },
@@ -57,8 +61,8 @@ export async function GET(req: Request) {
     });
 
     return NextResponse.json(quotations);
-  } catch {
-    return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
+  } catch (error) {
+    return handleApiError(error, "GET /api/quotations");
   }
 }
 
@@ -66,6 +70,7 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
+    const user = await requireAuth(req);
     const body = await req.json();
     const {
       clientId, title, description, pricingType,
@@ -73,10 +78,17 @@ export async function POST(req: Request) {
       taxRate, notes, terms, lineItems = [],
     } = body;
 
-    if (!clientId) return NextResponse.json({ error: "Client is required" }, { status: 400 });
-    if (!title?.trim()) return NextResponse.json({ error: "Title is required" }, { status: 400 });
+    if (!clientId) throw new ApiError("Client is required", 400);
+    if (!title?.trim()) throw new ApiError("Title is required", 400);
 
-    const number = await generateNumber();
+    // Confirm the target client belongs to the caller's org.
+    const client = await prisma.client.findFirst({
+      where: { id: clientId, organizationId: user.organizationId },
+      select: { id: true },
+    });
+    if (!client) throw new ApiError("Client not found", 404);
+
+    const number = await generateNumber(user.organizationId);
     const parsedItems = (lineItems as {
       title: string; description?: string; pricingType: string;
       quantity: string; unitPrice: string; unit?: string; rateCardId?: string;
@@ -101,6 +113,7 @@ export async function POST(req: Request) {
 
     const quotation = await prisma.quotation.create({
       data: {
+        organizationId: user.organizationId,
         number,
         clientId,
         title: title.trim(),
@@ -126,8 +139,7 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json(quotation, { status: 201 });
-  } catch (e) {
-    console.error(e);
-    return NextResponse.json({ error: "Failed to create quotation" }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error, "POST /api/quotations");
   }
 }

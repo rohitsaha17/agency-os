@@ -1,9 +1,12 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
+import { handleApiError } from "@/lib/api-errors";
 
-// POST /api/channels/seed — ensure default GENERAL channels exist
-export async function POST() {
+// POST /api/channels/seed — ensure default GENERAL channels exist for the caller's org
+export async function POST(req: NextRequest) {
   try {
+    const user = await requireAuth(req);
     const defaults = [
       { name: "general",       description: "Company-wide updates and announcements" },
       { name: "announcements", description: "Important announcements for the whole team" },
@@ -11,16 +14,26 @@ export async function POST() {
     ];
 
     for (const ch of defaults) {
-      await prisma.channel.upsert({
-        where: { name_type: { name: ch.name, type: "GENERAL" } } as never,
-        update: {},
-        create: { name: ch.name, description: ch.description, type: "GENERAL" },
+      // No composite unique index on (organizationId, name, type) — do a
+      // findFirst + create dance so seeding is idempotent per-org.
+      const existing = await prisma.channel.findFirst({
+        where: { organizationId: user.organizationId, name: ch.name, type: "GENERAL" },
+        select: { id: true },
       });
+      if (!existing) {
+        await prisma.channel.create({
+          data: {
+            organizationId: user.organizationId,
+            name: ch.name,
+            description: ch.description,
+            type: "GENERAL",
+          },
+        });
+      }
     }
 
     return NextResponse.json({ success: true });
   } catch (err) {
-    console.error("[POST /api/channels/seed]", err);
-    return NextResponse.json({ error: "Failed to seed channels" }, { status: 500 });
+    return handleApiError(err, "POST /api/channels/seed");
   }
 }

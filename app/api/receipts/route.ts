@@ -12,13 +12,14 @@ const receiptInclude = {
 // GET /api/receipts — list, filterable by clientId / invoiceId
 export async function GET(req: NextRequest) {
   try {
-    await requireAuth(req);
+    const user = await requireAuth(req);
     const { searchParams } = new URL(req.url);
     const clientId = searchParams.get("clientId") ?? undefined;
     const invoiceId = searchParams.get("invoiceId") ?? undefined;
 
     const receipts = await prisma.receipt.findMany({
       where: {
+        organizationId: user.organizationId,
         ...(clientId && { clientId }),
         ...(invoiceId && { invoiceId }),
       },
@@ -49,8 +50,23 @@ export async function POST(req: NextRequest) {
     const amt = Number(amount);
     if (!Number.isFinite(amt) || amt <= 0) throw new ApiError("Amount must be a positive number", 400);
 
+    // Confirm the target client (and invoice, if any) belong to the caller's org.
+    const client = await prisma.client.findFirst({
+      where: { id: clientId, organizationId: user.organizationId },
+      select: { id: true },
+    });
+    if (!client) throw new ApiError("Client not found", 404);
+    if (invoiceId) {
+      const inv = await prisma.invoice.findFirst({
+        where: { id: invoiceId, organizationId: user.organizationId },
+        select: { id: true },
+      });
+      if (!inv) throw new ApiError("Invoice not found", 404);
+    }
+
     const receipt = await prisma.receipt.create({
       data: {
+        organizationId: user.organizationId,
         clientId,
         invoiceId: invoiceId || null,
         amount: amt,

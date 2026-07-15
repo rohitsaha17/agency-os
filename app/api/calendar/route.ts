@@ -1,28 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/current-user";
+import { requireAuth } from "@/lib/auth";
+import { handleApiError } from "@/lib/api-errors";
 
 // GET /api/calendar?year=2026&month=3&userId=x&projectId=x&clientId=x&priority=HIGH
 export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  const year      = parseInt(searchParams.get("year")  ?? String(new Date().getFullYear()));
-  const month     = parseInt(searchParams.get("month") ?? String(new Date().getMonth() + 1));
-  const filterUserId    = searchParams.get("userId")    ?? undefined;
-  const filterProjectId = searchParams.get("projectId") ?? undefined;
-  const filterClientId  = searchParams.get("clientId")  ?? undefined;
-  const filterPriority  = searchParams.get("priority")  ?? undefined;
-
-  const rangeStart = new Date(year, month - 1, 1);
-  const rangeEnd   = new Date(year, month, 0, 23, 59, 59);
-
   try {
-    const currentUser = await getCurrentUser(req);
-    const role = currentUser?.role ?? "ADMIN";
-    const myId = currentUser?.id;
+    const currentUser = await requireAuth(req);
+    const orgId = currentUser.organizationId;
+
+    const { searchParams } = new URL(req.url);
+    const year      = parseInt(searchParams.get("year")  ?? String(new Date().getFullYear()));
+    const month     = parseInt(searchParams.get("month") ?? String(new Date().getMonth() + 1));
+    const filterUserId    = searchParams.get("userId")    ?? undefined;
+    const filterProjectId = searchParams.get("projectId") ?? undefined;
+    const filterClientId  = searchParams.get("clientId")  ?? undefined;
+    const filterPriority  = searchParams.get("priority")  ?? undefined;
+
+    const rangeStart = new Date(year, month - 1, 1);
+    const rangeEnd   = new Date(year, month, 0, 23, 59, 59);
+
+    const role = currentUser.role ?? "ADMIN";
+    const myId = currentUser.id;
 
     // ── Build task where clause with role scoping ──────────────
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const taskWhere: any = {
+      organizationId: orgId,
       deletedAt: null,
       dueDate: { gte: rangeStart, lte: rangeEnd },
     };
@@ -52,6 +56,7 @@ export async function GET(req: NextRequest) {
     // ── Build project where clause ─────────────────────────────
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const projectWhere: any = {
+      organizationId: orgId,
       status: { not: "CANCELLED" },
       OR: [
         { startDate: { gte: rangeStart, lte: rangeEnd } },
@@ -128,8 +133,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json(events);
   } catch (e) {
-    console.error("[GET /api/calendar]", e);
-    return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
+    return handleApiError(e, "GET /api/calendar");
   }
 }
 

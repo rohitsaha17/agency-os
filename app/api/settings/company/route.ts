@@ -1,26 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
+import { handleApiError, ApiError } from "@/lib/api-errors";
 
-const SINGLETON_ID = "singleton";
+// The CompanySettings model was removed in the multi-tenant migration.
+// This route now reads/writes the caller's Organization row instead —
+// kept at the same URL so existing frontend fetches (settings page,
+// PDF letterhead generator) continue to work without changes.
 
-// GET /api/settings/company
-export async function GET() {
+// GET /api/settings/company — the caller's organization
+export async function GET(req: NextRequest) {
   try {
-    const settings = await prisma.companySettings.upsert({
-      where:  { id: SINGLETON_ID },
-      create: { id: SINGLETON_ID },
-      update: {},
+    const user = await requireAuth(req);
+    const org = await prisma.organization.findUnique({
+      where: { id: user.organizationId },
     });
-    return NextResponse.json(settings);
+    if (!org) throw new ApiError("Organization not found", 404);
+    return NextResponse.json(org);
   } catch (error) {
-    console.error("[GET /api/settings/company]", error);
-    return NextResponse.json({ error: "Failed to load settings" }, { status: 500 });
+    return handleApiError(error, "GET /api/settings/company");
   }
 }
 
-// PATCH /api/settings/company
+// PATCH /api/settings/company — update the caller's organization
 export async function PATCH(req: NextRequest) {
   try {
+    const user = await requireAuth(req);
     const body = await req.json();
     const {
       name, email, phone, website, address, city, country,
@@ -30,33 +35,9 @@ export async function PATCH(req: NextRequest) {
       letterheadWebsite, letterheadColor, letterheadTemplate, letterheadConfig,
     } = body;
 
-    const settings = await prisma.companySettings.upsert({
-      where:  { id: SINGLETON_ID },
-      create: {
-        id: SINGLETON_ID,
-        name:               name               ?? "My Agency",
-        email:              email              ?? null,
-        phone:              phone              ?? null,
-        website:            website            ?? null,
-        address:            address            ?? null,
-        city:               city               ?? null,
-        country:            country            ?? null,
-        logoUrl:            logoUrl            ?? null,
-        currency:           currency           ?? "USD",
-        timezone:           timezone           ?? "UTC",
-        dateFormat:         dateFormat         ?? "MMM D, YYYY",
-        letterheadLogoUrl:  letterheadLogoUrl  ?? null,
-        letterheadHeader:   letterheadHeader   ?? null,
-        letterheadFooter:   letterheadFooter   ?? null,
-        letterheadAddress:  letterheadAddress  ?? null,
-        letterheadPhone:    letterheadPhone    ?? null,
-        letterheadEmail:    letterheadEmail    ?? null,
-        letterheadWebsite:  letterheadWebsite  ?? null,
-        letterheadColor:    letterheadColor    ?? "#6366f1",
-        letterheadTemplate: letterheadTemplate ?? "CLASSIC",
-        letterheadConfig:   letterheadConfig   ?? null,
-      },
-      update: {
+    const settings = await prisma.organization.update({
+      where: { id: user.organizationId },
+      data: {
         ...(name               !== undefined && { name }),
         ...(email              !== undefined && { email }),
         ...(phone              !== undefined && { phone }),
@@ -83,7 +64,6 @@ export async function PATCH(req: NextRequest) {
 
     return NextResponse.json(settings);
   } catch (error) {
-    console.error("[PATCH /api/settings/company]", error);
-    return NextResponse.json({ error: "Failed to save settings" }, { status: 500 });
+    return handleApiError(error, "PATCH /api/settings/company");
   }
 }

@@ -61,7 +61,7 @@ const fileSelect = {
 
 export async function GET(req: NextRequest) {
   try {
-    await requireAuth(req);
+    const user = await requireAuth(req);
 
     const { searchParams } = new URL(req.url);
     const clientId = searchParams.get("clientId") ?? undefined;
@@ -74,7 +74,9 @@ export async function GET(req: NextRequest) {
     const tagId = searchParams.get("tagId") ?? undefined;
     const pagination = parsePagination(searchParams);
 
-    const where: Record<string, unknown> = {};
+    const where: Record<string, unknown> = {
+      organizationId: user.organizationId,
+    };
 
     if (clientId) where.clientId = clientId;
     if (projectId) where.projectId = projectId;
@@ -170,6 +172,7 @@ export async function POST(req: NextRequest) {
     // written file so we don't leave orphans on disk.
     const created = await prisma.file.create({
       data: {
+        organizationId: user.organizationId,
         name: file.name,
         mimeType: file.type || "application/octet-stream",
         mimeCategory,

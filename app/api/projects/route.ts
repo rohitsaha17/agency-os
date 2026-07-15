@@ -8,7 +8,7 @@ import { checkRateLimit, WRITE_RATE_LIMITS } from "@/lib/rate-limit";
 // GET /api/projects — list all projects with optional filters
 export async function GET(req: NextRequest) {
   try {
-    await requireAuth(req);
+    const user = await requireAuth(req);
 
     const { searchParams } = new URL(req.url);
     const search = searchParams.get("q") ?? "";
@@ -18,6 +18,7 @@ export async function GET(req: NextRequest) {
     const pagination = parsePagination(searchParams);
 
     const where = {
+      organizationId: user.organizationId,
       ...(clientId && { clientId }),
       ...(status && { status: status as never }),
       ...(type && { type: type as never }),
@@ -100,10 +101,21 @@ export async function POST(req: NextRequest) {
     if (!clientId?.trim()) throw new ApiError("Client is required", 400);
     if (!name?.trim()) throw new ApiError("Project name is required", 400);
 
+    // Verify the client is in the caller's org before creating a project against it.
+    const client = await prisma.client.findFirst({
+      where: { id: clientId, organizationId: user.organizationId },
+      select: { id: true },
+    });
+    if (!client) throw new ApiError("Client not found", 404);
+
     // Duplicate-name guard outside the transaction is fine — the transaction
     // only needs to atomically create the project + its channels.
     const existing = await prisma.project.findFirst({
-      where: { clientId, name: { equals: name.trim(), mode: "insensitive" } },
+      where: {
+        organizationId: user.organizationId,
+        clientId,
+        name: { equals: name.trim(), mode: "insensitive" },
+      },
     });
     if (existing) {
       throw new ApiError(
@@ -115,6 +127,7 @@ export async function POST(req: NextRequest) {
     const project = await prisma.$transaction(async (tx) => {
       const created = await tx.project.create({
         data: {
+          organizationId: user.organizationId,
           clientId,
           name: name.trim(),
           description: description?.trim() || null,
@@ -141,8 +154,8 @@ export async function POST(req: NextRequest) {
         .replace(/^-|-$/g, "");
       await tx.channel.createMany({
         data: [
-          { name: `${slug}-team`,   description: `Internal team channel for ${created.name}`, type: "PROJECT_INTERNAL", projectId: created.id },
-          { name: `${slug}-client`, description: `Client communication for ${created.name}`,  type: "PROJECT_CLIENT",   projectId: created.id },
+          { organizationId: user.organizationId, name: `${slug}-team`,   description: `Internal team channel for ${created.name}`, type: "PROJECT_INTERNAL", projectId: created.id },
+          { organizationId: user.organizationId, name: `${slug}-client`, description: `Client communication for ${created.name}`,  type: "PROJECT_CLIENT",   projectId: created.id },
         ],
         skipDuplicates: true,
       });

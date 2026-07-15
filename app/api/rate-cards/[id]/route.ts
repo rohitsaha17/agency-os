@@ -1,9 +1,19 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
+import { handleApiError, ApiError } from "@/lib/api-errors";
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const user = await requireAuth(req);
     const { id } = await params;
+
+    const existing = await prisma.rateCard.findFirst({
+      where: { id, organizationId: user.organizationId },
+      select: { id: true },
+    });
+    if (!existing) throw new ApiError("Not found", 404);
+
     const body = await req.json();
     const { name, description, category, pricingType, unit, unitPrice, currency, isActive } = body;
 
@@ -22,21 +32,29 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     });
 
     return NextResponse.json(rateCard);
-  } catch {
-    return NextResponse.json({ error: "Failed to update rate card" }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error, "PATCH /api/rate-cards/[id]");
   }
 }
 
-export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const user = await requireAuth(req);
     const { id } = await params;
+
+    const existing = await prisma.rateCard.findFirst({
+      where: { id, organizationId: user.organizationId },
+      select: { id: true },
+    });
+    if (!existing) throw new ApiError("Not found", 404);
+
     // Soft delete by deactivating
     await prisma.rateCard.update({
       where: { id },
       data: { isActive: false },
     });
     return NextResponse.json({ ok: true });
-  } catch {
-    return NextResponse.json({ error: "Failed to delete rate card" }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error, "DELETE /api/rate-cards/[id]");
   }
 }

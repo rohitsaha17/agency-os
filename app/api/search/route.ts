@@ -1,17 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
+import { handleApiError } from "@/lib/api-errors";
 
 // GET /api/search?q=term — global search across projects, clients, tasks, files, messages
 export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  const q = searchParams.get("q")?.trim() ?? "";
-
-  if (!q || q.length < 2) return NextResponse.json({ results: [] });
-
   try {
+    const user = await requireAuth(req);
+    const orgId = user.organizationId;
+
+    const { searchParams } = new URL(req.url);
+    const q = searchParams.get("q")?.trim() ?? "";
+
+    if (!q || q.length < 2) return NextResponse.json({ results: [] });
+
     const [projects, clients, tasks, files, messages] = await Promise.all([
       prisma.project.findMany({
         where: {
+          organizationId: orgId,
           OR: [
             { name: { contains: q, mode: "insensitive" } },
             { description: { contains: q, mode: "insensitive" } },
@@ -22,6 +28,7 @@ export async function GET(req: NextRequest) {
       }),
       prisma.client.findMany({
         where: {
+          organizationId: orgId,
           OR: [
             { name:        { contains: q, mode: "insensitive" } },
             { companyName: { contains: q, mode: "insensitive" } },
@@ -32,6 +39,7 @@ export async function GET(req: NextRequest) {
       }),
       prisma.task.findMany({
         where: {
+          organizationId: orgId,
           deletedAt: null,
           OR: [
             { title:       { contains: q, mode: "insensitive" } },
@@ -45,7 +53,7 @@ export async function GET(req: NextRequest) {
         take: 5,
       }),
       prisma.file.findMany({
-        where: { name: { contains: q, mode: "insensitive" } },
+        where: { organizationId: orgId, name: { contains: q, mode: "insensitive" } },
         select: { id: true, name: true, mimeType: true, project: { select: { id: true, name: true } } },
         take: 5,
       }),
@@ -53,6 +61,8 @@ export async function GET(req: NextRequest) {
         where: {
           deletedAt: null,
           body: { contains: q, mode: "insensitive" },
+          // Scope through the parent channel — ChatMessage doesn't have organizationId.
+          channel: { organizationId: orgId },
         },
         select: {
           id: true, body: true,
@@ -104,7 +114,6 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ results });
   } catch (error) {
-    console.error("[GET /api/search]", error);
-    return NextResponse.json({ results: [] });
+    return handleApiError(error, "GET /api/search");
   }
 }

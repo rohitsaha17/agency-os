@@ -1,10 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
+import { handleApiError, ApiError } from "@/lib/api-errors";
 import type { Task } from "@/types";
 
 type Params = { params: Promise<{ id: string }> };
 
 // ── Helpers ────────────────────────────────────────────────────
+
+async function assertProjectInOrg(projectId: string, organizationId: string) {
+  const project = await prisma.project.findFirst({
+    where: { id: projectId, organizationId },
+    select: { id: true },
+  });
+  if (!project) throw new ApiError("Project not found", 404);
+}
 
 type PrismaTask = {
   id: string; projectId: string; parentId: string | null;
@@ -15,7 +25,7 @@ type PrismaTask = {
   isClientVisible: boolean; showSubtasksToClient: boolean;
   createdAt: Date; updatedAt: Date;
   manager: { id: string; name: string } | null;
-  assignees: { userId: string; user: { id: string; name: string; email: string; avatarUrl: string | null; role: string } }[];
+  assignees: { userId: string; user: { id: string; organizationId: string; name: string; email: string; avatarUrl: string | null; role: string } }[];
 };
 
 function computeProgress(task: Task): number {
@@ -40,7 +50,7 @@ function buildTree(flat: PrismaTask[]): Task[] {
       isClientVisible: t.isClientVisible,
       showSubtasksToClient: t.showSubtasksToClient,
       manager: t.manager,
-      assignees: t.assignees.map((a) => ({ userId: a.userId, user: { ...a.user, isActive: true, role: a.user.role as import("@/types").UserRole } })),
+      assignees: t.assignees.map((a) => ({ userId: a.userId, user: { ...a.user, isActive: true, organizationId: a.user.organizationId, role: a.user.role as import("@/types").UserRole } })),
       children: [],
       createdAt: t.createdAt.toISOString(),
       updatedAt: t.updatedAt.toISOString(),
@@ -74,16 +84,19 @@ function buildTree(flat: PrismaTask[]): Task[] {
 }
 
 // GET /api/projects/[id]/tasks
-export async function GET(_req: NextRequest, { params }: Params) {
+export async function GET(req: NextRequest, { params }: Params) {
   const { id } = await params;
   try {
+    const user = await requireAuth(req);
+    await assertProjectInOrg(id, user.organizationId);
+
     const tasks = await prisma.task.findMany({
-      where: { projectId: id, deletedAt: null },
+      where: { projectId: id, deletedAt: null, organizationId: user.organizationId },
       include: {
         manager: { select: { id: true, name: true } },
         assignees: {
           include: {
-            user: { select: { id: true, name: true, email: true, avatarUrl: true, role: true } },
+            user: { select: { id: true, organizationId: true, name: true, email: true, avatarUrl: true, role: true } },
           },
         },
       },
@@ -91,8 +104,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
     });
     return NextResponse.json(buildTree(tasks as PrismaTask[]));
   } catch (error) {
-    console.error("[GET /api/projects/[id]/tasks]", error);
-    return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
+    return handleApiError(error, "GET /api/projects/[id]/tasks");
   }
 }
 
@@ -100,6 +112,9 @@ export async function GET(_req: NextRequest, { params }: Params) {
 export async function POST(req: NextRequest, { params }: Params) {
   const { id: projectId } = await params;
   try {
+    const user = await requireAuth(req);
+    await assertProjectInOrg(projectId, user.organizationId);
+
     const body = await req.json();
     const {
       title, description, status, priority, dueDate, parentId,
@@ -107,7 +122,16 @@ export async function POST(req: NextRequest, { params }: Params) {
     } = body;
 
     if (!title?.trim()) {
-      return NextResponse.json({ error: "Task title is required" }, { status: 400 });
+      throw new ApiError("Task title is required", 400);
+    }
+
+    // If parentId provided, verify it belongs to the same project (and thus org).
+    if (parentId) {
+      const parent = await prisma.task.findFirst({
+        where: { id: parentId, projectId, organizationId: user.organizationId },
+        select: { id: true },
+      });
+      if (!parent) throw new ApiError("Parent task not found", 404);
     }
 
     const lastSibling = await prisma.task.findFirst({
@@ -118,6 +142,7 @@ export async function POST(req: NextRequest, { params }: Params) {
 
     const task = await prisma.task.create({
       data: {
+        organizationId: user.organizationId,
         projectId,
         parentId: parentId ?? null,
         managerId: managerId ?? null,
@@ -136,7 +161,7 @@ export async function POST(req: NextRequest, { params }: Params) {
         manager: { select: { id: true, name: true } },
         assignees: {
           include: {
-            user: { select: { id: true, name: true, email: true, avatarUrl: true, role: true } },
+            user: { select: { id: true, organizationId: true, name: true, email: true, avatarUrl: true, role: true } },
           },
         },
       },
@@ -157,7 +182,6 @@ export async function POST(req: NextRequest, { params }: Params) {
       { status: 201 }
     );
   } catch (error) {
-    console.error("[POST /api/projects/[id]/tasks]", error);
-    return NextResponse.json({ error: "Failed to create task" }, { status: 500 });
+    return handleApiError(error, "POST /api/projects/[id]/tasks");
   }
 }

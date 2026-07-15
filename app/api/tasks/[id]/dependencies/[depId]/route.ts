@@ -1,12 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
+import { handleApiError, ApiError } from "@/lib/api-errors";
 
 type Params = { params: Promise<{ id: string; depId: string }> };
 
 // DELETE /api/tasks/[id]/dependencies/[depId]
-export async function DELETE(_req: NextRequest, { params }: Params) {
+export async function DELETE(req: NextRequest, { params }: Params) {
   const { id: taskId, depId: dependsOnId } = await params;
   try {
+    const user = await requireAuth(req);
+
+    // Verify the parent task belongs to the caller's org before removing.
+    const task = await prisma.task.findFirst({
+      where: { id: taskId, organizationId: user.organizationId },
+      select: { id: true },
+    });
+    if (!task) throw new ApiError("Task not found", 404);
+
     await prisma.taskDependency.delete({
       where: { taskId_dependsOnId: { taskId, dependsOnId } },
     });
@@ -15,6 +26,6 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
     if ((error as { code?: string }).code === "P2025") {
       return NextResponse.json({ error: "Dependency not found" }, { status: 404 });
     }
-    return NextResponse.json({ error: "Failed to remove dependency" }, { status: 500 });
+    return handleApiError(error, "DELETE /api/tasks/[id]/dependencies/[depId]");
   }
 }

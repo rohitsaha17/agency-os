@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
+import { handleApiError, ApiError } from "@/lib/api-errors";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -8,8 +10,10 @@ export async function GET(req: NextRequest) {
   const active  = searchParams.get("active");
 
   try {
+    const user = await requireAuth(req);
     const stakeholders = await prisma.stakeholder.findMany({
       where: {
+        organizationId: user.organizationId,
         ...(type ? { type: type as "FREELANCER" | "AGENCY" | "VENDOR" | "INTERNAL_TEAM" } : {}),
         ...(active !== null ? { isActive: active === "true" } : {}),
         ...(search ? {
@@ -26,18 +30,18 @@ export async function GET(req: NextRequest) {
     });
     return NextResponse.json(stakeholders);
   } catch (error) {
-    console.error("[GET /api/stakeholders]", error);
-    return NextResponse.json({ error: "Failed to load stakeholders" }, { status: 500 });
+    return handleApiError(error, "GET /api/stakeholders");
   }
 }
 
 export async function POST(req: NextRequest) {
   try {
+    const user = await requireAuth(req);
     const body = await req.json();
     const { name, type, role, email, phone, website, address, skills, currency, defaultRate, notes } = body;
 
     if (!name?.trim()) {
-      return NextResponse.json({ error: "Name is required" }, { status: 400 });
+      throw new ApiError("Name is required", 400);
     }
 
     const skillsArr = typeof skills === "string"
@@ -46,6 +50,7 @@ export async function POST(req: NextRequest) {
 
     const stakeholder = await prisma.stakeholder.create({
       data: {
+        organizationId: user.organizationId,
         name:        name.trim(),
         type:        type || "FREELANCER",
         role:        role || null,
@@ -62,7 +67,6 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(stakeholder, { status: 201 });
   } catch (error) {
-    console.error("[POST /api/stakeholders]", error);
-    return NextResponse.json({ error: "Failed to create stakeholder" }, { status: 500 });
+    return handleApiError(error, "POST /api/stakeholders");
   }
 }

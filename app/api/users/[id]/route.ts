@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
+import { handleApiError, ApiError } from "@/lib/api-errors";
 
 // PATCH /api/users/[id] — update name, role, isActive
 export async function PATCH(
@@ -8,6 +10,15 @@ export async function PATCH(
 ) {
   const { id } = await params;
   try {
+    const caller = await requireAuth(req);
+
+    // Verify the target user belongs to the caller's organization.
+    const existing = await prisma.user.findFirst({
+      where: { id, organizationId: caller.organizationId },
+      select: { id: true },
+    });
+    if (!existing) throw new ApiError("User not found", 404);
+
     const { name, email, role, isActive, avatarUrl } = await req.json();
 
     const user = await prisma.user.update({
@@ -27,18 +38,25 @@ export async function PATCH(
 
     return NextResponse.json(user);
   } catch (error) {
-    console.error("[PATCH /api/users/[id]]", error);
-    return NextResponse.json({ error: "Failed to update user" }, { status: 500 });
+    return handleApiError(error, "PATCH /api/users/[id]");
   }
 }
 
 // DELETE /api/users/[id] — soft-delete (set isActive = false)
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
   try {
+    const caller = await requireAuth(req);
+
+    const existing = await prisma.user.findFirst({
+      where: { id, organizationId: caller.organizationId },
+      select: { id: true },
+    });
+    if (!existing) throw new ApiError("User not found", 404);
+
     const user = await prisma.user.update({
       where: { id },
       data: { isActive: false },
@@ -46,7 +64,6 @@ export async function DELETE(
     });
     return NextResponse.json(user);
   } catch (error) {
-    console.error("[DELETE /api/users/[id]]", error);
-    return NextResponse.json({ error: "Failed to deactivate user" }, { status: 500 });
+    return handleApiError(error, "DELETE /api/users/[id]");
   }
 }

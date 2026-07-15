@@ -1,11 +1,15 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
+import { handleApiError } from "@/lib/api-errors";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const user = await requireAuth(req);
+    const orgId = user.organizationId;
+
     const now      = new Date();
     const today    = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const tomorrow = new Date(today.getTime() + 86400000);
     const week     = new Date(today.getTime() + 7 * 86400000);
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
@@ -31,32 +35,34 @@ export async function GET() {
       // Project counts by status
       prisma.project.groupBy({
         by: ["status"],
+        where: { organizationId: orgId },
         _count: { id: true },
       }),
 
       // All task counts by status (excluding deleted)
       prisma.task.groupBy({
         by: ["status"],
-        where: { deletedAt: null },
+        where: { organizationId: orgId, deletedAt: null },
         _count: { id: true },
       }),
 
       // Active client count
-      prisma.client.count({ where: { status: "ACTIVE" } }),
+      prisma.client.count({ where: { organizationId: orgId, status: "ACTIVE" } }),
 
       // Quotation pipeline value (draft + sent + approved)
       prisma.quotation.aggregate({
-        where: { status: { in: ["DRAFT", "SENT", "APPROVED"] } },
+        where: { organizationId: orgId, status: { in: ["DRAFT", "SENT", "APPROVED"] } },
         _sum: { total: true },
         _count: { id: true },
       }),
 
       // Files waiting for review
-      prisma.file.count({ where: { status: "IN_REVIEW" } }),
+      prisma.file.count({ where: { organizationId: orgId, status: "IN_REVIEW" } }),
 
       // Overdue tasks (dueDate past + not done)
       prisma.task.findMany({
         where: {
+          organizationId: orgId,
           dueDate: { lt: today },
           status: { notIn: ["DONE"] },
           deletedAt: null,
@@ -72,6 +78,7 @@ export async function GET() {
       // Tasks due in next 7 days (not done)
       prisma.task.findMany({
         where: {
+          organizationId: orgId,
           dueDate: { gte: today, lte: week },
           status: { notIn: ["DONE"] },
           deletedAt: null,
@@ -87,6 +94,7 @@ export async function GET() {
       // Projects ending in next 14 days (not completed)
       prisma.project.findMany({
         where: {
+          organizationId: orgId,
           endDate: { gte: today, lte: new Date(today.getTime() + 14 * 86400000) },
           status: { notIn: ["COMPLETED", "CANCELLED"] },
         },
@@ -100,7 +108,7 @@ export async function GET() {
 
       // Active projects with task counts for health display
       prisma.project.findMany({
-        where: { status: { in: ["ACTIVE", "ON_HOLD", "DRAFT"] } },
+        where: { organizationId: orgId, status: { in: ["ACTIVE", "ON_HOLD", "DRAFT"] } },
         select: {
           id: true, name: true, status: true, startDate: true, endDate: true,
           client: { select: { id: true, name: true } },
@@ -116,6 +124,7 @@ export async function GET() {
       // Tasks completed this month
       prisma.task.count({
         where: {
+          organizationId: orgId,
           status: "DONE",
           updatedAt: { gte: monthStart },
           deletedAt: null,
@@ -125,6 +134,7 @@ export async function GET() {
       // Total tasks updated this month (for completion rate)
       prisma.task.count({
         where: {
+          organizationId: orgId,
           updatedAt: { gte: monthStart },
           deletedAt: null,
         },
@@ -132,7 +142,7 @@ export async function GET() {
 
       // Recent task completions (activity feed)
       prisma.task.findMany({
-        where: { status: "DONE", deletedAt: null },
+        where: { organizationId: orgId, status: "DONE", deletedAt: null },
         select: {
           id: true, title: true, updatedAt: true, priority: true,
           project: { select: { id: true, name: true } },
@@ -143,6 +153,7 @@ export async function GET() {
 
       // Recently uploaded files (activity feed)
       prisma.file.findMany({
+        where: { organizationId: orgId },
         select: {
           id: true, name: true, mimeCategory: true, createdAt: true,
           project: { select: { id: true, name: true } },
@@ -152,8 +163,9 @@ export async function GET() {
         take: 5,
       }),
 
-      // Recent file comments (activity feed)
+      // Recent file comments (activity feed) — org-scope through the parent file.
       prisma.fileComment.findMany({
+        where: { file: { organizationId: orgId } },
         select: {
           id: true, body: true, authorName: true, createdAt: true,
           file: { select: { id: true, name: true } },
@@ -165,6 +177,7 @@ export async function GET() {
       // Expense totals this month (excluding REJECTED)
       prisma.expense.aggregate({
         where: {
+          organizationId: orgId,
           status: { not: "REJECTED" },
           date: { gte: monthStart },
         },
@@ -173,7 +186,7 @@ export async function GET() {
       }),
 
       // Pending expenses count
-      prisma.expense.count({ where: { status: "PENDING" } }),
+      prisma.expense.count({ where: { organizationId: orgId, status: "PENDING" } }),
     ]);
 
     // ── Compute stats ─────────────────────────────────────────
@@ -270,7 +283,7 @@ export async function GET() {
 
     // Sent quotations awaiting response
     const sentQuotations = await prisma.quotation.findMany({
-      where: { status: "SENT" },
+      where: { organizationId: orgId, status: "SENT" },
       select: { id: true, title: true, validUntil: true, number: true },
       orderBy: { createdAt: "asc" },
       take: 3,
@@ -289,7 +302,7 @@ export async function GET() {
 
     // Blocked tasks
     const blockedTasks = await prisma.task.findMany({
-      where: { status: "BLOCKED", deletedAt: null },
+      where: { organizationId: orgId, status: "BLOCKED", deletedAt: null },
       select: {
         id: true, title: true,
         project: { select: { id: true, name: true } },
@@ -401,7 +414,6 @@ export async function GET() {
       recentActivity: feed,
     });
   } catch (e) {
-    console.error(e);
-    return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
+    return handleApiError(e, "GET /api/dashboard");
   }
 }

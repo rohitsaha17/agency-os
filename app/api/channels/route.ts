@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
+import { handleApiError, ApiError } from "@/lib/api-errors";
 
 const CHANNEL_SELECT = {
   id: true, name: true, description: true, type: true,
@@ -27,6 +29,7 @@ function serialize(ch: Record<string, unknown>) {
 // GET /api/channels  — list channels (optionally filter by projectId / clientId / type)
 export async function GET(req: NextRequest) {
   try {
+    const user = await requireAuth(req);
     const { searchParams } = new URL(req.url);
     const projectId = searchParams.get("projectId") ?? undefined;
     const clientId  = searchParams.get("clientId")  ?? undefined;
@@ -34,6 +37,7 @@ export async function GET(req: NextRequest) {
 
     const channels = await prisma.channel.findMany({
       where: {
+        organizationId: user.organizationId,
         isArchived: false,
         ...(projectId && { projectId }),
         ...(clientId  && { clientId  }),
@@ -45,19 +49,36 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json(channels.map(serialize));
   } catch (err) {
-    console.error("[GET /api/channels]", err);
-    return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
+    return handleApiError(err, "GET /api/channels");
   }
 }
 
 // POST /api/channels — create a channel
 export async function POST(req: NextRequest) {
   try {
+    const user = await requireAuth(req);
     const { name, description, type, projectId, clientId, memberIds } = await req.json();
-    if (!name?.trim()) return NextResponse.json({ error: "Channel name is required" }, { status: 400 });
+    if (!name?.trim()) throw new ApiError("Channel name is required", 400);
+
+    // Verify any referenced project/client belong to the caller's org.
+    if (projectId) {
+      const p = await prisma.project.findFirst({
+        where: { id: projectId, organizationId: user.organizationId },
+        select: { id: true },
+      });
+      if (!p) throw new ApiError("Project not found", 404);
+    }
+    if (clientId) {
+      const c = await prisma.client.findFirst({
+        where: { id: clientId, organizationId: user.organizationId },
+        select: { id: true },
+      });
+      if (!c) throw new ApiError("Client not found", 404);
+    }
 
     const channel = await prisma.channel.create({
       data: {
+        organizationId: user.organizationId,
         name: name.trim(),
         description: description?.trim() || null,
         type: type || "GENERAL",
@@ -72,7 +93,6 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(serialize(channel as unknown as Record<string, unknown>), { status: 201 });
   } catch (err) {
-    console.error("[POST /api/channels]", err);
-    return NextResponse.json({ error: "Failed to create channel" }, { status: 500 });
+    return handleApiError(err, "POST /api/channels");
   }
 }

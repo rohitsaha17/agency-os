@@ -1,14 +1,34 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
+import { handleApiError, ApiError } from "@/lib/api-errors";
 
 type Params = { params: Promise<{ id: string }> };
+
+async function assertContractInOrg(contractId: string, organizationId: string) {
+  const contract = await prisma.contract.findFirst({
+    where: { id: contractId, organizationId },
+    select: { id: true },
+  });
+  if (!contract) throw new ApiError("Contract not found", 404);
+}
 
 // POST /api/contracts/[id]/sign — mark a party as signed
 export async function POST(req: NextRequest, { params }: Params) {
   const { id: contractId } = await params;
   try {
+    const user = await requireAuth(req);
+    await assertContractInOrg(contractId, user.organizationId);
+
     const { partyId, signatureNote } = await req.json();
-    if (!partyId) return NextResponse.json({ error: "partyId is required" }, { status: 400 });
+    if (!partyId) throw new ApiError("partyId is required", 400);
+
+    // Verify the party belongs to THIS contract.
+    const party = await prisma.contractParty.findFirst({
+      where: { id: partyId, contractId },
+      select: { id: true },
+    });
+    if (!party) throw new ApiError("Party not found", 404);
 
     await prisma.contractParty.update({
       where: { id: partyId },
@@ -44,8 +64,7 @@ export async function POST(req: NextRequest, { params }: Params) {
 
     return NextResponse.json(contract);
   } catch (error) {
-    console.error("[POST /api/contracts/[id]/sign]", error);
-    return NextResponse.json({ error: "Failed to record signature" }, { status: 500 });
+    return handleApiError(error, "POST /api/contracts/[id]/sign");
   }
 }
 
@@ -53,8 +72,17 @@ export async function POST(req: NextRequest, { params }: Params) {
 export async function DELETE(req: NextRequest, { params }: Params) {
   const { id: contractId } = await params;
   try {
+    const user = await requireAuth(req);
+    await assertContractInOrg(contractId, user.organizationId);
+
     const { partyId } = await req.json();
-    if (!partyId) return NextResponse.json({ error: "partyId is required" }, { status: 400 });
+    if (!partyId) throw new ApiError("partyId is required", 400);
+
+    const party = await prisma.contractParty.findFirst({
+      where: { id: partyId, contractId },
+      select: { id: true },
+    });
+    if (!party) throw new ApiError("Party not found", 404);
 
     await prisma.contractParty.update({
       where: { id: partyId },
@@ -82,7 +110,6 @@ export async function DELETE(req: NextRequest, { params }: Params) {
     });
     return NextResponse.json(contract);
   } catch (error) {
-    console.error("[DELETE /api/contracts/[id]/sign]", error);
-    return NextResponse.json({ error: "Failed to remove signature" }, { status: 500 });
+    return handleApiError(error, "DELETE /api/contracts/[id]/sign");
   }
 }

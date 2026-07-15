@@ -1,13 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
+import { handleApiError, ApiError } from "@/lib/api-errors";
 
 type Params = { params: Promise<{ id: string; commentId: string }> };
+
+async function assertCommentInOrg(
+  commentId: string,
+  fileId: string,
+  organizationId: string
+) {
+  const comment = await prisma.fileComment.findFirst({
+    where: { id: commentId, fileId, file: { organizationId } },
+    select: { id: true },
+  });
+  if (!comment) throw new ApiError("Comment not found", 404);
+}
 
 // ── PATCH /api/files/[id]/comments/[commentId] ─────────────────
 
 export async function PATCH(req: NextRequest, { params }: Params) {
   try {
-    const { commentId } = await params;
+    const user = await requireAuth(req);
+    const { id, commentId } = await params;
+    await assertCommentInOrg(commentId, id, user.organizationId);
+
     const body = await req.json();
 
     const { status, body: commentBody } = body as {
@@ -35,26 +52,21 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
     return NextResponse.json(updated);
   } catch (err) {
-    console.error("[PATCH /api/files/.../comments/[commentId]]", err);
-    return NextResponse.json(
-      { error: "Failed to update comment" },
-      { status: 500 }
-    );
+    return handleApiError(err, "PATCH /api/files/[id]/comments/[commentId]");
   }
 }
 
 // ── DELETE /api/files/[id]/comments/[commentId] ────────────────
 
-export async function DELETE(_req: NextRequest, { params }: Params) {
+export async function DELETE(req: NextRequest, { params }: Params) {
   try {
-    const { commentId } = await params;
+    const user = await requireAuth(req);
+    const { id, commentId } = await params;
+    await assertCommentInOrg(commentId, id, user.organizationId);
+
     await prisma.fileComment.delete({ where: { id: commentId } });
     return NextResponse.json({ success: true });
   } catch (err) {
-    console.error("[DELETE /api/files/.../comments/[commentId]]", err);
-    return NextResponse.json(
-      { error: "Failed to delete comment" },
-      { status: 500 }
-    );
+    return handleApiError(err, "DELETE /api/files/[id]/comments/[commentId]");
   }
 }

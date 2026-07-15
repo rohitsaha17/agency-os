@@ -6,7 +6,7 @@ import { checkRateLimit, WRITE_RATE_LIMITS } from "@/lib/rate-limit";
 
 export async function GET(req: NextRequest) {
   try {
-    await requireAuth(req);
+    const user = await requireAuth(req);
 
     const { searchParams } = new URL(req.url);
     const type          = searchParams.get("type");
@@ -18,6 +18,7 @@ export async function GET(req: NextRequest) {
 
     const contracts = await prisma.contract.findMany({
       where: {
+        organizationId: user.organizationId,
         ...(type      ? { type:     type   as never } : {}),
         ...(status    ? { status:   status as never } : {}),
         ...(clientId  ? { clientId }  : {}),
@@ -60,6 +61,7 @@ export async function POST(req: NextRequest) {
 
     const contract = await prisma.contract.create({
       data: {
+        organizationId: user.organizationId,
         title:     title.trim(),
         type:      type || "NDA",
         status:    "DRAFT",

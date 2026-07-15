@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
+import { handleApiError, ApiError } from "@/lib/api-errors";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -23,11 +25,12 @@ function computeTotals(
 
 // ── GET ──────────────────────────────────────────────────────
 
-export async function GET(_req: Request, { params }: Params) {
+export async function GET(req: Request, { params }: Params) {
   try {
+    const user = await requireAuth(req);
     const { id } = await params;
-    const quotation = await prisma.quotation.findUnique({
-      where: { id },
+    const quotation = await prisma.quotation.findFirst({
+      where: { id, organizationId: user.organizationId },
       include: {
         client: { select: { id: true, name: true, companyName: true, email: true, logoUrl: true } },
         lineItems: { orderBy: { order: "asc" } },
@@ -35,10 +38,10 @@ export async function GET(_req: Request, { params }: Params) {
       },
     });
 
-    if (!quotation) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (!quotation) throw new ApiError("Not found", 404);
     return NextResponse.json(quotation);
-  } catch {
-    return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
+  } catch (error) {
+    return handleApiError(error, "GET /api/quotations/[id]");
   }
 }
 
@@ -46,7 +49,16 @@ export async function GET(_req: Request, { params }: Params) {
 
 export async function PATCH(req: Request, { params }: Params) {
   try {
+    const user = await requireAuth(req);
     const { id } = await params;
+
+    // Verify org ownership before mutating.
+    const existing = await prisma.quotation.findFirst({
+      where: { id, organizationId: user.organizationId },
+      select: { id: true, discountType: true, discountValue: true, taxRate: true },
+    });
+    if (!existing) throw new ApiError("Not found", 404);
+
     const body = await req.json();
     const {
       title, description, pricingType, validUntil,
@@ -74,15 +86,13 @@ export async function PATCH(req: Request, { params }: Params) {
         order: i,
       }));
 
-      const disc = discountType !== undefined
-        ? discountType
-        : (await prisma.quotation.findUnique({ where: { id }, select: { discountType: true } }))?.discountType ?? null;
+      const disc = discountType !== undefined ? discountType : existing.discountType ?? null;
       const discVal = discountValue !== undefined
         ? parseFloat(discountValue) || 0
-        : Number((await prisma.quotation.findUnique({ where: { id }, select: { discountValue: true } }))?.discountValue ?? 0);
+        : Number(existing.discountValue ?? 0);
       const tax = taxRate !== undefined
         ? parseFloat(taxRate) || 0
-        : Number((await prisma.quotation.findUnique({ where: { id }, select: { taxRate: true } }))?.taxRate ?? 0);
+        : Number(existing.taxRate ?? 0);
 
       const totals = computeTotals(parsedItems, disc, discVal, tax);
       subtotalVal = totals.subtotal;
@@ -120,20 +130,27 @@ export async function PATCH(req: Request, { params }: Params) {
     });
 
     return NextResponse.json(updated);
-  } catch (e) {
-    console.error(e);
-    return NextResponse.json({ error: "Failed to update quotation" }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error, "PATCH /api/quotations/[id]");
   }
 }
 
 // ── DELETE ────────────────────────────────────────────────────
 
-export async function DELETE(_req: Request, { params }: Params) {
+export async function DELETE(req: Request, { params }: Params) {
   try {
+    const user = await requireAuth(req);
     const { id } = await params;
+
+    const existing = await prisma.quotation.findFirst({
+      where: { id, organizationId: user.organizationId },
+      select: { id: true },
+    });
+    if (!existing) throw new ApiError("Not found", 404);
+
     await prisma.quotation.delete({ where: { id } });
     return NextResponse.json({ ok: true });
-  } catch {
-    return NextResponse.json({ error: "Failed to delete quotation" }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error, "DELETE /api/quotations/[id]");
   }
 }

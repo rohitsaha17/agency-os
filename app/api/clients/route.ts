@@ -8,7 +8,7 @@ import { checkRateLimit, WRITE_RATE_LIMITS } from "@/lib/rate-limit";
 // GET /api/clients — list all clients with optional search + status filter
 export async function GET(req: NextRequest) {
   try {
-    await requireAuth(req);
+    const user = await requireAuth(req);
 
     const { searchParams } = new URL(req.url);
     const search = searchParams.get("q") ?? "";
@@ -16,6 +16,7 @@ export async function GET(req: NextRequest) {
     const pagination = parsePagination(searchParams);
 
     const where = {
+      organizationId: user.organizationId,
       ...(search && {
         OR: [
           { name: { contains: search, mode: "insensitive" as const } },
@@ -91,6 +92,7 @@ export async function POST(req: NextRequest) {
     const client = await prisma.$transaction(async (tx) => {
       const created = await tx.client.create({
         data: {
+          organizationId: user.organizationId,
           name: company, // entity identifier = company name
           companyName: company,
           email: contactEmail || null,

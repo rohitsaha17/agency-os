@@ -1,17 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
+import { handleApiError, ApiError } from "@/lib/api-errors";
 
 // ── GET /api/folders ──────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
   try {
+    const user = await requireAuth(req);
     const { searchParams } = new URL(req.url);
     const projectId = searchParams.get("projectId") ?? undefined;
     const clientId = searchParams.get("clientId") ?? undefined;
     const scope = searchParams.get("scope") ?? undefined;
     const parentId = searchParams.get("parentId"); // null string means root
 
-    const where: Record<string, unknown> = {};
+    const where: Record<string, unknown> = {
+      organizationId: user.organizationId,
+    };
 
     if (projectId) where.projectId = projectId;
     if (clientId) where.clientId = clientId;
@@ -38,11 +43,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json(folders);
   } catch (err) {
-    console.error("[GET /api/folders]", err);
-    return NextResponse.json(
-      { error: "Failed to fetch folders" },
-      { status: 500 }
-    );
+    return handleApiError(err, "GET /api/folders");
   }
 }
 
@@ -50,6 +51,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const user = await requireAuth(req);
     const body = await req.json();
     const { name, scope, parentId, projectId, clientId, description, color } =
       body as {
@@ -63,14 +65,35 @@ export async function POST(req: NextRequest) {
       };
 
     if (!name || !name.trim()) {
-      return NextResponse.json(
-        { error: "Folder name is required" },
-        { status: 400 }
-      );
+      throw new ApiError("Folder name is required", 400);
+    }
+
+    // Verify any referenced parent/project/client belong to the caller's org.
+    if (parentId) {
+      const parent = await prisma.folder.findFirst({
+        where: { id: parentId, organizationId: user.organizationId },
+        select: { id: true },
+      });
+      if (!parent) throw new ApiError("Parent folder not found", 404);
+    }
+    if (projectId) {
+      const p = await prisma.project.findFirst({
+        where: { id: projectId, organizationId: user.organizationId },
+        select: { id: true },
+      });
+      if (!p) throw new ApiError("Project not found", 404);
+    }
+    if (clientId) {
+      const c = await prisma.client.findFirst({
+        where: { id: clientId, organizationId: user.organizationId },
+        select: { id: true },
+      });
+      if (!c) throw new ApiError("Client not found", 404);
     }
 
     const folder = await prisma.folder.create({
       data: {
+        organizationId: user.organizationId,
         name: name.trim(),
         scope: (scope as "PROJECT" | "CLIENT" | "COMMON") ?? "PROJECT",
         parentId: parentId || undefined,
@@ -88,10 +111,6 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(folder, { status: 201 });
   } catch (err) {
-    console.error("[POST /api/folders]", err);
-    return NextResponse.json(
-      { error: "Failed to create folder" },
-      { status: 500 }
-    );
+    return handleApiError(err, "POST /api/folders");
   }
 }

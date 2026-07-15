@@ -1,16 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
+import { handleApiError, ApiError } from "@/lib/api-errors";
 
 type Params = { params: Promise<{ id: string }> };
 
 // ── GET /api/folders/[id] ─────────────────────────────────────
 
-export async function GET(_req: NextRequest, { params }: Params) {
+export async function GET(req: NextRequest, { params }: Params) {
   try {
+    const user = await requireAuth(req);
     const { id } = await params;
 
-    const folder = await prisma.folder.findUnique({
-      where: { id },
+    const folder = await prisma.folder.findFirst({
+      where: { id, organizationId: user.organizationId },
       include: {
         project: { select: { id: true, name: true } },
         client: { select: { id: true, name: true } },
@@ -41,19 +44,12 @@ export async function GET(_req: NextRequest, { params }: Params) {
     });
 
     if (!folder) {
-      return NextResponse.json(
-        { error: "Folder not found" },
-        { status: 404 }
-      );
+      throw new ApiError("Folder not found", 404);
     }
 
     return NextResponse.json(folder);
   } catch (err) {
-    console.error("[GET /api/folders/[id]]", err);
-    return NextResponse.json(
-      { error: "Failed to fetch folder" },
-      { status: 500 }
-    );
+    return handleApiError(err, "GET /api/folders/[id]");
   }
 }
 
@@ -61,7 +57,15 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
 export async function PATCH(req: NextRequest, { params }: Params) {
   try {
+    const user = await requireAuth(req);
     const { id } = await params;
+
+    const existing = await prisma.folder.findFirst({
+      where: { id, organizationId: user.organizationId },
+      select: { id: true },
+    });
+    if (!existing) throw new ApiError("Folder not found", 404);
+
     const body = await req.json();
 
     const { name, description, color, parentId } = body as {
@@ -70,6 +74,15 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       color?: string | null;
       parentId?: string | null;
     };
+
+    // Verify moved parent is also in the caller's org (if reparenting).
+    if (parentId) {
+      const parent = await prisma.folder.findFirst({
+        where: { id: parentId, organizationId: user.organizationId },
+        select: { id: true },
+      });
+      if (!parent) throw new ApiError("Parent folder not found", 404);
+    }
 
     const folder = await prisma.folder.update({
       where: { id },
@@ -90,39 +103,27 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     });
 
     return NextResponse.json(folder);
-  } catch (err: unknown) {
-    if ((err as { code?: string }).code === "P2025") {
-      return NextResponse.json(
-        { error: "Folder not found" },
-        { status: 404 }
-      );
-    }
-    console.error("[PATCH /api/folders/[id]]", err);
-    return NextResponse.json(
-      { error: "Failed to update folder" },
-      { status: 500 }
-    );
+  } catch (err) {
+    return handleApiError(err, "PATCH /api/folders/[id]");
   }
 }
 
 // ── DELETE /api/folders/[id] ──────────────────────────────────
 
-export async function DELETE(_req: NextRequest, { params }: Params) {
+export async function DELETE(req: NextRequest, { params }: Params) {
   try {
+    const user = await requireAuth(req);
     const { id } = await params;
+
+    const existing = await prisma.folder.findFirst({
+      where: { id, organizationId: user.organizationId },
+      select: { id: true },
+    });
+    if (!existing) throw new ApiError("Folder not found", 404);
+
     await prisma.folder.delete({ where: { id } });
     return NextResponse.json({ success: true });
-  } catch (err: unknown) {
-    if ((err as { code?: string }).code === "P2025") {
-      return NextResponse.json(
-        { error: "Folder not found" },
-        { status: 404 }
-      );
-    }
-    console.error("[DELETE /api/folders/[id]]", err);
-    return NextResponse.json(
-      { error: "Failed to delete folder" },
-      { status: 500 }
-    );
+  } catch (err) {
+    return handleApiError(err, "DELETE /api/folders/[id]");
   }
 }

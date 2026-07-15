@@ -21,11 +21,11 @@ const MAX_RECURSION_DEPTH = 10;
 // GET /api/tasks/[id] — fetch single task with all relations
 export async function GET(req: NextRequest, { params }: Params) {
   try {
-    await requireAuth(req);
+    const user = await requireAuth(req);
     const { id } = await params;
 
-    const task = await prisma.task.findUnique({
-      where: { id, deletedAt: null },
+    const task = await prisma.task.findFirst({
+      where: { id, deletedAt: null, organizationId: user.organizationId },
       include: TASK_INCLUDE,
     });
     if (!task) throw new ApiError("Task not found", 404);
@@ -38,8 +38,15 @@ export async function GET(req: NextRequest, { params }: Params) {
 // PATCH /api/tasks/[id] — update task fields and/or assignees
 export async function PATCH(req: NextRequest, { params }: Params) {
   try {
-    await requireAuth(req);
+    const user = await requireAuth(req);
     const { id } = await params;
+
+    // Verify the task belongs to the caller's org before mutating.
+    const existing = await prisma.task.findFirst({
+      where: { id, deletedAt: null, organizationId: user.organizationId },
+      select: { id: true },
+    });
+    if (!existing) throw new ApiError("Task not found", 404);
 
     const body = await req.json();
     const {
@@ -50,7 +57,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     } = body;
 
     const task = await prisma.task.update({
-      where: { id, deletedAt: null },
+      where: { id },
       data: {
         ...(title       !== undefined && { title: title.trim() }),
         ...(description !== undefined && { description: description?.trim() || null }),
@@ -99,6 +106,13 @@ export async function DELETE(req: NextRequest, { params }: Params) {
     const user = await requireAuth(req);
     requireRole(user, ["ADMIN", "MANAGER"]);
     const { id } = await params;
+
+    // Verify org ownership before deleting.
+    const existing = await prisma.task.findFirst({
+      where: { id, deletedAt: null, organizationId: user.organizationId },
+      select: { id: true },
+    });
+    if (!existing) throw new ApiError("Task not found", 404);
 
     // Soft-delete this task and all its descendants
     await softDeleteDescendants(id, 0);

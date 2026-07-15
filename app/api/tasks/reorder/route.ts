@@ -1,12 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
+import { handleApiError, ApiError } from "@/lib/api-errors";
 
 // POST /api/tasks/reorder — update order for a list of task IDs
 export async function POST(req: NextRequest) {
   try {
+    const user = await requireAuth(req);
     const { taskIds } = await req.json();
     if (!Array.isArray(taskIds)) {
-      return NextResponse.json({ error: "taskIds must be an array" }, { status: 400 });
+      throw new ApiError("taskIds must be an array", 400);
+    }
+
+    // Verify every task belongs to the caller's org before reordering — otherwise
+    // a caller could probe/reorder ids from other tenants by submitting a mixed batch.
+    if (taskIds.length > 0) {
+      const owned = await prisma.task.count({
+        where: { id: { in: taskIds }, organizationId: user.organizationId },
+      });
+      if (owned !== taskIds.length) {
+        throw new ApiError("One or more tasks not found", 404);
+      }
     }
 
     await prisma.$transaction(
@@ -17,7 +31,6 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("[POST /api/tasks/reorder]", error);
-    return NextResponse.json({ error: "Failed to reorder tasks" }, { status: 500 });
+    return handleApiError(error, "POST /api/tasks/reorder");
   }
 }

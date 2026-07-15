@@ -15,10 +15,13 @@ const INCLUDE = {
 
 export async function GET(req: NextRequest, { params }: Params) {
   try {
-    await requireAuth(req);
+    const user = await requireAuth(req);
     const { id } = await params;
 
-    const invoice = await prisma.invoice.findUnique({ where: { id }, include: INCLUDE });
+    const invoice = await prisma.invoice.findFirst({
+      where: { id, organizationId: user.organizationId },
+      include: INCLUDE,
+    });
     if (!invoice) throw new ApiError("Invoice not found", 404);
     return NextResponse.json(invoice);
   } catch (error) {
@@ -36,6 +39,14 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     if (!rl.allowed) return apiError("Too many requests, please slow down", 429);
 
     const { id } = await params;
+
+    // Verify org ownership before mutating.
+    const existing = await prisma.invoice.findFirst({
+      where: { id, organizationId: user.organizationId },
+      select: { id: true },
+    });
+    if (!existing) throw new ApiError("Invoice not found", 404);
+
     const body = await req.json();
     const { status, dueDate, currency, discountPct, taxPct, notes, paidAt, lineItems } = body;
 
@@ -86,6 +97,13 @@ export async function DELETE(req: NextRequest, { params }: Params) {
     const user = await requireAuth(req);
     requireRole(user, ["ADMIN", "MANAGER"]);
     const { id } = await params;
+
+    // Verify org ownership before deleting.
+    const existing = await prisma.invoice.findFirst({
+      where: { id, organizationId: user.organizationId },
+      select: { id: true },
+    });
+    if (!existing) throw new ApiError("Invoice not found", 404);
 
     await prisma.invoice.delete({ where: { id } });
     return NextResponse.json({ success: true });

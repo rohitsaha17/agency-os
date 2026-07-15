@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
+import { handleApiError, ApiError } from "@/lib/api-errors";
 
 const expenseInclude = {
   project:     { select: { id: true, name: true, clientId: true } },
@@ -9,20 +11,22 @@ const expenseInclude = {
 };
 
 export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  const projectId     = searchParams.get("projectId");
-  const clientId      = searchParams.get("clientId");
-  const stakeholderId = searchParams.get("stakeholderId");
-  const category      = searchParams.get("category");
-  const status        = searchParams.get("status");
-  const search        = searchParams.get("search");
-  // When `clientId` is provided we want ALL expenses for that client —
-  // either tagged directly OR tagged to a project that belongs to the client.
-  // Opt-in via `?clientId=xxx&includeProjectExpenses=1`.
-  const includeProjectExpenses = searchParams.get("includeProjectExpenses") === "1";
-
   try {
+    const user = await requireAuth(req);
+    const { searchParams } = new URL(req.url);
+    const projectId     = searchParams.get("projectId");
+    const clientId      = searchParams.get("clientId");
+    const stakeholderId = searchParams.get("stakeholderId");
+    const category      = searchParams.get("category");
+    const status        = searchParams.get("status");
+    const search        = searchParams.get("search");
+    // When `clientId` is provided we want ALL expenses for that client —
+    // either tagged directly OR tagged to a project that belongs to the client.
+    // Opt-in via `?clientId=xxx&includeProjectExpenses=1`.
+    const includeProjectExpenses = searchParams.get("includeProjectExpenses") === "1";
+
     const where: Record<string, unknown> = {
+      organizationId: user.organizationId,
       ...(projectId     ? { projectId }     : {}),
       ...(stakeholderId ? { stakeholderId } : {}),
       ...(category ? { category: category as never } : {}),
@@ -48,13 +52,13 @@ export async function GET(req: NextRequest) {
     });
     return NextResponse.json(expenses);
   } catch (error) {
-    console.error("[GET /api/expenses]", error);
-    return NextResponse.json({ error: "Failed to load expenses" }, { status: 500 });
+    return handleApiError(error, "GET /api/expenses");
   }
 }
 
 export async function POST(req: NextRequest) {
   try {
+    const user = await requireAuth(req);
     const body = await req.json();
     const {
       title, description, category, amount, currency,
@@ -62,11 +66,35 @@ export async function POST(req: NextRequest) {
       isReimbursable, receiptUrl, notes,
     } = body;
 
-    if (!title?.trim()) return NextResponse.json({ error: "Title is required" }, { status: 400 });
-    if (!amount || isNaN(parseFloat(amount))) return NextResponse.json({ error: "Valid amount is required" }, { status: 400 });
+    if (!title?.trim()) throw new ApiError("Title is required", 400);
+    if (!amount || isNaN(parseFloat(amount))) throw new ApiError("Valid amount is required", 400);
+
+    // If linking to project/client/stakeholder, confirm each is in the caller's org.
+    if (projectId) {
+      const p = await prisma.project.findFirst({
+        where: { id: projectId, organizationId: user.organizationId },
+        select: { id: true },
+      });
+      if (!p) throw new ApiError("Project not found", 404);
+    }
+    if (clientId) {
+      const c = await prisma.client.findFirst({
+        where: { id: clientId, organizationId: user.organizationId },
+        select: { id: true },
+      });
+      if (!c) throw new ApiError("Client not found", 404);
+    }
+    if (stakeholderId) {
+      const s = await prisma.stakeholder.findFirst({
+        where: { id: stakeholderId, organizationId: user.organizationId },
+        select: { id: true },
+      });
+      if (!s) throw new ApiError("Stakeholder not found", 404);
+    }
 
     const expense = await prisma.expense.create({
       data: {
+        organizationId: user.organizationId,
         title:          title.trim(),
         description:    description?.trim() || null,
         category:       category || "OTHER",
@@ -86,7 +114,6 @@ export async function POST(req: NextRequest) {
     });
     return NextResponse.json(expense, { status: 201 });
   } catch (error) {
-    console.error("[POST /api/expenses]", error);
-    return NextResponse.json({ error: "Failed to create expense" }, { status: 500 });
+    return handleApiError(error, "POST /api/expenses");
   }
 }

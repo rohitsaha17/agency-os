@@ -169,7 +169,7 @@ function CompanyTab({
       if (res.ok) {
         const data = await res.json();
         onSaved(data);
-        toast.success("Company settings saved");
+        toast.success("Organization settings saved");
       } else {
         const d = await res.json();
         toast.error(d.error ?? "Failed to save settings");
@@ -232,7 +232,7 @@ function CompanyTab({
   return (
     <div className="space-y-6">
       {/* Brand */}
-      <SectionCard title="Brand Identity" desc="Your agency's name and logo — shown across the platform">
+      <SectionCard title="Organization Identity" desc="Your agency's name and logo — shown across the platform and on every PDF (invoices, quotations, contracts)">
         <div className="flex items-start gap-6 mb-4">
           <div className="flex-shrink-0">
             <div
@@ -286,7 +286,7 @@ function CompanyTab({
             )}
           </div>
           <div className="flex-1 space-y-3">
-            <Field label="Agency / Company Name">
+            <Field label="Organization / Agency Name">
               <Input value={form.name ?? ""} onChange={(e) => set("name", e.target.value)} placeholder="Vibrnd Creative Studio" />
             </Field>
             <Field label="Logo URL" hint="Or paste a direct URL to your logo">
@@ -1294,7 +1294,7 @@ const PERMISSIONS: { area: string; admin: boolean; manager: boolean; member: boo
   { area: "View Files",                 admin: true,  manager: true,  member: true  },
   { area: "Upload / Delete Files",      admin: true,  manager: true,  member: true  },
   { area: "Manage Users",               admin: true,  manager: false, member: false },
-  { area: "Change Company Settings",    admin: true,  manager: false, member: false },
+  { area: "Change Organization Settings", admin: true, manager: false, member: false },
   { area: "View Messages / Channels",   admin: true,  manager: true,  member: true  },
   { area: "Create Channels",            admin: true,  manager: true,  member: false },
 ];
@@ -1349,16 +1349,17 @@ function RolesTab() {
    Main Settings Page
    ───────────────────────────────────────────────────────────── */
 const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
-  { id: "company",     label: "Company",    icon: Building2 },
-  { id: "letterhead",  label: "Letterhead", icon: FileText  },
-  { id: "users",       label: "Users",      icon: Users     },
-  { id: "roles",       label: "Roles",      icon: Shield    },
+  { id: "company",     label: "Organization", icon: Building2 },
+  { id: "letterhead",  label: "Letterhead",   icon: FileText  },
+  { id: "users",       label: "Users",        icon: Users     },
+  { id: "roles",       label: "Roles",        icon: Shield    },
 ];
 
 const DEFAULT_SETTINGS: CompanySettings = {
-  id: "singleton", name: "My Agency", email: null, phone: null,
+  id: "singleton", name: "My Agency", slug: null, email: null, phone: null,
   website: null, address: null, city: null, country: null, logoUrl: null,
   currency: "USD", timezone: "UTC", dateFormat: "MMM D, YYYY",
+  taxRegistrations: null,
   letterheadLogoUrl: null, letterheadHeader: null, letterheadFooter: null,
   letterheadAddress: null, letterheadPhone: null, letterheadEmail: null,
   letterheadWebsite: null, letterheadColor: "#6366f1", letterheadTemplate: "CLASSIC",

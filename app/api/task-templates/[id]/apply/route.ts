@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
+import { handleApiError, ApiError } from "@/lib/api-errors";
 
 // Inline builtin templates (same data as the list route)
 const BUILTIN_TEMPLATES: Record<string, {
@@ -81,10 +83,18 @@ export async function POST(req: NextRequest, { params }: Params) {
   }
 
   try {
+    const user = await requireAuth(req);
     const { projectId, startDate } = await req.json();
     if (!projectId) {
-      return NextResponse.json({ error: "projectId is required" }, { status: 400 });
+      throw new ApiError("projectId is required", 400);
     }
+
+    // Verify the target project belongs to the caller's org.
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, organizationId: user.organizationId },
+      select: { id: true },
+    });
+    if (!project) throw new ApiError("Project not found", 404);
 
     const baseDate = startDate ? new Date(startDate) : null;
 
@@ -100,6 +110,7 @@ export async function POST(req: NextRequest, { params }: Params) {
         : null;
       const task = await prisma.task.create({
         data: {
+          organizationId: user.organizationId,
           projectId,
           title: item.title,
           priority: item.priority as never,
@@ -119,6 +130,7 @@ export async function POST(req: NextRequest, { params }: Params) {
         : null;
       const task = await prisma.task.create({
         data: {
+          organizationId: user.organizationId,
           projectId,
           parentId: parentId ?? null,
           title: item.title,
@@ -132,7 +144,6 @@ export async function POST(req: NextRequest, { params }: Params) {
 
     return NextResponse.json({ success: true, count: template.items.length });
   } catch (error) {
-    console.error("[POST /api/task-templates/[id]/apply]", error);
-    return NextResponse.json({ error: "Failed to apply template" }, { status: 500 });
+    return handleApiError(error, "POST /api/task-templates/[id]/apply");
   }
 }

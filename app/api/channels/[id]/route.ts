@@ -1,14 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
+import { handleApiError, ApiError } from "@/lib/api-errors";
 
 type Params = { params: Promise<{ id: string }> };
 
 // GET /api/channels/[id]
-export async function GET(_req: NextRequest, { params }: Params) {
+export async function GET(req: NextRequest, { params }: Params) {
   const { id } = await params;
   try {
-    const channel = await prisma.channel.findUnique({
-      where: { id },
+    const user = await requireAuth(req);
+    const channel = await prisma.channel.findFirst({
+      where: { id, organizationId: user.organizationId },
       include: {
         project: { select: { id: true, name: true } },
         client:  { select: { id: true, name: true, companyName: true } },
@@ -19,7 +22,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
         _count: { select: { messages: true, members: true } },
       },
     });
-    if (!channel) return NextResponse.json({ error: "Channel not found" }, { status: 404 });
+    if (!channel) throw new ApiError("Channel not found", 404);
     return NextResponse.json({
       ...channel,
       createdAt: channel.createdAt.toISOString(),
@@ -31,8 +34,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
       })),
     });
   } catch (err) {
-    console.error("[GET /api/channels/[id]]", err);
-    return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
+    return handleApiError(err, "GET /api/channels/[id]");
   }
 }
 
@@ -40,6 +42,13 @@ export async function GET(_req: NextRequest, { params }: Params) {
 export async function PATCH(req: NextRequest, { params }: Params) {
   const { id } = await params;
   try {
+    const user = await requireAuth(req);
+    const existing = await prisma.channel.findFirst({
+      where: { id, organizationId: user.organizationId },
+      select: { id: true },
+    });
+    if (!existing) throw new ApiError("Channel not found", 404);
+
     const { name, description, isArchived } = await req.json();
     const channel = await prisma.channel.update({
       where: { id },
@@ -51,19 +60,24 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     });
     return NextResponse.json({ ...channel, createdAt: channel.createdAt.toISOString(), updatedAt: channel.updatedAt.toISOString() });
   } catch (err) {
-    console.error("[PATCH /api/channels/[id]]", err);
-    return NextResponse.json({ error: "Failed to update channel" }, { status: 500 });
+    return handleApiError(err, "PATCH /api/channels/[id]");
   }
 }
 
 // DELETE /api/channels/[id]
-export async function DELETE(_req: NextRequest, { params }: Params) {
+export async function DELETE(req: NextRequest, { params }: Params) {
   const { id } = await params;
   try {
+    const user = await requireAuth(req);
+    const existing = await prisma.channel.findFirst({
+      where: { id, organizationId: user.organizationId },
+      select: { id: true },
+    });
+    if (!existing) throw new ApiError("Channel not found", 404);
+
     await prisma.channel.delete({ where: { id } });
     return NextResponse.json({ success: true });
   } catch (err) {
-    console.error("[DELETE /api/channels/[id]]", err);
-    return NextResponse.json({ error: "Failed to delete channel" }, { status: 500 });
+    return handleApiError(err, "DELETE /api/channels/[id]");
   }
 }

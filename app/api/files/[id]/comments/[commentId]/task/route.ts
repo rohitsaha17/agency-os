@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
+import { handleApiError, ApiError } from "@/lib/api-errors";
 
 type Params = { params: Promise<{ id: string; commentId: string }> };
 
@@ -8,7 +10,16 @@ type Params = { params: Promise<{ id: string; commentId: string }> };
 
 export async function POST(req: NextRequest, { params }: Params) {
   try {
-    const { commentId } = await params;
+    const user = await requireAuth(req);
+    const { id: fileId, commentId } = await params;
+
+    // Verify the comment (and its file) belong to the caller's org.
+    const comment = await prisma.fileComment.findFirst({
+      where: { id: commentId, fileId, file: { organizationId: user.organizationId } },
+      select: { id: true },
+    });
+    if (!comment) throw new ApiError("Comment not found", 404);
+
     const body = await req.json();
 
     const { title, projectId, priority } = body as {
@@ -18,21 +29,23 @@ export async function POST(req: NextRequest, { params }: Params) {
     };
 
     if (!title?.trim()) {
-      return NextResponse.json(
-        { error: "Task title is required" },
-        { status: 400 }
-      );
+      throw new ApiError("Task title is required", 400);
     }
     if (!projectId) {
-      return NextResponse.json(
-        { error: "projectId is required" },
-        { status: 400 }
-      );
+      throw new ApiError("projectId is required", 400);
     }
+
+    // Verify the target project belongs to the caller's org.
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, organizationId: user.organizationId },
+      select: { id: true },
+    });
+    if (!project) throw new ApiError("Project not found", 404);
 
     // Create the task
     const task = await prisma.task.create({
       data: {
+        organizationId: user.organizationId,
         projectId,
         title: title.trim(),
         priority: priority ?? "MEDIUM",
@@ -51,10 +64,6 @@ export async function POST(req: NextRequest, { params }: Params) {
       { status: 201 }
     );
   } catch (err) {
-    console.error("[POST /api/files/.../comments/[commentId]/task]", err);
-    return NextResponse.json(
-      { error: "Failed to create task from comment" },
-      { status: 500 }
-    );
+    return handleApiError(err, "POST /api/files/[id]/comments/[commentId]/task");
   }
 }

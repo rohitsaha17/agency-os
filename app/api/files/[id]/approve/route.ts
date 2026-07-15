@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
+import { handleApiError, ApiError } from "@/lib/api-errors";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -16,6 +18,7 @@ const ACTION_TO_STATUS: Record<
 
 export async function POST(req: NextRequest, { params }: Params) {
   try {
+    const user = await requireAuth(req);
     const { id } = await params;
     const body = await req.json();
 
@@ -24,14 +27,17 @@ export async function POST(req: NextRequest, { params }: Params) {
     };
 
     if (!action || !ACTION_TO_STATUS[action]) {
-      return NextResponse.json(
-        {
-          error:
-            "Invalid action. Must be one of: approve, request_changes, submit_review",
-        },
-        { status: 400 }
+      throw new ApiError(
+        "Invalid action. Must be one of: approve, request_changes, submit_review",
+        400
       );
     }
+
+    const existing = await prisma.file.findFirst({
+      where: { id, organizationId: user.organizationId },
+      select: { id: true },
+    });
+    if (!existing) throw new ApiError("File not found", 404);
 
     const newStatus = ACTION_TO_STATUS[action];
 
@@ -48,10 +54,6 @@ export async function POST(req: NextRequest, { params }: Params) {
 
     return NextResponse.json(updated);
   } catch (err) {
-    console.error("[POST /api/files/[id]/approve]", err);
-    return NextResponse.json(
-      { error: "Failed to update file status" },
-      { status: 500 }
-    );
+    return handleApiError(err, "POST /api/files/[id]/approve");
   }
 }

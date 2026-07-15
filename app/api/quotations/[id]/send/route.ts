@@ -1,18 +1,21 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
+import { handleApiError, ApiError } from "@/lib/api-errors";
 
-export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const user = await requireAuth(req);
     const { id } = await params;
 
-    const quotation = await prisma.quotation.findUnique({
-      where: { id },
+    const quotation = await prisma.quotation.findFirst({
+      where: { id, organizationId: user.organizationId },
       select: { status: true },
     });
 
-    if (!quotation) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (!quotation) throw new ApiError("Not found", 404);
     if (quotation.status !== "DRAFT") {
-      return NextResponse.json({ error: "Only DRAFT quotations can be sent" }, { status: 400 });
+      throw new ApiError("Only DRAFT quotations can be sent", 400);
     }
 
     const updated = await prisma.quotation.update({
@@ -21,7 +24,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     });
 
     return NextResponse.json(updated);
-  } catch {
-    return NextResponse.json({ error: "Failed to send quotation" }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error, "POST /api/quotations/[id]/send");
   }
 }

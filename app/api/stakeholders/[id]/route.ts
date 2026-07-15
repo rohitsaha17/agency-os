@@ -1,13 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
+import { handleApiError, ApiError } from "@/lib/api-errors";
 
 type Params = { params: Promise<{ id: string }> };
 
-export async function GET(_req: NextRequest, { params }: Params) {
+export async function GET(req: NextRequest, { params }: Params) {
   const { id } = await params;
   try {
-    const stakeholder = await prisma.stakeholder.findUnique({
-      where: { id },
+    const user = await requireAuth(req);
+    const stakeholder = await prisma.stakeholder.findFirst({
+      where: { id, organizationId: user.organizationId },
       include: {
         expenses: {
           orderBy: { date: "desc" },
@@ -24,17 +27,23 @@ export async function GET(_req: NextRequest, { params }: Params) {
         _count: { select: { expenses: true, contracts: true } },
       },
     });
-    if (!stakeholder) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (!stakeholder) throw new ApiError("Not found", 404);
     return NextResponse.json(stakeholder);
   } catch (error) {
-    console.error("[GET /api/stakeholders/[id]]", error);
-    return NextResponse.json({ error: "Failed to load stakeholder" }, { status: 500 });
+    return handleApiError(error, "GET /api/stakeholders/[id]");
   }
 }
 
 export async function PATCH(req: NextRequest, { params }: Params) {
   const { id } = await params;
   try {
+    const user = await requireAuth(req);
+    const existing = await prisma.stakeholder.findFirst({
+      where: { id, organizationId: user.organizationId },
+      select: { id: true },
+    });
+    if (!existing) throw new ApiError("Not found", 404);
+
     const body = await req.json();
     const { name, type, role, email, phone, website, address, skills, currency, defaultRate, notes, isActive } = body;
 
@@ -61,18 +70,23 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     });
     return NextResponse.json(stakeholder);
   } catch (error) {
-    console.error("[PATCH /api/stakeholders/[id]]", error);
-    return NextResponse.json({ error: "Failed to update stakeholder" }, { status: 500 });
+    return handleApiError(error, "PATCH /api/stakeholders/[id]");
   }
 }
 
-export async function DELETE(_req: NextRequest, { params }: Params) {
+export async function DELETE(req: NextRequest, { params }: Params) {
   const { id } = await params;
   try {
+    const user = await requireAuth(req);
+    const existing = await prisma.stakeholder.findFirst({
+      where: { id, organizationId: user.organizationId },
+      select: { id: true },
+    });
+    if (!existing) throw new ApiError("Not found", 404);
+
     await prisma.stakeholder.delete({ where: { id } });
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("[DELETE /api/stakeholders/[id]]", error);
-    return NextResponse.json({ error: "Failed to delete stakeholder" }, { status: 500 });
+    return handleApiError(error, "DELETE /api/stakeholders/[id]");
   }
 }

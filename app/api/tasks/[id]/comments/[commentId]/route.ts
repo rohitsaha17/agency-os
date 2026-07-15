@@ -1,18 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
+import { handleApiError, ApiError } from "@/lib/api-errors";
 
 type Params = { params: Promise<{ id: string; commentId: string }> };
 
 // DELETE /api/tasks/[id]/comments/[commentId]
-export async function DELETE(_req: NextRequest, { params }: Params) {
-  const { commentId } = await params;
+export async function DELETE(req: NextRequest, { params }: Params) {
+  const { id: taskId, commentId } = await params;
   try {
+    const user = await requireAuth(req);
+
+    // Verify the comment's parent task belongs to the caller's org.
+    const comment = await prisma.comment.findFirst({
+      where: { id: commentId, taskId, task: { organizationId: user.organizationId } },
+      select: { id: true },
+    });
+    if (!comment) throw new ApiError("Comment not found", 404);
+
     await prisma.comment.delete({ where: { id: commentId } });
     return NextResponse.json({ success: true });
-  } catch (error: unknown) {
-    if ((error as { code?: string }).code === "P2025") {
-      return NextResponse.json({ error: "Comment not found" }, { status: 404 });
-    }
-    return NextResponse.json({ error: "Failed to delete comment" }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error, "DELETE /api/tasks/[id]/comments/[commentId]");
   }
 }

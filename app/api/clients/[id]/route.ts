@@ -1,15 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
+import { apiError, handleApiError, ApiError } from "@/lib/api-errors";
 
 type Params = { params: Promise<{ id: string }> };
 
 // GET /api/clients/[id] — full client detail with contacts, files, projects
-export async function GET(_req: NextRequest, { params }: Params) {
+export async function GET(req: NextRequest, { params }: Params) {
   const { id } = await params;
 
   try {
-    const client = await prisma.client.findUnique({
-      where: { id },
+    const user = await requireAuth(req);
+    const client = await prisma.client.findFirst({
+      where: { id, organizationId: user.organizationId },
       include: {
         contacts: { orderBy: [{ isPrimary: "desc" }, { name: "asc" }] },
         files: { orderBy: { createdAt: "desc" } },
@@ -25,16 +28,12 @@ export async function GET(_req: NextRequest, { params }: Params) {
     });
 
     if (!client) {
-      return NextResponse.json({ error: "Client not found" }, { status: 404 });
+      throw new ApiError("Client not found", 404);
     }
 
     return NextResponse.json(client);
   } catch (error) {
-    console.error("[GET /api/clients/[id]]", error);
-    return NextResponse.json(
-      { error: "Database unavailable" },
-      { status: 503 }
-    );
+    return handleApiError(error, "GET /api/clients/[id]");
   }
 }
 
@@ -43,12 +42,20 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const { id } = await params;
 
   try {
+    const user = await requireAuth(req);
     const body = await req.json();
     const {
       name, companyName, email, phone, jobTitle, website,
       industry, address, logoUrl, links, brandColors, brandAssets,
       taxRegistrations, notes, status,
     } = body;
+
+    // Verify the client belongs to the caller's org before mutating.
+    const existing = await prisma.client.findFirst({
+      where: { id, organizationId: user.organizationId },
+      select: { id: true },
+    });
+    if (!existing) throw new ApiError("Client not found", 404);
 
     // Auto-derive logoUrl from logo-type link when links are updated
     const derivedLogoUrl = links !== undefined
@@ -132,18 +139,26 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     return NextResponse.json(result);
   } catch (error: unknown) {
     if ((error as { code?: string }).code === "P2025") {
-      return NextResponse.json({ error: "Client not found" }, { status: 404 });
+      return apiError("Client not found", 404);
     }
-    console.error("[PATCH /api/clients/[id]]", error);
-    return NextResponse.json({ error: "Failed to update client" }, { status: 500 });
+    return handleApiError(error, "PATCH /api/clients/[id]");
   }
 }
 
 // DELETE /api/clients/[id] — archive (soft delete) the client
-export async function DELETE(_req: NextRequest, { params }: Params) {
+export async function DELETE(req: NextRequest, { params }: Params) {
   const { id } = await params;
 
   try {
+    const user = await requireAuth(req);
+
+    // Verify org ownership before archiving.
+    const existing = await prisma.client.findFirst({
+      where: { id, organizationId: user.organizationId },
+      select: { id: true },
+    });
+    if (!existing) throw new ApiError("Client not found", 404);
+
     await prisma.client.update({
       where: { id },
       data: { status: "ARCHIVED" },
@@ -151,9 +166,8 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
     return NextResponse.json({ success: true });
   } catch (error: unknown) {
     if ((error as { code?: string }).code === "P2025") {
-      return NextResponse.json({ error: "Client not found" }, { status: 404 });
+      return apiError("Client not found", 404);
     }
-    console.error("[DELETE /api/clients/[id]]", error);
-    return NextResponse.json({ error: "Failed to archive client" }, { status: 500 });
+    return handleApiError(error, "DELETE /api/clients/[id]");
   }
 }

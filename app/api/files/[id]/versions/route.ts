@@ -2,14 +2,26 @@ import { NextRequest, NextResponse } from "next/server";
 import { writeFile, mkdir, unlink } from "fs/promises";
 import path from "path";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
+import { handleApiError, ApiError } from "@/lib/api-errors";
 
 type Params = { params: Promise<{ id: string }> };
 
+async function assertFileInOrg(fileId: string, organizationId: string) {
+  const file = await prisma.file.findFirst({
+    where: { id: fileId, organizationId },
+    select: { id: true },
+  });
+  if (!file) throw new ApiError("File not found", 404);
+}
+
 // ── GET /api/files/[id]/versions ───────────────────────────────
 
-export async function GET(_req: NextRequest, { params }: Params) {
+export async function GET(req: NextRequest, { params }: Params) {
   try {
+    const user = await requireAuth(req);
     const { id } = await params;
+    await assertFileInOrg(id, user.organizationId);
 
     const versions = await prisma.fileVersion.findMany({
       where: { fileId: id },
@@ -18,11 +30,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
     return NextResponse.json(versions);
   } catch (err) {
-    console.error("[GET /api/files/[id]/versions]", err);
-    return NextResponse.json(
-      { error: "Failed to fetch versions" },
-      { status: 500 }
-    );
+    return handleApiError(err, "GET /api/files/[id]/versions");
   }
 }
 
@@ -30,19 +38,21 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
 export async function POST(req: NextRequest, { params }: Params) {
   try {
+    const user = await requireAuth(req);
     const { id } = await params;
 
-    // Verify file exists
-    const existingFile = await prisma.file.findUnique({ where: { id } });
-    if (!existingFile) {
-      return NextResponse.json({ error: "File not found" }, { status: 404 });
-    }
+    // Verify org ownership before creating a new version.
+    const existingFile = await prisma.file.findFirst({
+      where: { id, organizationId: user.organizationId },
+      select: { id: true },
+    });
+    if (!existingFile) throw new ApiError("File not found", 404);
 
     const formData = await req.formData();
     const rawFile = formData.get("file");
 
     if (!rawFile || !(rawFile instanceof Blob)) {
-      return NextResponse.json({ error: "No file provided" }, { status: 400 });
+      throw new ApiError("No file provided", 400);
     }
 
     const file = rawFile as File;
@@ -96,11 +106,7 @@ export async function POST(req: NextRequest, { params }: Params) {
 
     return NextResponse.json(newVersion, { status: 201 });
   } catch (err) {
-    console.error("[POST /api/files/[id]/versions]", err);
-    return NextResponse.json(
-      { error: "Failed to create version" },
-      { status: 500 }
-    );
+    return handleApiError(err, "POST /api/files/[id]/versions");
   }
 }
 
@@ -108,11 +114,14 @@ export async function POST(req: NextRequest, { params }: Params) {
 
 export async function DELETE(req: NextRequest, { params }: Params) {
   try {
+    const user = await requireAuth(req);
     const { id } = await params;
+    await assertFileInOrg(id, user.organizationId);
+
     const versionId = new URL(req.url).searchParams.get("versionId");
 
     if (!versionId) {
-      return NextResponse.json({ error: "versionId query param required" }, { status: 400 });
+      throw new ApiError("versionId query param required", 400);
     }
 
     // Ensure version exists and belongs to this file
@@ -120,13 +129,13 @@ export async function DELETE(req: NextRequest, { params }: Params) {
       where: { id: versionId, fileId: id },
     });
     if (!version) {
-      return NextResponse.json({ error: "Version not found" }, { status: 404 });
+      throw new ApiError("Version not found", 404);
     }
 
     // Don't allow deleting the only remaining version
     const count = await prisma.fileVersion.count({ where: { fileId: id } });
     if (count <= 1) {
-      return NextResponse.json({ error: "Cannot delete the only version. Delete the file instead." }, { status: 400 });
+      throw new ApiError("Cannot delete the only version. Delete the file instead.", 400);
     }
 
     // Delete the version record
@@ -154,7 +163,6 @@ export async function DELETE(req: NextRequest, { params }: Params) {
 
     return NextResponse.json({ success: true });
   } catch (err) {
-    console.error("[DELETE /api/files/[id]/versions]", err);
-    return NextResponse.json({ error: "Failed to delete version" }, { status: 500 });
+    return handleApiError(err, "DELETE /api/files/[id]/versions");
   }
 }

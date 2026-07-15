@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
+import { handleApiError, ApiError } from "@/lib/api-errors";
 
 /**
  * POST /api/quotations/:id/convert
@@ -11,30 +13,32 @@ import { prisma } from "@/lib/prisma";
  */
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const user = await requireAuth(req);
     const { id } = await params;
     const body = await req.json();
     const { projectName, projectType, startDate, createTasks = true } = body;
 
-    // Load quotation with line items
-    const quotation = await prisma.quotation.findUnique({
-      where: { id },
+    // Load quotation with line items — scoped to the caller's org.
+    const quotation = await prisma.quotation.findFirst({
+      where: { id, organizationId: user.organizationId },
       include: {
         lineItems: { orderBy: { order: "asc" } },
         project: true,
       },
     });
 
-    if (!quotation) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (!quotation) throw new ApiError("Not found", 404);
     if (quotation.status === "CONVERTED") {
-      return NextResponse.json({ error: "Quotation already converted" }, { status: 400 });
+      throw new ApiError("Quotation already converted", 400);
     }
     if (quotation.project) {
-      return NextResponse.json({ error: "A project already exists for this quotation" }, { status: 400 });
+      throw new ApiError("A project already exists for this quotation", 400);
     }
 
     // ── 1. Create the project ─────────────────────────────────
     const project = await prisma.project.create({
       data: {
+        organizationId: user.organizationId,
         clientId: quotation.clientId,
         quotationId: quotation.id,
         name: (projectName || quotation.title).trim(),
@@ -51,6 +55,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (createTasks && quotation.lineItems.length > 0) {
       await prisma.task.createMany({
         data: quotation.lineItems.map((item, i) => ({
+          organizationId: user.organizationId,
           projectId: project.id,
           title: item.title,
           description: item.description,
@@ -77,8 +82,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     });
 
     return NextResponse.json({ projectId: project.id, projectName: project.name });
-  } catch (e) {
-    console.error(e);
-    return NextResponse.json({ error: "Conversion failed" }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error, "POST /api/quotations/[id]/convert");
   }
 }

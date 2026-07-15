@@ -1,13 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
+import { handleApiError, ApiError } from "@/lib/api-errors";
 
 type Params = { params: Promise<{ id: string }> };
+
+async function assertFileInOrg(fileId: string, organizationId: string) {
+  const file = await prisma.file.findFirst({
+    where: { id: fileId, organizationId },
+    select: { id: true },
+  });
+  if (!file) throw new ApiError("File not found", 404);
+}
 
 // ── GET /api/files/[id]/comments ──────────────────────────────
 
 export async function GET(req: NextRequest, { params }: Params) {
   try {
+    const user = await requireAuth(req);
     const { id } = await params;
+    await assertFileInOrg(id, user.organizationId);
+
     const { searchParams } = new URL(req.url);
     const versionId = searchParams.get("versionId") ?? undefined;
 
@@ -34,11 +47,7 @@ export async function GET(req: NextRequest, { params }: Params) {
 
     return NextResponse.json(comments);
   } catch (err) {
-    console.error("[GET /api/files/[id]/comments]", err);
-    return NextResponse.json(
-      { error: "Failed to fetch comments" },
-      { status: 500 }
-    );
+    return handleApiError(err, "GET /api/files/[id]/comments");
   }
 }
 
@@ -46,7 +55,10 @@ export async function GET(req: NextRequest, { params }: Params) {
 
 export async function POST(req: NextRequest, { params }: Params) {
   try {
+    const user = await requireAuth(req);
     const { id } = await params;
+    await assertFileInOrg(id, user.organizationId);
+
     const body = await req.json();
 
     const {
@@ -70,10 +82,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     };
 
     if (!commentBody?.trim()) {
-      return NextResponse.json(
-        { error: "Comment body is required" },
-        { status: 400 }
-      );
+      throw new ApiError("Comment body is required", 400);
     }
 
     const comment = await prisma.fileComment.create({
@@ -102,10 +111,6 @@ export async function POST(req: NextRequest, { params }: Params) {
 
     return NextResponse.json(comment, { status: 201 });
   } catch (err) {
-    console.error("[POST /api/files/[id]/comments]", err);
-    return NextResponse.json(
-      { error: "Failed to create comment" },
-      { status: 500 }
-    );
+    return handleApiError(err, "POST /api/files/[id]/comments");
   }
 }

@@ -1,5 +1,11 @@
 import { NextResponse } from "next/server";
 
+// NOTE (multi-tenant): This endpoint currently returns only HARDCODED builtin
+// templates that are shared across every organization. When we start
+// persisting user-created TaskTemplate rows, they MUST be filtered by
+// `organizationId: user.organizationId` (the model already has that column
+// and the auth helper already returns it).
+
 // Hardcoded templates — no DB required until user-created templates are needed
 const BUILTIN_TEMPLATES = [
   {

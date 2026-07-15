@@ -20,6 +20,7 @@ const CATEGORY_LABELS: Record<ExpenseCategory, string> = {
   ADVERTISING: "Advertising",
   OFFICE: "Office & Overhead",
   EQUIPMENT: "Equipment",
+  COMMISSIONS: "Commissions",
   OTHER: "Other",
 };
 
@@ -50,7 +51,7 @@ function formatDate(d: string) {
 const EMPTY_FORM = {
   title: "", description: "", category: "OTHER" as ExpenseCategory,
   amount: "", currency: "USD", date: new Date().toISOString().slice(0, 10),
-  status: "PENDING" as ExpenseStatus, projectId: "", stakeholderId: "", userId: "",
+  status: "PENDING" as ExpenseStatus, projectId: "", clientId: "", stakeholderId: "", userId: "",
   isReimbursable: false, receiptUrl: "", notes: "",
 };
 

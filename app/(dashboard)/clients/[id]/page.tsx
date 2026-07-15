@@ -6,11 +6,12 @@ import Link from "next/link";
 import {
   ChevronLeft, Edit2, Trash2, Plus, Star, Mail, Phone,
   Globe, MapPin, Building2, FileText, FolderOpen,
-  ExternalLink, Check, X, Pencil, Receipt, HardDrive, ChevronRight,
+  ExternalLink, Check, X, Pencil, Receipt as ReceiptIcon, HardDrive, ChevronRight,
   Link2, HardDriveIcon, Image, MessageSquare, Hash, Upload,
-  DollarSign, Clock, CheckCircle2, AlertCircle, Send, Users,
+  DollarSign, Clock, CheckCircle2, AlertCircle, Send, Users, User as UserIcon,
 } from "lucide-react";
 import { BrandAssetsEditor } from "@/components/clients/BrandAssetsEditor";
+import { ClientFilesTab } from "@/components/clients/ClientFilesTab";
 import type { BrandColor, BrandAsset, ClientLink } from "@/types";
 import { Button } from "@/components/ui/Button";
 import { PhoneInput } from "@/components/ui/PhoneInput";
@@ -22,10 +23,41 @@ import { QuotationBuilder } from "@/components/quotations/QuotationBuilder";
 import { useToast } from "@/components/ui/Toast";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useCurrentUser } from "@/lib/useCurrentUser";
-import { Client, ContactFormData, ClientContact, ProjectStatus, ProjectType, Quotation, AssetFile, ContractType, ContractPartyType, Stakeholder, User, Invoice, InvoiceStatus, Channel, ChatMessage } from "@/types";
+import { Client, ContactFormData, ClientContact, ProjectStatus, ProjectType, Quotation, AssetFile, ContractType, ContractPartyType, Stakeholder, User, Invoice, InvoiceStatus, Channel, ChatMessage, Expense, ExpenseCategory, ExpenseStatus, Receipt, ReceiptMethod } from "@/types";
+import { formatMoney } from "@/lib/format";
 
 // ── helpers ──────────────────────────────────────────────────
-type Tab = "overview" | "contacts" | "brand" | "tax" | "projects" | "quotations" | "files" | "contracts" | "chat" | "invoices";
+type Tab = "overview" | "contacts" | "brand" | "tax" | "projects" | "quotations" | "files" | "contracts" | "chat" | "invoices" | "expenses" | "receipts";
+
+const EXPENSE_CATEGORY_LABELS: Record<ExpenseCategory, string> = {
+  SOFTWARE_TOOLS: "Software & Tools",
+  FREELANCER_PAYMENT: "Freelancer Payment",
+  VENDOR_PAYMENT: "Vendor Payment",
+  STOCK_ASSETS: "Stock Assets",
+  PRINTING: "Printing",
+  TRAVEL: "Travel",
+  ADVERTISING: "Advertising",
+  OFFICE: "Office",
+  EQUIPMENT: "Equipment",
+  COMMISSIONS: "Commissions",
+  OTHER: "Other",
+};
+
+const EXPENSE_STATUS_COLOR: Record<ExpenseStatus, string> = {
+  PENDING: "bg-gray-100 text-gray-600",
+  APPROVED: "bg-blue-50 text-blue-700",
+  PAID: "bg-emerald-50 text-emerald-700",
+  REJECTED: "bg-red-50 text-red-600",
+};
+
+const RECEIPT_METHOD_LABELS: Record<ReceiptMethod, string> = {
+  BANK_TRANSFER: "Bank Transfer",
+  CASH: "Cash",
+  CHECK: "Cheque",
+  CARD: "Card",
+  UPI: "UPI",
+  OTHER: "Other",
+};
 
 const PROJECT_STATUS_COLOR: Record<ProjectStatus, string> = {
   DRAFT: "bg-gray-100 text-gray-600",
@@ -70,14 +102,18 @@ const EMPTY_CLIENT_PARTY: ClientPartyDraft = {
 
 // ── Contact Form (inline modal) ──────────────────────────────
 function ContactModal({
-  open, onClose, clientId, existing, onSaved,
+  open, onClose, clientId, existing, currentPrimary, onSaved,
 }: {
   open: boolean;
   onClose: () => void;
   clientId: string;
   existing?: ClientContact;
+  /** The existing primary contact for this client (if any). Used to confirm
+   *  re-assignment when "Set as primary" is checked on a different contact. */
+  currentPrimary?: ClientContact | null;
   onSaved: (c: ClientContact) => void;
 }) {
+  const confirm = useConfirm();
   const [form, setForm] = useState<ContactFormData>(
     existing
       ? { name: existing.name, email: existing.email ?? "", phone: existing.phone ?? "", jobTitle: existing.jobTitle ?? "", isPrimary: existing.isPrimary }
@@ -92,6 +128,22 @@ function ContactModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name.trim()) { setError("Name is required"); return; }
+
+    // If the user ticked "Set as primary" AND there's already a different
+    // primary contact, ask them to confirm the swap before saving.
+    const hasOtherPrimary =
+      currentPrimary && currentPrimary.id !== existing?.id;
+    if (form.isPrimary && hasOtherPrimary) {
+      const ok = await confirm({
+        title: "Change primary contact?",
+        message: `${form.name.trim()} will replace ${currentPrimary!.name} as the primary contact for this client.`,
+        confirmLabel: `Set ${form.name.trim()} as primary`,
+        cancelLabel: "Cancel",
+        variant: "warning",
+      });
+      if (!ok) return;
+    }
+
     setSaving(true); setError(null);
     try {
       const url = existing
@@ -185,6 +237,36 @@ export default function ClientDetailPage() {
   const [contractsLoaded, setContractsLoaded] = useState(false);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [invoicesLoaded, setInvoicesLoaded] = useState(false);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [expensesLoaded, setExpensesLoaded] = useState(false);
+  const [receipts, setReceipts] = useState<Receipt[]>([]);
+  const [receiptsLoaded, setReceiptsLoaded] = useState(false);
+  const [expenseModalOpen, setExpenseModalOpen] = useState(false);
+  const [expenseForm, setExpenseForm] = useState({
+    title: "",
+    amount: "",
+    currency: "USD",
+    date: new Date().toISOString().slice(0, 10),
+    category: "OTHER" as ExpenseCategory,
+    projectId: "",
+    notes: "",
+  });
+  const [expenseSaving, setExpenseSaving] = useState(false);
+  const [expenseError, setExpenseError] = useState<string | null>(null);
+  const [receiptModalOpen, setReceiptModalOpen] = useState(false);
+  const [receiptEditing, setReceiptEditing] = useState<Receipt | null>(null);
+  const [receiptForm, setReceiptForm] = useState({
+    amount: "",
+    currency: "USD",
+    receivedAt: new Date().toISOString().slice(0, 10),
+    method: "BANK_TRANSFER" as ReceiptMethod,
+    invoiceId: "",
+    reference: "",
+    receiptNumber: "",
+    notes: "",
+  });
+  const [receiptSaving, setReceiptSaving] = useState(false);
+  const [receiptError, setReceiptError] = useState<string | null>(null);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [channelsLoaded, setChannelsLoaded] = useState(false);
   const [activeChannel, setActiveChannel] = useState<Channel | null>(null);
@@ -248,6 +330,45 @@ export default function ClientDetailPage() {
         .then((r) => r.json())
         .then((d) => { if (Array.isArray(d)) setInvoices(d); setInvoicesLoaded(true); });
     }
+    if (tab === "overview") {
+      // Auto-load financial data so the summary is populated.
+      if (!quotationsLoaded) {
+        fetch(`/api/quotations?clientId=${id}`)
+          .then((r) => r.json())
+          .then((d) => { if (Array.isArray(d)) setQuotations(d); setQuotationsLoaded(true); });
+      }
+      if (!invoicesLoaded) {
+        fetch(`/api/invoices?clientId=${id}`)
+          .then((r) => r.json())
+          .then((d) => { if (Array.isArray(d)) setInvoices(d); setInvoicesLoaded(true); });
+      }
+      if (!receiptsLoaded) {
+        fetch(`/api/receipts?clientId=${id}`)
+          .then((r) => r.json())
+          .then((d) => { setReceipts(Array.isArray(d) ? d : d.receipts ?? []); setReceiptsLoaded(true); });
+      }
+      if (!expensesLoaded) {
+        fetch(`/api/expenses?clientId=${id}&includeProjectExpenses=1`)
+          .then((r) => r.json())
+          .then((d) => { setExpenses(Array.isArray(d) ? d : d.expenses ?? []); setExpensesLoaded(true); });
+      }
+    }
+    if (tab === "expenses" && !expensesLoaded) {
+      fetch(`/api/expenses?clientId=${id}&includeProjectExpenses=1`)
+        .then((r) => r.json())
+        .then((d) => { setExpenses(Array.isArray(d) ? d : d.expenses ?? []); setExpensesLoaded(true); });
+    }
+    if (tab === "receipts" && !receiptsLoaded) {
+      fetch(`/api/receipts?clientId=${id}`)
+        .then((r) => r.json())
+        .then((d) => { setReceipts(Array.isArray(d) ? d : d.receipts ?? []); setReceiptsLoaded(true); });
+      // Make sure we have invoices loaded for the dropdown
+      if (!invoicesLoaded) {
+        fetch(`/api/invoices?clientId=${id}`)
+          .then((r) => r.json())
+          .then((d) => { if (Array.isArray(d)) setInvoices(d); setInvoicesLoaded(true); });
+      }
+    }
     if (tab === "chat" && !channelsLoaded) {
       fetch(`/api/channels?clientId=${id}`)
         .then((r) => r.json())
@@ -261,7 +382,7 @@ export default function ClientDetailPage() {
         fetch("/api/users").then(r => r.json()).then(d => setTeamUsers(Array.isArray(d) ? d : d.users ?? [])).catch(() => {});
       }
     }
-  }, [tab, id, quotationsLoaded, filesLoaded, contractsLoaded, invoicesLoaded, channelsLoaded, activeChannel, teamUsers]);
+  }, [tab, id, quotationsLoaded, filesLoaded, contractsLoaded, invoicesLoaded, expensesLoaded, receiptsLoaded, channelsLoaded, activeChannel, teamUsers]);
 
   // Load stakeholders + users when contract modal opens
   useEffect(() => {
@@ -357,6 +478,146 @@ export default function ClientDetailPage() {
       }
     } catch {
       toast.error("Failed to update invoice");
+    }
+  };
+
+  // ── Expense helpers ──
+  const handleAddExpense = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!expenseForm.title.trim()) { setExpenseError("Title is required"); return; }
+    if (!expenseForm.amount || isNaN(Number(expenseForm.amount))) { setExpenseError("Valid amount is required"); return; }
+    setExpenseSaving(true); setExpenseError(null);
+    try {
+      const res = await fetch("/api/expenses", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: expenseForm.title.trim(),
+          amount: Number(expenseForm.amount),
+          currency: expenseForm.currency,
+          date: expenseForm.date,
+          category: expenseForm.category,
+          clientId: id,
+          projectId: expenseForm.projectId || null,
+          notes: expenseForm.notes || null,
+          status: "PENDING",
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error || "Failed to create expense");
+      }
+      toast.success("Expense added");
+      setExpenseModalOpen(false);
+      setExpenseForm({
+        title: "", amount: "", currency: "USD",
+        date: new Date().toISOString().slice(0, 10),
+        category: "OTHER", projectId: "", notes: "",
+      });
+      // Refetch
+      setExpensesLoaded(false);
+      fetch(`/api/expenses?clientId=${id}&includeProjectExpenses=1`)
+        .then((r) => r.json())
+        .then((d) => { setExpenses(Array.isArray(d) ? d : d.expenses ?? []); setExpensesLoaded(true); });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to create expense";
+      setExpenseError(msg);
+      toast.error(msg);
+    } finally {
+      setExpenseSaving(false);
+    }
+  };
+
+  // ── Receipt helpers ──
+  const openReceiptModal = (existing?: Receipt) => {
+    if (existing) {
+      setReceiptEditing(existing);
+      setReceiptForm({
+        amount: String(existing.amount),
+        currency: existing.currency,
+        receivedAt: existing.receivedAt.slice(0, 10),
+        method: existing.method,
+        invoiceId: existing.invoiceId ?? "",
+        reference: existing.reference ?? "",
+        receiptNumber: existing.receiptNumber ?? "",
+        notes: existing.notes ?? "",
+      });
+    } else {
+      setReceiptEditing(null);
+      const defaultCurrency = invoices[0]?.currency ?? "USD";
+      setReceiptForm({
+        amount: "", currency: defaultCurrency,
+        receivedAt: new Date().toISOString().slice(0, 10),
+        method: "BANK_TRANSFER", invoiceId: "",
+        reference: "", receiptNumber: "", notes: "",
+      });
+    }
+    setReceiptError(null);
+    setReceiptModalOpen(true);
+  };
+
+  const handleSaveReceipt = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!receiptForm.amount || isNaN(Number(receiptForm.amount))) { setReceiptError("Valid amount is required"); return; }
+    setReceiptSaving(true); setReceiptError(null);
+    try {
+      const url = receiptEditing
+        ? `/api/receipts/${receiptEditing.id}`
+        : "/api/receipts";
+      const method = receiptEditing ? "PATCH" : "POST";
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientId: id,
+          amount: Number(receiptForm.amount),
+          currency: receiptForm.currency,
+          receivedAt: receiptForm.receivedAt,
+          method: receiptForm.method,
+          invoiceId: receiptForm.invoiceId || null,
+          reference: receiptForm.reference || null,
+          receiptNumber: receiptForm.receiptNumber || null,
+          notes: receiptForm.notes || null,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error || "Failed to save receipt");
+      }
+      toast.success(receiptEditing ? "Receipt updated" : "Receipt recorded");
+      setReceiptModalOpen(false);
+      setReceiptEditing(null);
+      setReceiptsLoaded(false);
+      fetch(`/api/receipts?clientId=${id}`)
+        .then((r) => r.json())
+        .then((d) => { setReceipts(Array.isArray(d) ? d : d.receipts ?? []); setReceiptsLoaded(true); });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to save receipt";
+      setReceiptError(msg);
+      toast.error(msg);
+    } finally {
+      setReceiptSaving(false);
+    }
+  };
+
+  const handleDeleteReceipt = async (receiptId: string) => {
+    const ok = await confirm({
+      title: "Delete receipt?",
+      message: "This payment record will be permanently deleted.",
+      confirmLabel: "Delete",
+      variant: "danger",
+    });
+    if (!ok) return;
+    try {
+      const res = await fetch(`/api/receipts/${receiptId}`, { method: "DELETE" });
+      if (!res.ok) {
+        toast.error("Failed to delete receipt");
+        return;
+      }
+      toast.success("Receipt deleted");
+      setReceipts((prev) => prev.filter((r) => r.id !== receiptId));
+    } catch {
+      toast.error("Failed to delete receipt");
     }
   };
 
@@ -535,7 +796,10 @@ export default function ClientDetailPage() {
     );
   }
 
-  const initials = client.name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase();
+  // Heading should always be the company name. Fall back to legacy `name`.
+  const displayName = (client.companyName ?? "").trim() || client.name;
+  const primaryContact = client.contacts.find((c) => c.isPrimary) ?? client.contacts[0];
+  const initials = displayName.split(" ").map((w) => w[0]).filter(Boolean).join("").slice(0, 2).toUpperCase();
   const tabs: { id: Tab; label: string }[] = [
     { id: "overview",    label: "Overview" },
     { id: "contacts",    label: `Contacts (${client.contacts.length})` },
@@ -544,6 +808,8 @@ export default function ClientDetailPage() {
     { id: "projects",    label: `Projects (${client.projects.length})` },
     { id: "quotations",  label: "Quotations" },
     { id: "invoices",    label: "Invoices" },
+    { id: "receipts",    label: "Receipts" },
+    { id: "expenses",    label: "Expenses" },
     { id: "files",       label: "Files" },
     { id: "chat",        label: "Chat" },
     { id: "contracts",   label: "Contracts" },
@@ -559,20 +825,34 @@ export default function ClientDetailPage() {
         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
           <div className="flex items-center gap-4">
             {client.logoUrl ? (
-              <img src={client.logoUrl} alt={client.name} className="w-14 h-14 rounded-xl object-contain border border-gray-200 bg-gray-50 p-1" />
+              // object-contain + padding + white bg so logos don't get cropped
+              // or styled awkwardly inside the square frame.
+              <div className="w-14 h-14 rounded-xl bg-white border border-gray-200 flex items-center justify-center p-1.5 overflow-hidden">
+                <img
+                  src={client.logoUrl}
+                  alt={displayName}
+                  className="max-w-full max-h-full object-contain"
+                />
+              </div>
             ) : (
               <div className="w-14 h-14 rounded-xl bg-indigo-100 flex items-center justify-center">
-                <span className="text-base font-bold text-indigo-600">{initials}</span>
+                {primaryContact ? (
+                  <Building2 className="w-7 h-7 text-indigo-600" />
+                ) : (
+                  <span className="text-base font-bold text-indigo-600">{initials}</span>
+                )}
               </div>
             )}
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-xl font-semibold text-gray-900">{client.name}</h1>
+                <h1 className="text-xl font-bold text-gray-900">{displayName}</h1>
                 <StatusBadge status={client.status} />
               </div>
-              {client.companyName && (
+              {primaryContact && (
                 <p className="text-sm text-gray-500 mt-0.5 flex items-center gap-1.5">
-                  <Building2 className="w-3.5 h-3.5" /> {client.companyName}
+                  <UserIcon className="w-3.5 h-3.5" />
+                  {primaryContact.name}
+                  {primaryContact.jobTitle ? ` · ${primaryContact.jobTitle}` : ""}
                 </p>
               )}
               {client.industry && (
@@ -613,8 +893,62 @@ export default function ClientDetailPage() {
       {/* Tab Content */}
       <div className="flex-1 px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
         {/* ── OVERVIEW ── */}
-        {tab === "overview" && (
+        {tab === "overview" && (() => {
+          // ── Financial Summary calculations ──
+          const pipelineQuotations = quotations.filter((q) => q.status === "APPROVED" || q.status === "SENT");
+          const pipelineTotal = pipelineQuotations.reduce((s, q) => s + Number(q.total ?? 0), 0);
+          const invoicedTotal = invoices.reduce(
+            (s, inv) => s + inv.lineItems.reduce((ls, li) => ls + li.quantity * li.unitPrice, 0),
+            0
+          );
+          const paidFromInvoices = invoices
+            .filter((inv) => inv.status === "PAID")
+            .reduce((s, inv) => s + inv.lineItems.reduce((ls, li) => ls + li.quantity * li.unitPrice, 0), 0);
+          const paidFromReceipts = receipts.reduce((s, r) => s + Number(r.amount ?? 0), 0);
+          const paidTotal = paidFromInvoices + paidFromReceipts;
+          const outstanding = Math.max(0, invoicedTotal - paidTotal);
+          const expensesTotal = expenses
+            .filter((ex) => ex.status === "PAID" || ex.status === "APPROVED")
+            .reduce((s, ex) => s + Number(ex.amount ?? 0), 0);
+          const netMargin = paidTotal - expensesTotal;
+          // Most-common currency among invoices / receipts / expenses; fallback USD
+          const currencyCounts: Record<string, number> = {};
+          [...invoices, ...receipts, ...expenses, ...quotations].forEach((item) => {
+            const c = (item as { currency?: string }).currency;
+            if (c) currencyCounts[c] = (currencyCounts[c] ?? 0) + 1;
+          });
+          const dominantCurrency = Object.entries(currencyCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "USD";
+          const finStats: { label: string; value: number; color: string; icon: typeof DollarSign }[] = [
+            { label: "Pipeline (Quotations)", value: pipelineTotal, color: "text-indigo-600", icon: FileText },
+            { label: "Invoiced", value: invoicedTotal, color: "text-gray-700", icon: DollarSign },
+            { label: "Paid", value: paidTotal, color: "text-emerald-600", icon: CheckCircle2 },
+            { label: "Outstanding", value: outstanding, color: "text-amber-600", icon: AlertCircle },
+            { label: "Expenses (this client)", value: expensesTotal, color: "text-red-600", icon: ReceiptIcon },
+            { label: "Net Margin", value: netMargin, color: netMargin >= 0 ? "text-emerald-600" : "text-red-600", icon: DollarSign },
+          ];
+          return (
           <div className="max-w-2xl space-y-6">
+            {/* Financial Summary */}
+            <div className="bg-white border border-gray-200 rounded-xl p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <DollarSign className="w-4 h-4 text-gray-400" />
+                <span className="text-sm font-medium text-gray-700">Financial Summary</span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {finStats.map(({ label, value, color, icon: Icon }) => (
+                  <div key={label} className="bg-gray-50 border border-gray-100 rounded-xl p-3">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <Icon className={`w-3.5 h-3.5 ${color}`} />
+                      <span className="text-[11px] text-gray-500">{label}</span>
+                    </div>
+                    <p className={`text-base font-semibold ${color}`}>
+                      {formatMoney(value, dominantCurrency, { precision: 0 })}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             <div className="bg-white border border-gray-200 rounded-xl divide-y divide-gray-100">
               {[
                 { label: "Email", value: client.email, icon: Mail, href: client.email ? `mailto:${client.email}` : undefined },
@@ -691,7 +1025,8 @@ export default function ClientDetailPage() {
               </p>
             </div>
           </div>
-        )}
+          );
+        })()}
 
         {/* ── CONTACTS ── */}
         {tab === "contacts" && (
@@ -805,7 +1140,7 @@ export default function ClientDetailPage() {
           <div className="max-w-2xl">
             <div className="bg-white border border-gray-200 rounded-xl p-6">
               <div className="flex items-center gap-2 mb-1">
-                <Receipt className="w-4 h-4 text-gray-400" />
+                <ReceiptIcon className="w-4 h-4 text-gray-400" />
                 <h3 className="text-sm font-semibold text-gray-800">Tax Registrations</h3>
               </div>
               <p className="text-xs text-gray-500 mb-5">All applicable tax IDs for this client (GST, VAT, EIN, ABN, etc.)</p>
@@ -828,7 +1163,7 @@ export default function ClientDetailPage() {
                 </div>
               ) : (
                 <div className="border-2 border-dashed border-gray-200 rounded-xl p-8 text-center">
-                  <Receipt className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                  <ReceiptIcon className="w-8 h-8 text-gray-300 mx-auto mb-2" />
                   <p className="text-sm text-gray-400">No tax registrations added.</p>
                   <p className="text-xs text-gray-400 mt-1">
                     Edit the client to add GST, VAT, EIN and other tax IDs.
@@ -946,105 +1281,9 @@ export default function ClientDetailPage() {
         )}
 
         {/* ── FILES ── */}
-        {tab === "files" && (() => {
-          const commonFiles = files.filter((f) => !f.projectId);
-          const projectFiles = files.filter((f) => !!f.projectId);
-          const projectGroups = projectFiles.reduce<Record<string, { name: string; files: AssetFile[] }>>((acc, f) => {
-            const pId = f.projectId!;
-            if (!acc[pId]) acc[pId] = { name: f.project?.name ?? "Project", files: [] };
-            acc[pId].files.push(f);
-            return acc;
-          }, {});
-
-          const FileCard = ({ f }: { f: AssetFile }) => (
-            <Link
-              key={f.id}
-              href="/files"
-              className="bg-white border border-gray-200 rounded-xl overflow-hidden hover:border-indigo-300 transition-colors group"
-            >
-              {f.mimeCategory === "image" && f.url ? (
-                <img src={f.url} alt={f.name} className="w-full h-28 object-cover" />
-              ) : (
-                <div className="w-full h-28 bg-gray-50 flex items-center justify-center">
-                  <HardDrive className="w-8 h-8 text-gray-300" />
-                </div>
-              )}
-              <div className="px-3 py-2">
-                <p className="text-xs font-medium text-gray-800 truncate">{f.name}</p>
-                <p className="text-xs text-gray-400 mt-0.5">{f.status}</p>
-              </div>
-            </Link>
-          );
-
-          return (
-            <div className="max-w-3xl space-y-4">
-              <div className="flex items-center justify-between">
-                <p className="text-sm text-gray-500">{files.length} file{files.length !== 1 ? "s" : ""}</p>
-                <Link href={`/files?clientId=${id}`}>
-                  <Button size="sm" icon={<Plus className="w-3.5 h-3.5" />}>Upload Files</Button>
-                </Link>
-              </div>
-
-              {/* Upload zone */}
-              <Link
-                href={`/files?clientId=${id}`}
-                className="block border-2 border-dashed border-gray-200 rounded-xl p-6 text-center hover:border-indigo-300 hover:bg-indigo-50/30 transition-colors cursor-pointer"
-              >
-                <Upload className="w-6 h-6 text-gray-300 mx-auto mb-2" />
-                <p className="text-sm text-gray-500">Drop files here or click to upload</p>
-                <p className="text-xs text-gray-400 mt-1">Files will be linked to this client</p>
-              </Link>
-
-              {!filesLoaded ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {[1,2,3].map((i) => (
-                    <div key={i} className="bg-white border border-gray-200 rounded-xl aspect-square animate-pulse" />
-                  ))}
-                </div>
-              ) : files.length === 0 ? (
-                <div className="bg-white border border-gray-200 rounded-xl p-10 text-center">
-                  <HardDrive className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-                  <p className="text-sm text-gray-500">No files uploaded yet.</p>
-                  <Link href={`/files?clientId=${id}`} className="mt-3 inline-block text-sm text-indigo-600 hover:underline">
-                    Go to Files
-                  </Link>
-                </div>
-              ) : (
-                <div className="space-y-6">
-                  {/* Client Common Files */}
-                  {commonFiles.length > 0 && (
-                    <div>
-                      <div className="flex items-center gap-2 mb-3">
-                        <FolderOpen className="w-4 h-4 text-gray-400" />
-                        <h3 className="text-sm font-medium text-gray-700">Client Common</h3>
-                        <span className="text-xs text-gray-400">({commonFiles.length})</span>
-                      </div>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                        {commonFiles.map((f) => <FileCard key={f.id} f={f} />)}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Per-Project File Groups */}
-                  {Object.entries(projectGroups).map(([pId, group]) => (
-                    <div key={pId}>
-                      <div className="flex items-center gap-2 mb-3">
-                        <FolderOpen className="w-4 h-4 text-indigo-400" />
-                        <Link href={`/projects/${pId}`} className="text-sm font-medium text-gray-700 hover:text-indigo-600 transition-colors">
-                          {group.name}
-                        </Link>
-                        <span className="text-xs text-gray-400">({group.files.length})</span>
-                      </div>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                        {group.files.map((f) => <FileCard key={f.id} f={f} />)}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-        })()}
+        {tab === "files" && (
+          <ClientFilesTab clientId={id} projects={client.projects ?? []} />
+        )}
 
         {/* ── INVOICES ── */}
         {tab === "invoices" && (() => {
@@ -1500,28 +1739,482 @@ export default function ClientDetailPage() {
             )}
           </div>
         )}
+
+        {/* ── EXPENSES ── */}
+        {tab === "expenses" && (() => {
+          const totalAmount = expenses.reduce((s, e) => s + Number(e.amount ?? 0), 0);
+          const currency = expenses[0]?.currency ?? "USD";
+
+          // Group: each project (this client's) + a "Direct (no project)" bucket
+          const groups: { key: string; label: string; projectId: string | null; items: Expense[] }[] = [];
+          const direct = expenses.filter((e) => !e.projectId);
+          const byProject = expenses.filter((e) => !!e.projectId);
+          if (direct.length) groups.push({ key: "direct", label: "Direct (no project)", projectId: null, items: direct });
+          const projectGroups = byProject.reduce<Record<string, { name: string; items: Expense[] }>>((acc, e) => {
+            const pId = e.projectId!;
+            if (!acc[pId]) acc[pId] = { name: e.project?.name ?? "Project", items: [] };
+            acc[pId].items.push(e);
+            return acc;
+          }, {});
+          Object.entries(projectGroups).forEach(([pId, g]) =>
+            groups.push({ key: pId, label: g.name, projectId: pId, items: g.items })
+          );
+
+          return (
+            <div className="max-w-4xl space-y-4">
+              {/* Summary + add button */}
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex gap-3">
+                  <div className="bg-white border border-gray-200 rounded-xl px-4 py-3">
+                    <p className="text-xs text-gray-500">Total Expenses</p>
+                    <p className="text-lg font-semibold text-gray-900">{formatMoney(totalAmount, currency)}</p>
+                  </div>
+                  <div className="bg-white border border-gray-200 rounded-xl px-4 py-3">
+                    <p className="text-xs text-gray-500">Count</p>
+                    <p className="text-lg font-semibold text-gray-900">{expenses.length}</p>
+                  </div>
+                </div>
+                <Button size="sm" icon={<Plus className="w-3.5 h-3.5" />} onClick={() => setExpenseModalOpen(true)}>
+                  Add Expense
+                </Button>
+              </div>
+
+              {!expensesLoaded ? (
+                <div className="space-y-2">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="bg-white border border-gray-200 rounded-xl h-12 animate-pulse" />
+                  ))}
+                </div>
+              ) : expenses.length === 0 ? (
+                <div className="bg-white border border-gray-200 rounded-xl p-10 text-center">
+                  <DollarSign className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                  <p className="text-sm text-gray-500">No expenses recorded yet.</p>
+                  <button
+                    onClick={() => setExpenseModalOpen(true)}
+                    className="mt-3 text-sm text-indigo-600 hover:underline"
+                  >
+                    Add the first expense
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-5">
+                  {groups.map((g) => {
+                    const groupTotal = g.items.reduce((s, e) => s + Number(e.amount ?? 0), 0);
+                    return (
+                      <div key={g.key}>
+                        <div className="flex items-center gap-2 mb-2">
+                          {g.projectId ? (
+                            <FolderOpen className="w-4 h-4 text-indigo-400" />
+                          ) : (
+                            <DollarSign className="w-4 h-4 text-gray-400" />
+                          )}
+                          {g.projectId ? (
+                            <Link href={`/projects/${g.projectId}`} className="text-sm font-medium text-gray-700 hover:text-indigo-600">
+                              {g.label}
+                            </Link>
+                          ) : (
+                            <span className="text-sm font-medium text-gray-700">{g.label}</span>
+                          )}
+                          <span className="text-xs text-gray-400">({g.items.length})</span>
+                          <span className="ml-auto text-xs font-medium text-gray-500">{formatMoney(groupTotal, currency)}</span>
+                        </div>
+                        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="bg-gray-50/50 dark:bg-slate-800/40 text-xs text-gray-500 uppercase tracking-wide">
+                                <th className="text-left px-4 py-2 font-medium">Title</th>
+                                <th className="text-left px-4 py-2 font-medium">Category</th>
+                                <th className="text-right px-4 py-2 font-medium">Amount</th>
+                                <th className="text-left px-4 py-2 font-medium">Date</th>
+                                <th className="text-left px-4 py-2 font-medium">Status</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
+                              {g.items.map((exp) => (
+                                <tr key={exp.id} className="hover:bg-gray-50/80 dark:hover:bg-slate-800/40 transition-colors">
+                                  <td className="px-4 py-2.5">
+                                    <p className="text-sm text-gray-800">{exp.title}</p>
+                                    {exp.notes && <p className="text-xs text-gray-400 line-clamp-1">{exp.notes}</p>}
+                                  </td>
+                                  <td className="px-4 py-2.5 text-xs text-gray-500">
+                                    {({
+                                      SOFTWARE_TOOLS: "Software & Tools",
+                                      FREELANCER_PAYMENT: "Freelancer Payment",
+                                      VENDOR_PAYMENT: "Vendor Payment",
+                                      STOCK_ASSETS: "Stock Assets",
+                                      PRINTING: "Printing",
+                                      TRAVEL: "Travel",
+                                      ADVERTISING: "Advertising",
+                                      OFFICE: "Office",
+                                      EQUIPMENT: "Equipment",
+                                      COMMISSIONS: "Commissions",
+                                      OTHER: "Other",
+                                    } as Record<ExpenseCategory, string>)[exp.category]}
+                                  </td>
+                                  <td className="px-4 py-2.5 text-right text-sm font-medium text-gray-800">
+                                    {formatMoney(Number(exp.amount), exp.currency)}
+                                  </td>
+                                  <td className="px-4 py-2.5 text-xs text-gray-500">
+                                    {new Date(exp.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                                  </td>
+                                  <td className="px-4 py-2.5">
+                                    <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
+                                      exp.status === "PAID" ? "bg-emerald-50 text-emerald-700"
+                                        : exp.status === "APPROVED" ? "bg-blue-50 text-blue-700"
+                                        : exp.status === "REJECTED" ? "bg-red-50 text-red-700"
+                                        : "bg-amber-50 text-amber-700"
+                                    }`}>
+                                      {exp.status}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* ── RECEIPTS ── */}
+        {tab === "receipts" && (() => {
+          const totalReceived = receipts.reduce((s, r) => s + Number(r.amount ?? 0), 0);
+          const currency = receipts[0]?.currency ?? "USD";
+          const METHOD_LABELS: Record<ReceiptMethod, string> = {
+            BANK_TRANSFER: "Bank Transfer",
+            CASH: "Cash",
+            CHECK: "Cheque",
+            CARD: "Card",
+            UPI: "UPI",
+            OTHER: "Other",
+          };
+
+          return (
+            <div className="max-w-4xl space-y-4">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex gap-3">
+                  <div className="bg-white border border-gray-200 rounded-xl px-4 py-3">
+                    <p className="text-xs text-gray-500">Total Received</p>
+                    <p className="text-lg font-semibold text-emerald-600">{formatMoney(totalReceived, currency)}</p>
+                  </div>
+                  <div className="bg-white border border-gray-200 rounded-xl px-4 py-3">
+                    <p className="text-xs text-gray-500">Count</p>
+                    <p className="text-lg font-semibold text-gray-900">{receipts.length}</p>
+                  </div>
+                </div>
+                <Button size="sm" icon={<Plus className="w-3.5 h-3.5" />} onClick={() => openReceiptModal()}>
+                  Record Receipt
+                </Button>
+              </div>
+
+              {!receiptsLoaded ? (
+                <div className="space-y-2">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="bg-white border border-gray-200 rounded-xl h-12 animate-pulse" />
+                  ))}
+                </div>
+              ) : receipts.length === 0 ? (
+                <div className="bg-white border border-gray-200 rounded-xl p-10 text-center">
+                  <ReceiptIcon className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                  <p className="text-sm text-gray-500">No payments recorded yet.</p>
+                  <button
+                    onClick={() => openReceiptModal()}
+                    className="mt-3 text-sm text-indigo-600 hover:underline"
+                  >
+                    Record the first payment
+                  </button>
+                </div>
+              ) : (
+                <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-gray-50/50 dark:bg-slate-800/40 text-xs text-gray-500 uppercase tracking-wide">
+                        <th className="text-left px-4 py-2.5 font-medium">Date</th>
+                        <th className="text-right px-4 py-2.5 font-medium">Amount</th>
+                        <th className="text-left px-4 py-2.5 font-medium">Method</th>
+                        <th className="text-left px-4 py-2.5 font-medium">Reference</th>
+                        <th className="text-left px-4 py-2.5 font-medium">Invoice</th>
+                        <th className="text-left px-4 py-2.5 font-medium">Notes</th>
+                        <th className="text-right px-4 py-2.5 font-medium w-20">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
+                      {receipts.map((r) => (
+                        <tr key={r.id} className="hover:bg-gray-50/80 dark:hover:bg-slate-800/40 transition-colors">
+                          <td className="px-4 py-3 text-gray-700">
+                            {new Date(r.receivedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                          </td>
+                          <td className="px-4 py-3 text-right text-sm font-medium text-emerald-600">
+                            {formatMoney(Number(r.amount), r.currency)}
+                          </td>
+                          <td className="px-4 py-3 text-xs text-gray-500">{METHOD_LABELS[r.method]}</td>
+                          <td className="px-4 py-3 text-xs text-gray-500">{r.reference || "—"}</td>
+                          <td className="px-4 py-3 text-xs">
+                            {r.invoice ? (
+                              <Link href={`/invoices`} className="text-indigo-600 hover:underline">
+                                {r.invoice.invoiceNumber}
+                              </Link>
+                            ) : (
+                              <span className="text-gray-300">—</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-xs text-gray-500 max-w-xs truncate">{r.notes || "—"}</td>
+                          <td className="px-4 py-3 text-right">
+                            <div className="inline-flex items-center gap-1">
+                              <button
+                                onClick={() => openReceiptModal(r)}
+                                className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                                title="Edit"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteReceipt(r.id)}
+                                className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                                title="Delete"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </div>
+
+      {/* Expense Modal */}
+      <Modal open={expenseModalOpen} onClose={() => setExpenseModalOpen(false)} title="Add Expense" width="max-w-md">
+        <form onSubmit={handleAddExpense} className="space-y-4">
+          {expenseError && <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">{expenseError}</p>}
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Title *</label>
+            <input
+              type="text" required
+              value={expenseForm.title}
+              onChange={(e) => setExpenseForm((f) => ({ ...f, title: e.target.value }))}
+              placeholder="e.g. Stock photos for homepage"
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Amount *</label>
+              <input
+                type="number" required step="0.01" min="0"
+                value={expenseForm.amount}
+                onChange={(e) => setExpenseForm((f) => ({ ...f, amount: e.target.value }))}
+                placeholder="0.00"
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Currency</label>
+              <select
+                value={expenseForm.currency}
+                onChange={(e) => setExpenseForm((f) => ({ ...f, currency: e.target.value }))}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+              >
+                {["USD", "EUR", "GBP", "INR", "AUD", "CAD", "SGD", "AED"].map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Category</label>
+              <select
+                value={expenseForm.category}
+                onChange={(e) => setExpenseForm((f) => ({ ...f, category: e.target.value as ExpenseCategory }))}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+              >
+                <option value="SOFTWARE_TOOLS">Software &amp; Tools</option>
+                <option value="FREELANCER_PAYMENT">Freelancer Payment</option>
+                <option value="VENDOR_PAYMENT">Vendor Payment</option>
+                <option value="STOCK_ASSETS">Stock Assets</option>
+                <option value="PRINTING">Printing</option>
+                <option value="TRAVEL">Travel</option>
+                <option value="ADVERTISING">Advertising</option>
+                <option value="OFFICE">Office &amp; Overhead</option>
+                <option value="EQUIPMENT">Equipment</option>
+                <option value="COMMISSIONS">Commissions</option>
+                <option value="OTHER">Other</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Date</label>
+              <input
+                type="date"
+                value={expenseForm.date}
+                onChange={(e) => setExpenseForm((f) => ({ ...f, date: e.target.value }))}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Project (optional)</label>
+            <select
+              value={expenseForm.projectId}
+              onChange={(e) => setExpenseForm((f) => ({ ...f, projectId: e.target.value }))}
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+            >
+              <option value="">— Direct to client (no project) —</option>
+              {(client?.projects ?? []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Notes</label>
+            <textarea
+              value={expenseForm.notes}
+              onChange={(e) => setExpenseForm((f) => ({ ...f, notes: e.target.value }))}
+              rows={2}
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+              placeholder="Optional notes…"
+            />
+          </div>
+          <div className="flex gap-2 pt-2">
+            <Button type="button" variant="secondary" className="flex-1" onClick={() => setExpenseModalOpen(false)}>Cancel</Button>
+            <Button type="submit" loading={expenseSaving} className="flex-1">Add Expense</Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Receipt Modal */}
+      <Modal open={receiptModalOpen} onClose={() => setReceiptModalOpen(false)} title={receiptEditing ? "Edit Receipt" : "Record Receipt"} width="max-w-md">
+        <form onSubmit={handleSaveReceipt} className="space-y-4">
+          {receiptError && <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">{receiptError}</p>}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Amount *</label>
+              <input
+                type="number" required step="0.01" min="0"
+                value={receiptForm.amount}
+                onChange={(e) => setReceiptForm((f) => ({ ...f, amount: e.target.value }))}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Currency</label>
+              <select
+                value={receiptForm.currency}
+                onChange={(e) => setReceiptForm((f) => ({ ...f, currency: e.target.value }))}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+              >
+                {["USD", "EUR", "GBP", "INR", "AUD", "CAD", "SGD", "AED"].map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Received On</label>
+              <input
+                type="date"
+                value={receiptForm.receivedAt}
+                onChange={(e) => setReceiptForm((f) => ({ ...f, receivedAt: e.target.value }))}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Method</label>
+              <select
+                value={receiptForm.method}
+                onChange={(e) => setReceiptForm((f) => ({ ...f, method: e.target.value as ReceiptMethod }))}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+              >
+                <option value="BANK_TRANSFER">Bank Transfer</option>
+                <option value="CASH">Cash</option>
+                <option value="CHECK">Cheque</option>
+                <option value="CARD">Card</option>
+                <option value="UPI">UPI</option>
+                <option value="OTHER">Other</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Linked Invoice (optional)</label>
+            <select
+              value={receiptForm.invoiceId}
+              onChange={(e) => setReceiptForm((f) => ({ ...f, invoiceId: e.target.value }))}
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+            >
+              <option value="">— None —</option>
+              {invoices.map((inv) => <option key={inv.id} value={inv.id}>{inv.invoiceNumber}</option>)}
+            </select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Reference</label>
+              <input
+                type="text"
+                value={receiptForm.reference}
+                onChange={(e) => setReceiptForm((f) => ({ ...f, reference: e.target.value }))}
+                placeholder="Txn id / cheque no."
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Receipt #</label>
+              <input
+                type="text"
+                value={receiptForm.receiptNumber}
+                onChange={(e) => setReceiptForm((f) => ({ ...f, receiptNumber: e.target.value }))}
+                placeholder="Internal #"
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Notes</label>
+            <textarea
+              value={receiptForm.notes}
+              onChange={(e) => setReceiptForm((f) => ({ ...f, notes: e.target.value }))}
+              rows={2}
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+            />
+          </div>
+          <div className="flex gap-2 pt-2">
+            <Button type="button" variant="secondary" className="flex-1" onClick={() => setReceiptModalOpen(false)}>Cancel</Button>
+            <Button type="submit" loading={receiptSaving} className="flex-1">{receiptEditing ? "Save Changes" : "Record Receipt"}</Button>
+          </div>
+        </form>
+      </Modal>
 
       {/* Edit Modal */}
       <Modal open={editOpen} onClose={() => setEditOpen(false)} title="Edit Client" width="max-w-2xl">
         <ClientForm
           clientId={client.id}
-          initialData={{
-            name: client.name,
-            companyName: client.companyName ?? "",
-            email: client.email ?? "",
-            phone: client.phone ?? "",
-            website: client.website ?? "",
-            industry: client.industry ?? "",
-            address: client.address ?? "",
-            logoUrl: client.logoUrl ?? "",
-            links: clientLinks,
-            brandColors: brandColors,
-            brandAssets: brandAssets,
-            taxRegistrations: client.taxRegistrations ?? [],
-            notes: client.notes ?? "",
-            status: client.status,
-          }}
+          initialData={(() => {
+            // Use the primary contact for the contact-side fields (falling back
+            // to the legacy Client.name/email/phone for older records that
+            // pre-date the company-first form).
+            const primary = client.contacts.find((c) => c.isPrimary) ?? client.contacts[0];
+            return {
+              name: primary?.name ?? client.name,
+              companyName: client.companyName ?? client.name ?? "",
+              email: primary?.email ?? client.email ?? "",
+              phone: primary?.phone ?? client.phone ?? "",
+              jobTitle: primary?.jobTitle ?? "",
+              website: client.website ?? "",
+              industry: client.industry ?? "",
+              address: client.address ?? "",
+              logoUrl: client.logoUrl ?? "",
+              links: clientLinks,
+              brandColors: brandColors,
+              brandAssets: brandAssets,
+              taxRegistrations: client.taxRegistrations ?? [],
+              notes: client.notes ?? "",
+              status: client.status,
+            };
+          })()}
           onSuccess={() => {
             setEditOpen(false);
             fetchClient();
@@ -1535,6 +2228,7 @@ export default function ClientDetailPage() {
         onClose={() => setContactModal({ open: false })}
         clientId={client.id}
         existing={contactModal.editing}
+        currentPrimary={client.contacts.find((c) => c.isPrimary) ?? null}
         onSaved={handleContactSaved}
       />
 

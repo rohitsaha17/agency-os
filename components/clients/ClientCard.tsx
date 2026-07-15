@@ -9,38 +9,43 @@ interface ClientCardProps {
 
 export function ClientCard({ client }: ClientCardProps) {
   const primaryContact = client.contacts.find((c) => c.isPrimary) ?? client.contacts[0];
-  const initials = client.name
-    .split(" ")
-    .map((w) => w[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
+  // Heading should always be the company name. Fall back to legacy `name`
+  // for older records created before the company-first form.
+  const displayName = client.companyName?.trim() || client.name;
 
   return (
     <Link href={`/clients/${client.id}`}>
       <div className="bg-white border border-gray-200 rounded-xl p-5 hover:border-indigo-300 hover:shadow-md transition-all group">
         {/* Header */}
         <div className="flex items-start justify-between mb-4">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 min-w-0">
             {client.logoUrl ? (
-              <img
-                src={client.logoUrl}
-                alt={client.name}
-                className="w-10 h-10 rounded-lg object-contain border border-gray-100"
-              />
+              // object-contain + p-1 + bg-white prevents cropping and gives
+              // transparent logos a clean canvas. The square box stays the
+              // same size; the logo scales to fit inside it.
+              <div className="w-10 h-10 rounded-lg bg-white border border-gray-200 flex items-center justify-center flex-shrink-0 p-1 overflow-hidden">
+                <img
+                  src={client.logoUrl}
+                  alt={displayName}
+                  className="max-w-full max-h-full object-contain"
+                />
+              </div>
             ) : (
-              <div className="w-10 h-10 rounded-lg bg-indigo-100 flex items-center justify-center">
-                <span className="text-xs font-bold text-indigo-600">{initials}</span>
+              <div className="w-10 h-10 rounded-lg bg-indigo-100 flex items-center justify-center flex-shrink-0">
+                <Building2 className="w-5 h-5 text-indigo-600" />
               </div>
             )}
-            <div>
-              <h3 className="text-sm font-semibold text-gray-900 group-hover:text-indigo-600 transition-colors leading-tight">
-                {client.name}
+            <div className="min-w-0">
+              <h3 className="text-sm font-bold text-gray-900 group-hover:text-indigo-600 transition-colors leading-tight truncate">
+                {displayName}
               </h3>
-              {client.companyName && (
-                <p className="text-xs text-gray-500 mt-0.5 flex items-center gap-1">
-                  <Building2 className="w-3 h-3" />
-                  {client.companyName}
+              {primaryContact && (
+                <p className="text-xs text-gray-500 mt-0.5 flex items-center gap-1 truncate">
+                  <User className="w-3 h-3 flex-shrink-0" />
+                  <span className="truncate">
+                    {primaryContact.name}
+                    {primaryContact.jobTitle ? ` · ${primaryContact.jobTitle}` : ""}
+                  </span>
                 </p>
               )}
             </div>
@@ -60,12 +65,6 @@ export function ClientCard({ client }: ClientCardProps) {
             <p className="text-xs text-gray-500 flex items-center gap-2">
               <Phone className="w-3.5 h-3.5 flex-shrink-0" />
               {client.phone}
-            </p>
-          )}
-          {primaryContact && (
-            <p className="text-xs text-gray-500 flex items-center gap-2">
-              <User className="w-3.5 h-3.5 flex-shrink-0" />
-              <span className="truncate">{primaryContact.name}{primaryContact.jobTitle ? ` · ${primaryContact.jobTitle}` : ""}</span>
             </p>
           )}
         </div>

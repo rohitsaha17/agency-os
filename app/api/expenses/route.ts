@@ -1,29 +1,50 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+const expenseInclude = {
+  project:     { select: { id: true, name: true, clientId: true } },
+  client:      { select: { id: true, name: true, companyName: true } },
+  stakeholder: { select: { id: true, name: true, type: true } },
+  user:        { select: { id: true, name: true } },
+};
+
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const projectId     = searchParams.get("projectId");
+  const clientId      = searchParams.get("clientId");
   const stakeholderId = searchParams.get("stakeholderId");
   const category      = searchParams.get("category");
   const status        = searchParams.get("status");
   const search        = searchParams.get("search");
+  // When `clientId` is provided we want ALL expenses for that client —
+  // either tagged directly OR tagged to a project that belongs to the client.
+  // Opt-in via `?clientId=xxx&includeProjectExpenses=1`.
+  const includeProjectExpenses = searchParams.get("includeProjectExpenses") === "1";
 
   try {
+    const where: Record<string, unknown> = {
+      ...(projectId     ? { projectId }     : {}),
+      ...(stakeholderId ? { stakeholderId } : {}),
+      ...(category ? { category: category as never } : {}),
+      ...(status   ? { status:   status   as never } : {}),
+      ...(search   ? { title: { contains: search, mode: "insensitive" } } : {}),
+    };
+
+    if (clientId) {
+      if (includeProjectExpenses) {
+        where.OR = [
+          { clientId },
+          { project: { clientId } },
+        ];
+      } else {
+        where.clientId = clientId;
+      }
+    }
+
     const expenses = await prisma.expense.findMany({
-      where: {
-        ...(projectId     ? { projectId }     : {}),
-        ...(stakeholderId ? { stakeholderId } : {}),
-        ...(category ? { category: category as never } : {}),
-        ...(status   ? { status:   status   as never } : {}),
-        ...(search   ? { title: { contains: search, mode: "insensitive" } } : {}),
-      },
+      where,
       orderBy: { date: "desc" },
-      include: {
-        project:     { select: { id: true, name: true } },
-        stakeholder: { select: { id: true, name: true, type: true } },
-        user:        { select: { id: true, name: true } },
-      },
+      include: expenseInclude,
     });
     return NextResponse.json(expenses);
   } catch (error) {
@@ -37,7 +58,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const {
       title, description, category, amount, currency,
-      date, status, projectId, stakeholderId, userId,
+      date, status, projectId, clientId, stakeholderId, userId,
       isReimbursable, receiptUrl, notes,
     } = body;
 
@@ -54,17 +75,14 @@ export async function POST(req: NextRequest) {
         date:           date ? new Date(date) : new Date(),
         status:         status || "PENDING",
         projectId:      projectId      || null,
+        clientId:       clientId       || null,
         stakeholderId:  stakeholderId  || null,
         userId:         userId         || null,
         isReimbursable: !!isReimbursable,
         receiptUrl:     receiptUrl?.trim() || null,
         notes:          notes?.trim()  || null,
       },
-      include: {
-        project:     { select: { id: true, name: true } },
-        stakeholder: { select: { id: true, name: true, type: true } },
-        user:        { select: { id: true, name: true } },
-      },
+      include: expenseInclude,
     });
     return NextResponse.json(expense, { status: 201 });
   } catch (error) {

@@ -121,7 +121,7 @@ function TaskRow({ task, depth, onOpen, onStatusChange, onAddSubtask, draggingId
         onDragEnd={canDrag ? onDragEnd : undefined}
         onDrop={canDrag ? (e) => { e.preventDefault(); onDrop(); } : undefined}
         onClick={() => onOpen(task)}
-        className={`group flex items-center gap-2.5 py-2.5 border-l-2 border-b border-b-gray-100 transition-all cursor-pointer ${STATUS_ROW_LEFT[task.status]} ${isDone ? "opacity-60" : ""} ${isDragging ? "opacity-30 bg-indigo-50" : "hover:bg-gray-50/80"}`}
+        className={`group flex items-center gap-2.5 py-2.5 border-l-2 border-b border-b-gray-100 dark:border-b-slate-800 transition-all cursor-pointer ${STATUS_ROW_LEFT[task.status]} ${isDone ? "opacity-60" : ""} ${isDragging ? "opacity-30 bg-indigo-50 dark:bg-indigo-500/10" : "hover:bg-gray-50/80 dark:hover:bg-slate-800/60"}`}
         style={{ paddingLeft: `${12 + depth * 22}px`, paddingRight: "10px" }}
       >
         {/* Drag handle */}

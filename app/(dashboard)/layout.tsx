@@ -1,6 +1,7 @@
 import { Sidebar } from "@/components/layout/Sidebar";
 import { ToastProvider } from "@/components/ui/Toast";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
+import { DateInputAutoOpen } from "@/components/ui/DateInputAutoOpen";
 
 export default function DashboardLayout({
   children,
@@ -10,6 +11,7 @@ export default function DashboardLayout({
   return (
     <ToastProvider>
       <ConfirmProvider>
+        <DateInputAutoOpen />
         <div className="min-h-screen bg-gray-50">
           <Sidebar />
           <main className="lg:ml-64 min-h-screen flex flex-col pt-14 lg:pt-0">

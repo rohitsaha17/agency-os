@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Calendar, CheckSquare, RefreshCw, Zap } from "lucide-react";
+import { Calendar, CheckSquare } from "lucide-react";
 import { StatusBadge } from "@/components/ui/Badge";
 import type { Project } from "@/types";
 
@@ -45,12 +45,11 @@ export function ProjectCard({ project }: ProjectCardProps) {
             <span className="text-xs text-gray-500 truncate">{clientName}</span>
           </div>
           <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
-            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
               project.type === "RETAINER"
                 ? "bg-purple-50 text-purple-700 ring-1 ring-purple-200"
                 : "bg-sky-50 text-sky-700 ring-1 ring-sky-200"
             }`}>
-              {project.type === "RETAINER" ? <RefreshCw className="w-3 h-3" /> : <Zap className="w-3 h-3" />}
               {project.type === "RETAINER" ? "Retainer" : "One-Time"}
             </span>
           </div>

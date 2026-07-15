@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
   ChevronRight, Plus, Calendar, DollarSign, CheckSquare,
-  LayoutGrid, List, Edit3, RefreshCw, Zap, FileText,
+  LayoutGrid, List, Edit3, FileText, Sparkles,
   TrendingDown, Scroll, Clock, CheckCircle2, XCircle, Paperclip,
   Upload, Download, Image, Film, File as FileIcon, Grid3X3,
   MessageSquare, Receipt, Send, Hash, ExternalLink, Trash2, Users, Loader2,
@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
 import { ProjectForm } from "@/components/projects/ProjectForm";
+import { TemplatePickerModal } from "@/components/projects/TemplatePickerModal";
 import { TaskBoard } from "@/components/tasks/TaskBoard";
 import { TaskList } from "@/components/tasks/TaskList";
 import { TaskModal } from "@/components/tasks/TaskModal";
@@ -80,7 +81,8 @@ const CATEGORY_LABELS: Record<ExpenseCategory, string> = {
   SOFTWARE_TOOLS: "Software & Tools", FREELANCER_PAYMENT: "Freelancer Payment",
   VENDOR_PAYMENT: "Vendor Payment", STOCK_ASSETS: "Stock Assets",
   PRINTING: "Printing", TRAVEL: "Travel", ADVERTISING: "Advertising",
-  OFFICE: "Office & Overhead", EQUIPMENT: "Equipment", OTHER: "Other",
+  OFFICE: "Office & Overhead", EQUIPMENT: "Equipment",
+  COMMISSIONS: "Commissions", OTHER: "Other",
 };
 
 const EXPENSE_STATUS_COLORS: Record<ExpenseStatus, string> = {
@@ -179,6 +181,7 @@ export default function ProjectDetailPage() {
 
   // Modals
   const [editProjectOpen, setEditProjectOpen] = useState(false);
+  const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
   const [taskModal, setTaskModal] = useState<{
     open: boolean; defaultStatus?: TaskStatus; parentTask?: Task | null;
   }>({ open: false });
@@ -606,12 +609,11 @@ export default function ProjectDetailPage() {
               <div className="flex items-center gap-2 mb-1 flex-wrap">
                 <h1 className="text-xl font-semibold text-gray-900" title={project.name}>{project.name}</h1>
                 <StatusBadge status={project.status} />
-                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
                   project.type === "RETAINER"
                     ? "bg-purple-50 text-purple-700 ring-1 ring-purple-200"
                     : "bg-sky-50 text-sky-700 ring-1 ring-sky-200"
                 }`}>
-                  {project.type === "RETAINER" ? <RefreshCw className="w-3 h-3" /> : <Zap className="w-3 h-3" />}
                   {project.type === "RETAINER"
                     ? `Retainer${project.recurringFrequency ? ` · ${RECURRING_FREQUENCIES.find(f => f.value === project.recurringFrequency)?.label ?? project.recurringFrequency}` : ""}`
                     : "One-Time"}
@@ -713,7 +715,7 @@ export default function ProjectDetailPage() {
       <div className="flex-1 px-4 sm:px-6 lg:px-8 py-4 sm:py-6 overflow-auto">
         {/* ── TASKS TAB ── */}
         {pageTab === "tasks" && (<>
-        <div className="flex items-center mb-5">
+        <div className="flex items-center justify-between mb-5 gap-3 flex-wrap">
           <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1">
             {(["list", "kanban"] as ViewMode[]).map((v) => (
               <button
@@ -726,6 +728,14 @@ export default function ProjectDetailPage() {
               </button>
             ))}
           </div>
+          <Button
+            size="sm"
+            variant="secondary"
+            icon={<Sparkles className="w-3.5 h-3.5" />}
+            onClick={() => setTemplatePickerOpen(true)}
+          >
+            Generate Tasks
+          </Button>
         </div>
 
 
@@ -1596,6 +1606,16 @@ export default function ProjectDetailPage() {
           />
         </Modal>
       )}
+
+      {/* Template Picker — Generate Tasks */}
+      <TemplatePickerModal
+        open={templatePickerOpen}
+        onClose={() => setTemplatePickerOpen(false)}
+        projectId={id}
+        projectType={project?.type as "ONE_TIME" | "RETAINER" | undefined}
+        startDate={project?.startDate}
+        onApplied={fetchTasks}
+      />
 
       {/* Task Create Modal */}
       {taskModal.open && (

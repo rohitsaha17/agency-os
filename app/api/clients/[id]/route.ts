@@ -38,14 +38,14 @@ export async function GET(_req: NextRequest, { params }: Params) {
   }
 }
 
-// PATCH /api/clients/[id] — update client fields
+// PATCH /api/clients/[id] — update client fields and primary contact
 export async function PATCH(req: NextRequest, { params }: Params) {
   const { id } = await params;
 
   try {
     const body = await req.json();
     const {
-      name, companyName, email, phone, website,
+      name, companyName, email, phone, jobTitle, website,
       industry, address, logoUrl, links, brandColors, brandAssets,
       taxRegistrations, notes, status,
     } = body;
@@ -55,32 +55,81 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       ? (Array.isArray(links) ? (links.find((l: { type: string; url: string }) => l.type === "logo")?.url ?? null) : null)
       : undefined;
 
-    const client = await prisma.client.update({
-      where: { id },
-      data: {
-        ...(name !== undefined && { name: name.trim() }),
-        ...(companyName !== undefined && { companyName: companyName?.trim() || null }),
-        ...(email !== undefined && { email: email?.trim() || null }),
-        ...(phone !== undefined && { phone: phone?.trim() || null }),
-        ...(website !== undefined && { website: website?.trim() || null }),
-        ...(industry !== undefined && { industry: industry?.trim() || null }),
-        ...(address !== undefined && { address: address?.trim() || null }),
-        ...(links !== undefined && { links }),
-        ...(derivedLogoUrl !== undefined && { logoUrl: derivedLogoUrl }),
-        ...(logoUrl !== undefined && links === undefined && { logoUrl: logoUrl?.trim() || null }),
-        ...(brandColors !== undefined && { brandColors }),
-        ...(brandAssets !== undefined && { brandAssets }),
-        ...(taxRegistrations !== undefined && { taxRegistrations }),
-        ...(notes !== undefined && { notes: notes?.trim() || null }),
-        ...(status !== undefined && { status }),
-      },
-      include: {
-        contacts: true,
-        _count: { select: { projects: true } },
-      },
+    // companyName is the entity identifier — when it changes, mirror it onto
+    // Client.name so the rest of the app (which reads `name`) stays in sync.
+    const company = companyName !== undefined ? (companyName?.trim() || null) : undefined;
+    const trimmedContactName = name !== undefined ? (name?.trim() || null) : undefined;
+
+    const result = await prisma.$transaction(async (tx) => {
+      const client = await tx.client.update({
+        where: { id },
+        data: {
+          ...(company !== undefined && { name: company || "" /* keep in sync */, companyName: company }),
+          ...(email !== undefined && { email: email?.trim() || null }),
+          ...(phone !== undefined && { phone: phone?.trim() || null }),
+          ...(website !== undefined && { website: website?.trim() || null }),
+          ...(industry !== undefined && { industry: industry?.trim() || null }),
+          ...(address !== undefined && { address: address?.trim() || null }),
+          ...(links !== undefined && { links }),
+          ...(derivedLogoUrl !== undefined && { logoUrl: derivedLogoUrl }),
+          ...(logoUrl !== undefined && links === undefined && { logoUrl: logoUrl?.trim() || null }),
+          ...(brandColors !== undefined && { brandColors }),
+          ...(brandAssets !== undefined && { brandAssets }),
+          ...(taxRegistrations !== undefined && { taxRegistrations }),
+          ...(notes !== undefined && { notes: notes?.trim() || null }),
+          ...(status !== undefined && { status }),
+        },
+      });
+
+      // Sync primary contact when any of its fields are sent
+      const contactFieldsTouched =
+        name !== undefined || email !== undefined ||
+        phone !== undefined || jobTitle !== undefined;
+
+      if (contactFieldsTouched) {
+        const primary = await tx.clientContact.findFirst({
+          where: { clientId: id, isPrimary: true },
+        });
+
+        const contactData = {
+          ...(trimmedContactName !== undefined && trimmedContactName && { name: trimmedContactName }),
+          ...(email !== undefined && { email: email?.trim() || null }),
+          ...(phone !== undefined && { phone: phone?.trim() || null }),
+          ...(jobTitle !== undefined && { jobTitle: jobTitle?.trim() || null }),
+        };
+
+        if (primary) {
+          if (Object.keys(contactData).length > 0) {
+            await tx.clientContact.update({
+              where: { id: primary.id },
+              data: contactData,
+            });
+          }
+        } else if (trimmedContactName) {
+          // No primary contact yet (legacy record) — create one
+          await tx.clientContact.create({
+            data: {
+              clientId: id,
+              name: trimmedContactName,
+              email: email?.trim() || null,
+              phone: phone?.trim() || null,
+              jobTitle: jobTitle?.trim() || null,
+              isPrimary: true,
+            },
+          });
+        }
+      }
+
+      return tx.client.findUnique({
+        where: { id: client.id },
+        include: {
+          contacts: true,
+          _count: { select: { projects: true } },
+        },
+      });
     });
 
-    return NextResponse.json(client);
+    return NextResponse.json(result);
   } catch (error: unknown) {
     if ((error as { code?: string }).code === "P2025") {
       return NextResponse.json({ error: "Client not found" }, { status: 404 });

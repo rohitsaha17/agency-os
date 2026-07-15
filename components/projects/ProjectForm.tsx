@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, Zap, RefreshCw } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import type { ProjectFormData, ProjectType, ProjectStatus, ClientSummary } from "@/types";
 
@@ -16,9 +16,9 @@ const STATUS_OPTIONS: { value: ProjectStatus; label: string }[] = [
   { value: "CANCELLED", label: "Cancelled" },
 ];
 
-const TYPE_OPTIONS: { value: ProjectType; label: string; desc: string; icon: React.ReactNode }[] = [
-  { value: "ONE_TIME", label: "One-Time", desc: "Fixed scope with a defined end date",      icon: <Zap className="w-4 h-4" /> },
-  { value: "RETAINER", label: "Retainer", desc: "Recurring engagement at a set frequency", icon: <RefreshCw className="w-4 h-4" /> },
+const TYPE_OPTIONS: { value: ProjectType; label: string; desc: string }[] = [
+  { value: "ONE_TIME", label: "One-Time", desc: "Fixed scope with a defined end date" },
+  { value: "RETAINER", label: "Retainer", desc: "Recurring engagement at a set frequency" },
 ];
 
 export const RECURRING_FREQUENCIES = [
@@ -172,15 +172,12 @@ export function ProjectForm({ initialData, projectId, defaultClientId, onSuccess
         {TYPE_OPTIONS.map((opt) => (
           <button
             key={opt.value} type="button" onClick={() => set("type", opt.value)}
-            className={`text-left p-4 rounded-xl border-2 transition-colors flex items-start gap-3 ${
+            className={`text-left p-4 rounded-xl border-2 transition-colors ${
               form.type === opt.value
                 ? "border-indigo-500 bg-indigo-50"
                 : "border-gray-200 hover:border-gray-300"
             }`}
           >
-            <span className={`mt-0.5 ${form.type === opt.value ? "text-indigo-600" : "text-gray-400"}`}>
-              {opt.icon}
-            </span>
             <div>
               <p className={`text-sm font-semibold ${form.type === opt.value ? "text-indigo-700" : "text-gray-800"}`}>
                 {opt.label}

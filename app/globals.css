@@ -109,6 +109,8 @@
 
 /* Opacity variants */
 .dark .bg-gray-50\/50             { background-color: rgba(30, 41, 59, 0.5); }
+.dark .bg-gray-50\/80             { background-color: rgba(30, 41, 59, 0.8); }
+.dark .hover\:bg-gray-50\/80:hover { background-color: rgba(30, 41, 59, 0.7); }
 .dark .bg-gray-100\/80            { background-color: rgba(30, 41, 59, 0.8); }
 
 /* Translucent white surfaces — used as light "chip" backgrounds inside
@@ -477,3 +479,68 @@ a:focus-visible {
    ═════════════════════════════════════════════════════════════ */
 a:not(.raw):hover { opacity: 0.92; }
 .dark a:not(.raw):hover { opacity: 1; }
+
+/* ═════════════════════════════════════════════════════════════
+   DATE / TIME INPUTS
+   - Light mode: tweak picker icon color for legibility.
+   - Dark mode: tell the browser the input lives on a dark surface
+     so all UA chrome (caret, picker) renders in a dark-friendly
+     palette, then invert the picker indicator icon so it is clearly
+     visible against the input background.
+   - Make the picker indicator span the whole input area so clicking
+     ANYWHERE on the input opens the calendar — paired with a JS
+     showPicker() fallback in components/ui/DateInputAutoOpen.tsx.
+   ═════════════════════════════════════════════════════════════ */
+input[type="date"],
+input[type="time"],
+input[type="datetime-local"],
+input[type="month"],
+input[type="week"] {
+  cursor: pointer;
+}
+
+.dark input[type="date"],
+.dark input[type="time"],
+.dark input[type="datetime-local"],
+.dark input[type="month"],
+.dark input[type="week"] {
+  color-scheme: dark;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+input[type="month"]::-webkit-calendar-picker-indicator,
+input[type="week"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.7;
+  padding: 4px;
+  border-radius: 4px;
+  transition: opacity 150ms ease, background-color 150ms ease;
+}
+input[type="date"]::-webkit-calendar-picker-indicator:hover,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover,
+input[type="month"]::-webkit-calendar-picker-indicator:hover,
+input[type="week"]::-webkit-calendar-picker-indicator:hover,
+input[type="time"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+  background-color: rgba(99, 102, 241, 0.12);
+}
+
+.dark input[type="date"]::-webkit-calendar-picker-indicator,
+.dark input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+.dark input[type="month"]::-webkit-calendar-picker-indicator,
+.dark input[type="week"]::-webkit-calendar-picker-indicator,
+.dark input[type="time"]::-webkit-calendar-picker-indicator {
+  filter: invert(1) brightness(1.4);
+  opacity: 0.85;
+}
+.dark input[type="date"]::-webkit-calendar-picker-indicator:hover,
+.dark input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover,
+.dark input[type="month"]::-webkit-calendar-picker-indicator:hover,
+.dark input[type="week"]::-webkit-calendar-picker-indicator:hover,
+.dark input[type="time"]::-webkit-calendar-picker-indicator:hover {
+  filter: invert(1) brightness(1.5);
+  opacity: 1;
+  background-color: rgba(129, 140, 248, 0.18);
+}

@@ -146,10 +146,14 @@ export type ClientSummary = Pick<
 };
 
 export interface ClientFormData {
+  /** Primary contact person's full name */
   name: string;
+  /** Company / organization name — the main client identifier */
   companyName: string;
   email: string;
   phone: string;
+  /** Primary contact person's job title / role */
+  jobTitle: string;
   website: string;
   industry: string;
   address: string;
@@ -562,7 +566,7 @@ export interface StakeholderFormData {
 export type ExpenseCategory =
   | "SOFTWARE_TOOLS" | "FREELANCER_PAYMENT" | "VENDOR_PAYMENT"
   | "STOCK_ASSETS" | "PRINTING" | "TRAVEL" | "ADVERTISING"
-  | "OFFICE" | "EQUIPMENT" | "OTHER";
+  | "OFFICE" | "EQUIPMENT" | "COMMISSIONS" | "OTHER";
 
 export type ExpenseStatus = "PENDING" | "APPROVED" | "REJECTED" | "PAID";
 
@@ -576,6 +580,7 @@ export interface Expense {
   date: string;
   status: ExpenseStatus;
   projectId: string | null;
+  clientId: string | null;
   stakeholderId: string | null;
   userId: string | null;
   isReimbursable: boolean;
@@ -584,6 +589,7 @@ export interface Expense {
   createdAt: string;
   updatedAt: string;
   project?: { id: string; name: string } | null;
+  client?: { id: string; name: string; companyName: string | null } | null;
   stakeholder?: { id: string; name: string; type: StakeholderType } | null;
   user?: { id: string; name: string } | null;
 }
@@ -597,11 +603,48 @@ export interface ExpenseFormData {
   date: string;
   status: ExpenseStatus;
   projectId: string;
+  clientId: string;
   stakeholderId: string;
   userId: string;
   isReimbursable: boolean;
   receiptUrl: string;
   notes: string;
+}
+
+// ── Receipts (payments received from clients) ─────────────────
+
+export type ReceiptMethod =
+  | "BANK_TRANSFER" | "CASH" | "CHECK" | "CARD" | "UPI" | "OTHER";
+
+export interface Receipt {
+  id: string;
+  clientId: string;
+  invoiceId: string | null;
+  amount: number;
+  currency: string;
+  receivedAt: string;
+  method: ReceiptMethod;
+  reference: string | null;
+  receiptNumber: string | null;
+  notes: string | null;
+  attachmentUrl: string | null;
+  createdAt: string;
+  updatedAt: string;
+  client?: { id: string; name: string; companyName: string | null } | null;
+  invoice?: { id: string; invoiceNumber: string } | null;
+}
+
+export interface ReceiptFormData {
+  clientId: string;
+  invoiceId: string;
+  amount: string;
+  currency: string;
+  receivedAt: string;
+  method: ReceiptMethod;
+  reference: string;
+  receiptNumber: string;
+  notes: string;
+  attachmentUrl: string;
 }
 
 // ── Contracts ─────────────────────────────────────────────────

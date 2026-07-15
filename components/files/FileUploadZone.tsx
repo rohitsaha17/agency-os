@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Upload, CheckCircle, XCircle, Loader2, FolderUp, Link2, Folder, Building2, Briefcase } from "lucide-react";
+import { Upload, CheckCircle, XCircle, Loader2, FolderUp, Link2, Folder, Building2, Briefcase, Pencil, Check } from "lucide-react";
 import type { AssetFile } from "@/types";
 
 // ── types ──────────────────────────────────────────────────────
@@ -316,32 +316,124 @@ export function FileUploadZone({
 // ── UploadRow sub-component ────────────────────────────────────
 
 function UploadRow({ item }: { item: UploadItem }) {
+  // Inline metadata editor — appears once upload completes so users can add
+  // an optional friendly title and description without leaving the page.
+  const [editing, setEditing] = useState(false);
+  const [title, setTitle] = useState(item.result?.name ?? item.file.name);
+  const [description, setDescription] = useState(item.result?.description ?? "");
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const save = async () => {
+    if (!item.result?.id) return;
+    setSaving(true);
+    try {
+      await fetch(`/api/files/${item.result.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: title.trim() || item.file.name,
+          description: description.trim() || null,
+        }),
+      });
+      setSaved(true);
+      setEditing(false);
+    } catch {
+      // ignore — the file is uploaded; metadata edit is optional
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="bg-slate-800 rounded-lg px-4 py-2.5">
       <div className="flex items-center gap-3">
         <div className="flex-1 min-w-0">
-          <p className="text-sm text-slate-200 truncate">{item.file.name}</p>
+          <p className="text-sm text-slate-200 truncate">
+            {saved ? title : item.file.name}
+          </p>
           {item.progress === "error" ? (
             <p className="text-xs text-red-400 mt-0.5">{item.errorMsg}</p>
           ) : (
             <p className="text-xs text-slate-500 mt-0.5">
               {formatBytes(item.file.size)}
+              {saved && description ? ` · ${description.slice(0, 60)}${description.length > 60 ? "…" : ""}` : ""}
             </p>
           )}
         </div>
 
-        <div className="flex-shrink-0">
+        <div className="flex-shrink-0 flex items-center gap-2">
           {item.progress === "uploading" && (
             <Loader2 className="w-4 h-4 text-indigo-400 animate-spin" />
           )}
-          {item.progress === "done" && (
-            <CheckCircle className="w-4 h-4 text-emerald-400" />
+          {item.progress === "done" && !editing && (
+            <>
+              <button
+                type="button"
+                onClick={() => setEditing(true)}
+                className="text-[11px] text-slate-400 hover:text-slate-200 inline-flex items-center gap-1 transition-colors"
+                title="Add title / description (optional)"
+              >
+                <Pencil className="w-3 h-3" />
+                {saved ? "Edit" : "Add details"}
+              </button>
+              <CheckCircle className="w-4 h-4 text-emerald-400" />
+            </>
           )}
           {item.progress === "error" && (
             <XCircle className="w-4 h-4 text-red-400" />
           )}
         </div>
       </div>
+
+      {/* Inline metadata editor */}
+      {editing && (
+        <div className="mt-3 pt-3 border-t border-slate-700/60 space-y-2">
+          <div>
+            <label className="block text-[11px] text-slate-500 mb-1">
+              Title <span className="text-slate-600">(optional)</span>
+            </label>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder={item.file.name}
+              className="w-full px-2.5 py-1.5 text-sm rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+          <div>
+            <label className="block text-[11px] text-slate-500 mb-1">
+              Description <span className="text-slate-600">(optional)</span>
+            </label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={2}
+              placeholder="Brief note about this file…"
+              className="w-full px-2.5 py-1.5 text-sm rounded-lg bg-slate-900 border border-slate-700 text-slate-200 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+            />
+          </div>
+          <div className="flex items-center gap-2 justify-end">
+            <button
+              type="button"
+              onClick={() => setEditing(false)}
+              disabled={saving}
+              className="text-[11px] px-3 py-1.5 text-slate-400 hover:text-slate-200 transition-colors"
+            >
+              Skip
+            </button>
+            <button
+              type="button"
+              onClick={save}
+              disabled={saving}
+              className="text-[11px] px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg inline-flex items-center gap-1.5 disabled:opacity-50 transition-colors"
+            >
+              {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+              Save
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -39,7 +39,7 @@ const LINK_TYPES: { value: ClientLinkType; label: string }[] = [
 ];
 
 const EMPTY_FORM: ClientFormData = {
-  name: "", companyName: "", email: "", phone: "",
+  name: "", companyName: "", email: "", phone: "", jobTitle: "",
   website: "", industry: "", address: "", logoUrl: "",
   links: [], brandColors: [], brandAssets: [], taxRegistrations: [],
   notes: "", status: "ACTIVE",
@@ -258,10 +258,13 @@ export function ClientForm({ initialData, clientId, onSuccess }: ClientFormProps
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.name.trim()) { setError("Client name is required"); return; }
+    if (!form.companyName.trim()) { setError("Company name is required"); return; }
+    if (!form.name.trim()) { setError("Primary contact name is required"); return; }
     setSaving(true);
     setError(null);
     try {
+      // Send the form as-is. Server uses companyName as the entity identifier
+      // and creates a primary ClientContact from { name, email, phone, jobTitle }.
       const res = await fetch(isEdit ? `/api/clients/${clientId}` : "/api/clients", {
         method: isEdit ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
@@ -283,21 +286,14 @@ export function ClientForm({ initialData, clientId, onSuccess }: ClientFormProps
         <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">{error}</div>
       )}
 
-      {/* Basic Info */}
-      <Section title="Basic Information">
+      {/* Company Information */}
+      <Section title="Company Information">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <FormField label="Contact Person Name" required>
-            <TextInput value={form.name} onChange={(v) => set("name", v)} placeholder="e.g. John Smith" />
-          </FormField>
-          <FormField label="Company Name">
-            <TextInput value={form.companyName} onChange={(v) => set("companyName", v)} placeholder="If different from above" />
-          </FormField>
-          <FormField label="Email">
-            <TextInput value={form.email} onChange={(v) => set("email", v)} placeholder="contact@example.com" type="email" />
-          </FormField>
-          <FormField label="Phone">
-            <PhoneInput value={form.phone} onChange={(v) => set("phone", v)} placeholder="Phone number" />
-          </FormField>
+          <div className="col-span-1 sm:col-span-2">
+            <FormField label="Company Name" required>
+              <TextInput value={form.companyName} onChange={(v) => set("companyName", v)} placeholder="e.g. Acme Corporation" />
+            </FormField>
+          </div>
           <FormField label="Website">
             <TextInput value={form.website} onChange={(v) => set("website", v)} placeholder="example.com or https://example.com" />
           </FormField>
@@ -309,7 +305,7 @@ export function ClientForm({ initialData, clientId, onSuccess }: ClientFormProps
               placeholder="Select industry"
             />
           </FormField>
-          <div className="col-span-2">
+          <div className="col-span-1 sm:col-span-2">
             <FormField label="Address">
               <TextInput value={form.address} onChange={(v) => set("address", v)} placeholder="123 Main St, City, Country" />
             </FormField>
@@ -320,6 +316,28 @@ export function ClientForm({ initialData, clientId, onSuccess }: ClientFormProps
               onChange={(v) => set("status", v as ClientStatus)}
               options={STATUS_OPTIONS}
             />
+          </FormField>
+        </div>
+      </Section>
+
+      {/* Primary Contact */}
+      <Section title="Primary Contact">
+        <p className="text-xs text-gray-500 mb-4">
+          The first person you add becomes the primary contact for this client.
+          You can add more contacts later from the client&rsquo;s page.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <FormField label="Contact Name" required>
+            <TextInput value={form.name} onChange={(v) => set("name", v)} placeholder="e.g. John Smith" />
+          </FormField>
+          <FormField label="Role / Job Title">
+            <TextInput value={form.jobTitle} onChange={(v) => set("jobTitle", v)} placeholder="e.g. Marketing Director" />
+          </FormField>
+          <FormField label="Email">
+            <TextInput value={form.email} onChange={(v) => set("email", v)} placeholder="contact@example.com" type="email" />
+          </FormField>
+          <FormField label="Phone">
+            <PhoneInput value={form.phone} onChange={(v) => set("phone", v)} placeholder="Phone number" />
           </FormField>
         </div>
       </Section>

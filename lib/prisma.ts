@@ -1,12 +1,15 @@
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
+import { getRuntimeDatabaseUrl } from "@/lib/db-url";
 
 // Prevent multiple Prisma Client instances during Next.js hot reload
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };
 
 function createPrismaClient() {
-  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  // Accept whichever connection URL is present — DATABASE_URL, or the
+  // Vercel-Supabase auto-injected POSTGRES_* variants.
+  const pool = new Pool({ connectionString: getRuntimeDatabaseUrl() });
   const adapter = new PrismaPg(pool);
   return new PrismaClient({
     adapter,

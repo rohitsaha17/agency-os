@@ -8,19 +8,19 @@ import dotenv from "dotenv";
 // CommonJS and ESM contexts (Prisma CLI may evaluate this either way).
 dotenv.config({ path: path.resolve(process.cwd(), ".env") });
 
-const databaseUrl = process.env.DATABASE_URL;
-
-// Prisma 7 expects the connection URL under `datasource.url` (not under
-// `migrate.*` — that field doesn't exist in the public PrismaConfig type).
-// The property must always be present; we use an empty-string fallback so
-// `prisma generate` during install (e.g. Vercel before env vars wire up)
-// doesn't crash. Migrate commands will surface a clear connection error
-// downstream if the URL is empty, which is the desired behavior.
-const config: Parameters<typeof defineConfig>[0] = {
+// Prisma 7 requires `datasource.url` to be a literal in the exported
+// config for migrate / db push. Making it conditional (only setting the
+// property when DATABASE_URL is defined) makes `db push` error with
+// "datasource.url property is required" instead of a clear connection
+// error, so we always include it.
+//
+// Empty-string fallback: `prisma generate` doesn't need a real URL and
+// won't crash on an empty one. Migrate/push commands with an empty URL
+// will surface a clearer "invalid connection string" error downstream —
+// pointing you at your DATABASE_URL env var, which is the actual problem.
+export default defineConfig({
   schema: "prisma/schema.prisma",
-};
-if (databaseUrl) {
-  config.datasource = { url: databaseUrl };
-}
-
-export default defineConfig(config);
+  datasource: {
+    url: process.env.DATABASE_URL ?? "",
+  },
+});

@@ -62,16 +62,25 @@ export function handleApiError(err: unknown, tag?: string): NextResponse {
     return apiError(err.message, err.status, err.code);
   }
 
-  // Unknown error — log it for operators, return generic message to caller.
+  // Unknown error — log it for operators.
   const prefix = tag ? `[${tag}]` : "[api]";
   if (err instanceof Error) {
-    console.error(prefix, err.message);
+    console.error(prefix, err.name, err.message, err.stack);
   } else {
-    console.error(prefix, "Non-Error thrown:", typeof err);
+    console.error(prefix, "Non-Error thrown:", typeof err, err);
   }
 
+  // Surface the underlying error name + first line of message to callers.
+  // This is fine for a solo-dev deployment and makes production debugging
+  // dramatically easier; tighten to a generic "Internal error" once the
+  // app is used by real end users.
+  const detail =
+    err instanceof Error
+      ? `${err.name}: ${err.message.split("\n")[0].slice(0, 240)}`
+      : "Unknown internal error";
+
   return NextResponse.json(
-    { error: { message: "Internal error", code: "INTERNAL" } },
+    { error: { message: detail, code: "INTERNAL" } },
     { status: 500 }
   );
 }

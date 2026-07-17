@@ -70,14 +70,25 @@ export function handleApiError(err: unknown, tag?: string): NextResponse {
     console.error(prefix, "Non-Error thrown:", typeof err, err);
   }
 
-  // Surface the underlying error name + first line of message to callers.
-  // This is fine for a solo-dev deployment and makes production debugging
-  // dramatically easier; tighten to a generic "Internal error" once the
-  // app is used by real end users.
-  const detail =
-    err instanceof Error
-      ? `${err.name}: ${err.message.split("\n")[0].slice(0, 240)}`
-      : "Unknown internal error";
+  // Surface the underlying error name + a useful line of message to
+  // callers. Solo-dev deploys: worth the debuggability trade-off.
+  // Tighten to a generic "Internal error" once real end users show up.
+  //
+  // Prisma errors format their message with a bunch of leading whitespace
+  // and the useful line 2+ lines down, so we pick the first NON-EMPTY line
+  // rather than "message.split('\\n')[0]" (which was returning "").
+  // Prisma errors also carry a `.code` (P1001, P2002, etc.) — that's often
+  // the single most useful piece of info, so include it if present.
+  let detail = "Unknown internal error";
+  if (err instanceof Error) {
+    const firstMeaningfulLine =
+      err.message
+        .split("\n")
+        .map((l) => l.trim())
+        .find((l) => l.length > 0) ?? "";
+    const prismaCode = (err as unknown as { code?: string }).code;
+    detail = `${err.name}${prismaCode ? ` (${prismaCode})` : ""}: ${firstMeaningfulLine.slice(0, 320) || "(no message)"}`;
+  }
 
   return NextResponse.json(
     { error: { message: detail, code: "INTERNAL" } },

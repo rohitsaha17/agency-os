@@ -29,3 +29,6 @@ tsconfig.tsbuildinfo
 # binary marketing/sales assets — not part of the codebase
 *.pdf
 *.pptx
+
+# Supabase CLI local state
+supabase/.temp/

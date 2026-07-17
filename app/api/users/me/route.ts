@@ -28,6 +28,7 @@ export async function GET(req: NextRequest) {
             currency: true,
             timezone: true,
             dateFormat: true,
+            onboardingCompleted: true,
           },
         },
       },

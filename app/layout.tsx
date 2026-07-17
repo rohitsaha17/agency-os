@@ -3,8 +3,9 @@ import "./globals.css";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 
 export const metadata: Metadata = {
-  title: "Agency Management Tool",
-  description: "Full-scale creative agency management platform",
+  title: "Vibrnd Studio Flow",
+  description:
+    "Run your creative agency on one flow — clients, projects, tasks, quotes, invoices, files and more.",
 };
 
 /*

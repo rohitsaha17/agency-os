@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
+import { useCurrentUser } from "@/lib/useCurrentUser";
 import {
   AlertCircle, Clock, CheckCircle2, Ban, FolderKanban,
   TrendingUp, Users, FileText, HardDrive, ArrowRight,
@@ -506,6 +507,7 @@ function MetricRing({ value, label, color }: { value: number; label: string; col
 // ── Main Page ─────────────────────────────────────────────────
 
 export default function DashboardPage() {
+  const { user: currentUser } = useCurrentUser();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -703,7 +705,9 @@ export default function DashboardPage() {
       <div className="bg-white border-b border-gray-200 px-4 sm:px-6 lg:px-8 py-4 sm:py-5 flex-shrink-0">
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:justify-between">
           <div>
-            <h1 className="text-xl font-semibold text-gray-900">{greeting()}, AgencyOS</h1>
+            <h1 className="text-xl font-semibold text-gray-900">
+              {greeting()}, {currentUser?.name?.split(" ")[0] ?? "there"}
+            </h1>
             <p className="text-sm text-gray-500 mt-0.5">{today}</p>
             {alertCount > 0 ? (
               <p className="text-sm text-amber-700 mt-1 font-medium flex items-center gap-1.5">

@@ -1006,6 +1006,12 @@ model Organization {
   letterheadTemplate String  @default("CLASSIC")
   letterheadConfig   String?
 
+  // Onboarding: new tenants are created by the platform admin with this
+  // false; the org OWNER completes the onboarding form on first login,
+  // which flips it true and unlocks the dashboard.
+  onboardingCompleted Boolean   @default(false)
+  onboardedAt         DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

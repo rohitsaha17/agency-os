@@ -5,11 +5,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Users, FolderKanban, CheckSquare,
-  Calendar, FileText, Tag, Receipt, Settings, Zap,
+  Calendar, FileText, Tag, Receipt, Settings,
   HardDrive, Users2, TrendingDown, Scroll, Menu, X,
-  Sun, MessageSquare,
+  Sun, MessageSquare, LogOut,
 } from "lucide-react";
 import { ThemeToggle, ThemeToggleIcon } from "@/components/ui/ThemeToggle";
+import { BrandLogo } from "@/components/ui/BrandLogo";
 import { useTheme } from "@/components/providers/ThemeProvider";
 import { GlobalSearch } from "@/components/ui/GlobalSearch";
 
@@ -189,16 +190,26 @@ function NavContent({
         {/* User row */}
         <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg mt-1">
           <div className="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0 shadow-sm ring-1 ring-indigo-400/30">
-            {appUser ? appUser.name.charAt(0).toUpperCase() : "A"}
+            {appUser ? appUser.name.charAt(0).toUpperCase() : "·"}
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-xs font-semibold text-slate-200 truncate leading-tight">
-              {appUser?.name ?? "Admin"}
+              {appUser?.name ?? "Signed out"}
             </p>
             <p className="text-[10px] text-slate-500 truncate leading-tight mt-0.5">
-              {appUser?.email ?? "AgencyOS"}
+              {appUser?.email ?? "Vibrnd Studio Flow"}
             </p>
           </div>
+          <button
+            onClick={async () => {
+              try { await fetch("/api/auth/logout", { method: "POST" }); } catch { /* ignore */ }
+              window.location.href = "/login";
+            }}
+            title="Log out"
+            className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-white/[0.06] transition-colors flex-shrink-0"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+          </button>
         </div>
       </div>
     </div>
@@ -210,12 +221,15 @@ function NavContent({
    ───────────────────────────────────────────────────────────── */
 function Logo() {
   return (
-    <div className="flex items-center gap-2.5">
+    <div className="flex items-center gap-2.5 text-white">
       <div className="w-7 h-7 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-lg flex items-center justify-center shadow-sm ring-1 ring-indigo-400/20">
-        <Zap className="w-4 h-4 text-white" />
+        <BrandLogo className="w-4.5 h-4.5 text-white" />
       </div>
-      <span className="text-white font-semibold text-sm tracking-tight">
-        AgencyOS
+      <span className="font-semibold text-sm tracking-tight leading-tight">
+        Vibrnd
+        <span className="block text-[9px] font-medium tracking-[0.18em] uppercase text-slate-400">
+          Studio Flow
+        </span>
       </span>
     </div>
   );

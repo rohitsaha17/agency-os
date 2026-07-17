@@ -9,7 +9,26 @@ const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };
 function createPrismaClient() {
   // Accept whichever connection URL is present — DATABASE_URL, or the
   // Vercel-Supabase auto-injected POSTGRES_* variants.
-  const pool = new Pool({ connectionString: getRuntimeDatabaseUrl() });
+  const connectionString = getRuntimeDatabaseUrl();
+
+  // Local Postgres (localhost / 127.0.0.1) doesn't use TLS; remote hosts
+  // like Supabase require it. Only enable SSL for non-local hosts so local
+  // dev keeps working.
+  const isLocal = /(?:localhost|127\.0\.0\.1)/.test(connectionString);
+
+  const pool = new Pool({
+    connectionString,
+    // ── Serverless (Vercel) + Supabase pooler (Supavisor) tuning ──
+    // A frozen lambda holds open TCP connections that Supavisor eventually
+    // reaps; a later thaw then tries to reuse a dead backend and fails with
+    // EPOOLCHECKOUT / :noproc. Keeping the local pool tiny and releasing
+    // idle connections quickly makes us re-establish fresh connections
+    // instead of reusing stale ones.
+    max: 1, // one backend per lambda instance — pooler multiplexes the rest
+    idleTimeoutMillis: 10_000, // drop idle conns before Supavisor reaps them
+    connectionTimeoutMillis: 15_000, // fail fast instead of hanging 30s
+    ...(isLocal ? {} : { ssl: { rejectUnauthorized: false } }),
+  });
   const adapter = new PrismaPg(pool);
   return new PrismaClient({
     adapter,

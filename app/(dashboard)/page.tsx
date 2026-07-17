@@ -519,7 +519,15 @@ export default function DashboardPage() {
     try {
       const res = await fetch("/api/dashboard");
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error);
+      if (!res.ok) {
+        // API errors are now shaped as { error: { message, code } };
+        // fall back to a plain string for older callers or unexpected shapes.
+        const errObj = json?.error;
+        const msg = typeof errObj === "string"
+          ? errObj
+          : (errObj?.message ?? `Request failed (${res.status})`);
+        throw new Error(msg);
+      }
       setData(json);
       setLastRefresh(new Date());
     } catch (e) {

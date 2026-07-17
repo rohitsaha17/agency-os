@@ -1,54 +1,57 @@
+/* eslint-disable @next/next/no-img-element */
+
 /**
  * Vibrnd Studio Flow — brand mark.
  *
- * Faithful vector redraw of the Vibrnd logo: heavy geometric "V" whose
- * right arm sweeps up to a rounded tip, with a reels/clapper icon at the
- * top right (film-strip notches + play-button cutout). Drawn with
- * `currentColor` so it inherits text color — white on dark chrome,
- * near-black on light surfaces.
+ * Uses the ORIGINAL logo artwork, background-removed and cropped to the
+ * mark (bold V + reels icon):
  *
- * To use the original raster artwork instead, save it (ideally with a
- * transparent background) as `public/logo.png` and swap this component's
- * body for:
- *   <img src="/logo.png" alt="Vibrnd Studio Flow" className={className} />
+ *   public/logo-mark.png — mark only, black on transparent
+ *   public/logo-full.png — full lockup (mark + VIBRND Studio Flow text)
+ *
+ * The mark is black; on dark chrome we render it white via a CSS invert
+ * filter (transparency is preserved, so only the glyph flips color).
+ *
+ * `tone="onDark"` (default) → white mark for dark surfaces.
+ * `tone="onLight"`          → original black mark for light surfaces.
  */
-export function BrandLogo({ className }: { className?: string }) {
+export function BrandLogo({
+  className,
+  tone = "onDark",
+}: {
+  className?: string;
+  tone?: "onDark" | "onLight";
+}) {
   return (
-    <svg
-      viewBox="0 0 86 100"
-      className={className}
-      fill="currentColor"
-      xmlns="http://www.w3.org/2000/svg"
+    <img
+      src="/logo-mark.png"
+      alt=""
       aria-hidden="true"
-    >
-      {/* The V — left arm with flat top, right arm rising to a rounded tip */}
-      <path
-        d="M 4.5 20
-           H 51.1
-           L 44.2 72.6
-           L 74.0 31.2
-           A 6.8 6.8 0 0 1 85.2 38.9
-           L 56.4 99.1
-           H 28.9
-           L 1.6 24.5
-           Q 0.4 20 4.5 20
-           Z"
-      />
-      {/* Reels icon — rounded square, clapper strip with notches, play cutout */}
-      <path
-        fillRule="evenodd"
-        d="M 69.5 0 h 11.5 a 5 5 0 0 1 5 5 v 11.5 a 5 5 0 0 1 -5 5 h -11.5 a 5 5 0 0 1 -5 -5 V 5 a 5 5 0 0 1 5 -5 Z
-           M 64.5 6 h 21.5 v 1.3 h -21.5 Z
-           M 67.8 0.8 l 2.7 4.6 h 2.5 l -2.7 -4.6 Z
-           M 73.9 0.8 l 2.7 4.6 h 2.5 l -2.7 -4.6 Z
-           M 80.0 0.8 l 2.7 4.6 h 2.4 l -2.2 -4.2 a 5 5 0 0 0 -1.4 -0.4 Z
-           M 71.8 9.7 l 7.6 4.35 l -7.6 4.35 Z"
-      />
-    </svg>
+      draggable={false}
+      className={`object-contain select-none ${tone === "onDark" ? "invert" : ""} ${className ?? ""}`}
+    />
   );
 }
 
-/** Wordmark + logo lockup used on marketing-style surfaces. */
+/** Full logo lockup (mark + wordmark) — for marketing-style surfaces. */
+export function BrandLogoFull({
+  className,
+  tone = "onDark",
+}: {
+  className?: string;
+  tone?: "onDark" | "onLight";
+}) {
+  return (
+    <img
+      src="/logo-full.png"
+      alt="Vibrnd Studio Flow"
+      draggable={false}
+      className={`object-contain select-none ${tone === "onDark" ? "invert" : ""} ${className ?? ""}`}
+    />
+  );
+}
+
+/** Mark + text lockup used in app chrome (text stays crisp as HTML). */
 export function BrandLockup({
   markClassName = "w-8 h-8",
   textClassName = "text-base",

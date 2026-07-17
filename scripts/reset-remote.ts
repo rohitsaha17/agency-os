@@ -48,12 +48,36 @@ async function main() {
   try {
     console.log("→ Dropping the entire public schema…");
     // Nuclear: drop the whole public schema and recreate it. This removes
-    // tables, indexes, sequences, enums, functions — everything Prisma
-    // creates. Then `prisma db push` starts from a clean slate.
+    // tables, indexes, sequences, enums, functions — everything, including
+    // any Supabase template tables (e.g. a `public.audit_log` that points
+    // at `auth.users` and blocks `prisma db push` with error P4002).
+    // Supabase's own machinery lives in the auth/storage/realtime schemas,
+    // NOT public, so this is safe.
     await client.query("DROP SCHEMA IF EXISTS public CASCADE");
     await client.query("CREATE SCHEMA public");
-    await client.query("GRANT ALL ON SCHEMA public TO PUBLIC");
     console.log("  ✓ public schema recreated (empty)");
+
+    // Restore standard grants. `postgres` owns the schema (it created it),
+    // and we re-grant the Supabase service roles if they exist so the
+    // project's API/dashboard keep working. Guarded so this also runs fine
+    // against a plain Postgres that lacks those roles.
+    console.log("→ Restoring schema grants…");
+    await client.query("GRANT ALL ON SCHEMA public TO postgres");
+    await client.query("GRANT USAGE ON SCHEMA public TO public");
+    await client.query(`
+      DO $$
+      DECLARE r text;
+      BEGIN
+        FOREACH r IN ARRAY ARRAY['anon','authenticated','service_role'] LOOP
+          IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = r) THEN
+            EXECUTE format('GRANT USAGE ON SCHEMA public TO %I', r);
+            EXECUTE format('ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO %I', r);
+            EXECUTE format('ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO %I', r);
+          END IF;
+        END LOOP;
+      END $$;
+    `);
+    console.log("  ✓ grants restored");
 
     console.log("\n✓ Done. Next steps:");
     console.log("  npx prisma db push");

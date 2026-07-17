@@ -1,9 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Loader2, Building2, MapPin, Globe2 } from "lucide-react";
+import {
+  ArrowRight, Loader2, Building2, MapPin, Globe2, Upload, X,
+  Image as ImageIcon,
+} from "lucide-react";
 import { BrandLogo } from "@/components/ui/BrandLogo";
+
+/** Max logo size — stored as a base64 data-URL on the Organization row. */
+const MAX_LOGO_BYTES = 1.5 * 1024 * 1024;
 
 const CURRENCIES = ["USD", "EUR", "GBP", "INR", "AUD", "CAD", "SGD", "AED"];
 const TIMEZONES = [
@@ -25,6 +31,26 @@ export default function OnboardingPage() {
 
   const set = (field: keyof typeof form, value: string) =>
     setForm((f) => ({ ...f, [field]: value }));
+
+  const logoInputRef = useRef<HTMLInputElement>(null);
+  const [logoError, setLogoError] = useState<string | null>(null);
+
+  const handleLogoFile = (file: File | undefined) => {
+    setLogoError(null);
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setLogoError("Please choose an image file (PNG, JPG or SVG)");
+      return;
+    }
+    if (file.size > MAX_LOGO_BYTES) {
+      setLogoError("Logo must be under 1.5 MB — try a smaller export");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => set("logoUrl", reader.result as string);
+    reader.onerror = () => setLogoError("Couldn't read that file — try again");
+    reader.readAsDataURL(file);
+  };
 
   useEffect(() => {
     fetch("/api/users/me")
@@ -142,13 +168,52 @@ export default function OnboardingPage() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">Logo URL <span className="text-slate-600">(optional)</span></label>
+                <label className="block text-xs font-medium text-slate-400 mb-1.5">
+                  Logo <span className="text-slate-600">(optional)</span>
+                </label>
                 <input
-                  type="text" value={form.logoUrl}
-                  onChange={(e) => set("logoUrl", e.target.value)}
-                  placeholder="https://…/logo.png"
-                  className="w-full px-3.5 py-2.5 text-sm rounded-xl bg-slate-900 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  ref={logoInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => { handleLogoFile(e.target.files?.[0]); e.target.value = ""; }}
                 />
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => logoInputRef.current?.click()}
+                    title={form.logoUrl ? "Replace logo" : "Upload logo"}
+                    className="w-[42px] h-[42px] rounded-xl border border-dashed border-slate-600 hover:border-indigo-500 bg-slate-900 flex items-center justify-center overflow-hidden transition-colors flex-shrink-0"
+                  >
+                    {form.logoUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={form.logoUrl} alt="Logo preview" className="max-w-full max-h-full object-contain p-0.5" />
+                    ) : (
+                      <ImageIcon className="w-4 h-4 text-slate-500" />
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => logoInputRef.current?.click()}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border border-slate-700 text-slate-300 hover:bg-white/[0.05] transition-colors"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    {form.logoUrl ? "Replace" : "Upload image"}
+                  </button>
+                  {form.logoUrl && (
+                    <button
+                      type="button"
+                      onClick={() => set("logoUrl", "")}
+                      className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-white/[0.05] transition-colors"
+                      title="Remove logo"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+                {logoError && (
+                  <p className="mt-1.5 text-[11px] text-red-400">{logoError}</p>
+                )}
               </div>
             </div>
           </section>

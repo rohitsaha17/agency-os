@@ -5,6 +5,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { ToastProvider } from "@/components/ui/Toast";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import { DateInputAutoOpen } from "@/components/ui/DateInputAutoOpen";
+import { AppTour } from "@/components/onboarding/AppTour";
 
 /**
  * Dashboard shell — server-gated.
@@ -49,6 +50,7 @@ export default async function DashboardLayout({
           <main className="lg:ml-64 min-h-screen flex flex-col pt-14 lg:pt-0">
             {children}
           </main>
+          <AppTour />
         </div>
       </ConfirmProvider>
     </ToastProvider>

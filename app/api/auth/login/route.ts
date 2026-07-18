@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { checkRateLimit } from "@/lib/rate-limit";
-import { apiError } from "@/lib/api-errors";
+import { apiError, handleApiError } from "@/lib/api-errors";
 import { verifyPassword } from "@/lib/password";
 
 /**
@@ -33,50 +33,56 @@ export async function POST(req: NextRequest) {
     return apiError("Please enter a valid email address", 400);
   }
 
-  const user = await prisma.user.findFirst({
-    where: { email: { equals: normalized, mode: "insensitive" }, isActive: true },
-    select: {
-      id: true, name: true, email: true, role: true, passwordHash: true,
-      organization: { select: { id: true, name: true, onboardingCompleted: true } },
-    },
-  });
+  try {
+    const user = await prisma.user.findFirst({
+      where: { email: { equals: normalized, mode: "insensitive" }, isActive: true },
+      select: {
+        id: true, name: true, email: true, role: true, passwordHash: true,
+        organization: { select: { id: true, name: true, onboardingCompleted: true } },
+      },
+    });
 
-  if (!user) {
-    // Deliberately vague — don't reveal which emails exist.
-    return apiError("No account found for that email", 404);
+    if (!user) {
+      // Deliberately vague — don't reveal which emails exist.
+      return apiError("No account found for that email", 404);
+    }
+
+    // Account has never set a password → send the client to the setup step.
+    if (!user.passwordHash) {
+      return NextResponse.json({ needsPasswordSetup: true, email: user.email });
+    }
+
+    // Phase 1: email recognised, prompt for the password (no cookie yet).
+    if (password === undefined || password === null || password === "") {
+      return NextResponse.json({ needsPassword: true, email: user.email });
+    }
+
+    // Phase 2: verify.
+    if (!verifyPassword(String(password), user.passwordHash)) {
+      return apiError("Incorrect password", 401);
+    }
+
+    const res = NextResponse.json({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      organization: user.organization,
+      needsOnboarding: !user.organization.onboardingCompleted,
+    });
+
+    res.cookies.set("userId", user.id, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 30, // 30 days
+    });
+
+    return res;
+  } catch (error) {
+    // Always return JSON (never an empty 500) so the client can show the
+    // real reason instead of "Unexpected end of JSON input".
+    return handleApiError(error, "POST /api/auth/login");
   }
-
-  // Account has never set a password → send the client to the setup step.
-  if (!user.passwordHash) {
-    return NextResponse.json({ needsPasswordSetup: true, email: user.email });
-  }
-
-  // Phase 1: email recognised, prompt for the password (no cookie yet).
-  if (password === undefined || password === null || password === "") {
-    return NextResponse.json({ needsPassword: true, email: user.email });
-  }
-
-  // Phase 2: verify.
-  if (!verifyPassword(String(password), user.passwordHash)) {
-    return apiError("Incorrect password", 401);
-  }
-
-  const res = NextResponse.json({
-    id: user.id,
-    name: user.name,
-    email: user.email,
-    role: user.role,
-    organization: user.organization,
-    needsOnboarding: !user.organization.onboardingCompleted,
-  });
-
-  res.cookies.set("userId", user.id, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 30, // 30 days
-  });
-
-  return res;
 }

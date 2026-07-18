@@ -199,6 +199,36 @@ model User {
 }
 
 // ============================================================
+// TRIAL REQUESTS — public "request a workspace / free trial" leads
+// ============================================================
+
+enum TrialRequestStatus {
+  NEW
+  CONTACTED
+  CONVERTED
+  DECLINED
+}
+
+model TrialRequest {
+  id          String             @id @default(cuid())
+  agencyName  String
+  contactName String
+  email       String
+  phone       String?
+  location    String? // where they're based
+  website     String?
+  teamSize    String? // free-text range, e.g. "1-5"
+  services    String? // what they do
+  message     String?
+  status      TrialRequestStatus @default(NEW)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  @@index([status])
+  @@map("trial_requests")
+}
+
+// ============================================================
 // CLIENTS — Companies or individuals the agency works for
 // ============================================================
 
@@ -471,7 +501,7 @@ model RateCard {
 model Quotation {
   id             String          @id @default(cuid())
   organizationId String
-  number         String          @unique // e.g. QUO-2025-001
+  number         String // e.g. QUO-2025-001 — unique per organization
   clientId       String
   createdById    String? // Nullable until auth is wired up
   title          String
@@ -497,6 +527,7 @@ model Quotation {
   project      Project?
   invoice      Invoice?            @relation("QuotationInvoice")
 
+  @@unique([organizationId, number])
   @@index([organizationId])
   @@map("quotations")
 }
@@ -531,7 +562,7 @@ model Invoice {
   projectId      String?
   quotationId    String?       @unique
   clientId       String
-  invoiceNumber  String        @unique
+  invoiceNumber  String // unique per organization
   status         InvoiceStatus @default(DRAFT)
   dueDate        DateTime?
   currency       String        @default("USD")
@@ -549,6 +580,7 @@ model Invoice {
   lineItems    InvoiceLineItem[]
   receipts     Receipt[]
 
+  @@unique([organizationId, invoiceNumber])
   @@index([status, clientId])
   @@index([dueDate])
   @@index([organizationId])

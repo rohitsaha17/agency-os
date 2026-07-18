@@ -6,6 +6,7 @@ import { requireAuth } from "@/lib/auth";
 import { apiError, handleApiError, ApiError } from "@/lib/api-errors";
 import { parsePagination, paginationMeta } from "@/lib/pagination";
 import { checkRateLimit, WRITE_RATE_LIMITS } from "@/lib/rate-limit";
+import { assertUploadWithinQuota } from "@/lib/upload-limits";
 
 // ── helpers ────────────────────────────────────────────────────
 
@@ -147,6 +148,10 @@ export async function POST(req: NextRequest) {
     }
 
     const file = rawFile as File;
+
+    // Enforce the per-user upload storage quota (200 MB).
+    await assertUploadWithinQuota(user.id, file.size);
+
     const clientId = (formData.get("clientId") as string) || null;
     const projectId = (formData.get("projectId") as string) || null;
     const taskId = (formData.get("taskId") as string) || null;

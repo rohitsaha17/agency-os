@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   Building2, Plus, Loader2, KeyRound, RefreshCw, CheckCircle2,
-  Clock, Users, FolderKanban, Receipt, LogOut, Copy,
+  Clock, Users, FolderKanban, Receipt, LogOut, Copy, Inbox, Mail,
 } from "lucide-react";
 import { BrandLogo } from "@/components/ui/BrandLogo";
 
@@ -18,12 +18,28 @@ interface Tenant {
   counts: { users: number; clients: number; projects: number; invoices: number };
 }
 
+interface TrialRequest {
+  id: string;
+  agencyName: string;
+  contactName: string;
+  email: string;
+  phone: string | null;
+  location: string | null;
+  website: string | null;
+  teamSize: string | null;
+  services: string | null;
+  message: string | null;
+  status: string;
+  createdAt: string;
+}
+
 const KEY_STORAGE = "vsf_platform_admin_key";
 
 export default function PlatformAdminPage() {
   const [adminKey, setAdminKey] = useState<string | null>(null);
   const [keyInput, setKeyInput] = useState("");
   const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [requests, setRequests] = useState<TrialRequest[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -63,9 +79,19 @@ export default function PlatformAdminPage() {
     }
   }, []);
 
+  const fetchRequests = useCallback(async (key: string) => {
+    try {
+      const res = await fetch("/api/trial-request", { headers: { "x-admin-key": key } });
+      if (res.ok) setRequests(await res.json());
+    } catch { /* non-critical */ }
+  }, []);
+
   useEffect(() => {
-    if (adminKey) fetchTenants(adminKey);
-  }, [adminKey, fetchTenants]);
+    if (adminKey) {
+      fetchTenants(adminKey);
+      fetchRequests(adminKey);
+    }
+  }, [adminKey, fetchTenants, fetchRequests]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -281,6 +307,46 @@ export default function PlatformAdminPage() {
                       <Receipt className="w-3.5 h-3.5 text-slate-500" /> {t.counts.invoices}
                     </span>
                   </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* Trial requests (public leads) */}
+        <section className="mt-10">
+          <div className="flex items-center gap-2 mb-4">
+            <Inbox className="w-4 h-4 text-slate-400" />
+            <h2 className="text-sm font-semibold">Trial Requests</h2>
+            <span className="text-xs text-slate-500">({requests.length})</span>
+          </div>
+
+          {requests.length === 0 ? (
+            <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-8 text-center text-sm text-slate-500">
+              No trial requests yet — submissions from the public form appear here.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {requests.map((r) => (
+                <div key={r.id} className="rounded-2xl border border-white/[0.07] bg-white/[0.03] px-5 py-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm font-semibold text-white">{r.agencyName}</p>
+                    <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300 ring-1 ring-indigo-500/30">
+                      {r.status}
+                    </span>
+                    {r.location && <span className="text-xs text-slate-500">· {r.location}</span>}
+                    {r.teamSize && <span className="text-xs text-slate-500">· {r.teamSize} people</span>}
+                  </div>
+                  <p className="text-xs text-slate-400 mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <span>{r.contactName}</span>
+                    <a href={`mailto:${r.email}`} className="inline-flex items-center gap-1 text-indigo-400 hover:text-indigo-300">
+                      <Mail className="w-3 h-3" /> {r.email}
+                    </a>
+                    {r.phone && <span>{r.phone}</span>}
+                    {r.website && <a href={r.website} target="_blank" rel="noreferrer" className="text-slate-400 hover:text-slate-200 underline">{r.website}</a>}
+                  </p>
+                  {r.services && <p className="text-xs text-slate-500 mt-2 leading-relaxed"><span className="text-slate-400">Services:</span> {r.services}</p>}
+                  {r.message && <p className="text-xs text-slate-500 mt-1 leading-relaxed italic">“{r.message}”</p>}
                 </div>
               ))}
             </div>

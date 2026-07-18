@@ -3,7 +3,9 @@ import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
-import { handleApiError, ApiError } from "@/lib/api-errors";
+import { handleApiError, apiError, ApiError } from "@/lib/api-errors";
+import { checkRateLimit, WRITE_RATE_LIMITS } from "@/lib/rate-limit";
+import { assertUploadWithinQuota } from "@/lib/upload-limits";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -88,9 +90,16 @@ export async function POST(req: NextRequest, { params }: Params) {
       body       = (fd.get("body") as string) ?? "";
       taskId     = (fd.get("taskId") as string)      || undefined;
 
-      // Handle file attachments
+      // Handle file attachments (rate-limited + counted against the quota).
       const files = fd.getAll("files") as File[];
-      for (const file of files) {
+      const realFiles = files.filter((f) => f instanceof Blob);
+      if (realFiles.length) {
+        const rl = checkRateLimit(req, `chat:upload:${user.id}`, WRITE_RATE_LIMITS.heavy);
+        if (!rl.allowed) return apiError("Too many uploads, please slow down", 429);
+        const totalBytes = realFiles.reduce((s, f) => s + (f as File).size, 0);
+        await assertUploadWithinQuota(user.id, totalBytes);
+      }
+      for (const file of realFiles) {
         if (!(file instanceof Blob)) continue;
         const uploadsDir = path.join(process.cwd(), "public", "uploads");
         await mkdir(uploadsDir, { recursive: true });
@@ -114,6 +123,7 @@ export async function POST(req: NextRequest, { params }: Params) {
         const created = await prisma.file.create({
           data: {
             organizationId: user.organizationId,
+            uploadedById: user.id,
             name: (file as File).name,
             mimeType: mime,
             mimeCategory,

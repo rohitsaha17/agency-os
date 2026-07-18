@@ -274,11 +274,19 @@ export default function LoginPage() {
           )}
 
           {phase === "email" && (
-            <p className="mt-8 text-xs text-slate-500 leading-relaxed">
-              New agency? Workspaces are created by the Vibrnd team — once
-              yours is set up, sign in here with your owner email to complete
-              onboarding.
-            </p>
+            <div className="mt-8 rounded-xl border border-white/[0.06] bg-white/[0.03] px-4 py-3.5">
+              <p className="text-xs text-slate-500 leading-relaxed">
+                New agency? Workspaces are created by the Vibrnd team — once
+                yours is set up, sign in here with your owner email to complete
+                onboarding.
+              </p>
+              <a
+                href="/request-access"
+                className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-400 hover:text-indigo-300 transition-colors"
+              >
+                Contact us to start a free trial <ArrowRight className="w-3.5 h-3.5" />
+              </a>
+            </div>
           )}
         </div>
       </div>

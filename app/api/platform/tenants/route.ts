@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { apiError, handleApiError, ApiError } from "@/lib/api-errors";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { requirePlatformAdmin } from "@/lib/platform-admin";
 
 /**
  * Platform-admin tenant management — for the SaaS owner, NOT tenant users.
@@ -14,21 +15,6 @@ import { checkRateLimit } from "@/lib/rate-limit";
  *   GET  /api/platform/tenants        → list all organizations
  *   POST /api/platform/tenants        → create org + its OWNER user
  */
-
-function requirePlatformAdmin(req: NextRequest): void {
-  const configured = process.env.PLATFORM_ADMIN_KEY;
-  if (!configured) {
-    throw new ApiError(
-      "Platform admin is disabled — set PLATFORM_ADMIN_KEY in the environment",
-      503,
-      "ADMIN_DISABLED"
-    );
-  }
-  const provided = req.headers.get("x-admin-key");
-  if (provided !== configured) {
-    throw new ApiError("Invalid admin key", 401, "UNAUTHORIZED");
-  }
-}
 
 export async function GET(req: NextRequest) {
   try {

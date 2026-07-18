@@ -52,3 +52,12 @@ ALTER TABLE "invoices" DROP CONSTRAINT IF EXISTS "invoices_invoiceNumber_key";
 DROP INDEX IF EXISTS "invoices_invoiceNumber_key";
 CREATE UNIQUE INDEX IF NOT EXISTS "invoices_organizationId_invoiceNumber_key"
   ON "invoices" ("organizationId", "invoiceNumber");
+
+-- 4. Per-organization plan / trial / storage limit -----------
+DO $$ BEGIN
+  CREATE TYPE "PlanTier" AS ENUM ('TRIAL', 'FULL');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+ALTER TABLE "organizations" ADD COLUMN IF NOT EXISTS "plan" "PlanTier" NOT NULL DEFAULT 'TRIAL';
+ALTER TABLE "organizations" ADD COLUMN IF NOT EXISTS "trialEndsAt" TIMESTAMP(3);
+ALTER TABLE "organizations" ADD COLUMN IF NOT EXISTS "uploadLimitMb" INTEGER NOT NULL DEFAULT 200;

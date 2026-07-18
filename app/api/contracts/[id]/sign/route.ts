@@ -91,7 +91,15 @@ export async function DELETE(req: NextRequest, { params }: Params) {
 
     const allParties = await prisma.contractParty.findMany({ where: { contractId } });
     const signedCount = allParties.filter((p) => p.signedAt !== null).length;
-    const newStatus = signedCount === 0 ? "SENT" : "PARTIALLY_SIGNED";
+    // Undoing the only signature must not promote a DRAFT contract to SENT.
+    const current = await prisma.contract.findUnique({
+      where: { id: contractId },
+      select: { status: true },
+    });
+    const newStatus =
+      signedCount > 0 ? "PARTIALLY_SIGNED"
+      : current?.status === "DRAFT" ? "DRAFT"
+      : "SENT";
 
     const contract = await prisma.contract.update({
       where: { id: contractId },

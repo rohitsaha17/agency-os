@@ -114,7 +114,7 @@ function ProgressRing({ progress }: { progress: number }) {
   const color = progress >= 75 ? "#10b981" : progress >= 40 ? "#6366f1" : "#d1d5db";
   return (
     <svg width="52" height="52" viewBox="0 0 52 52" className="-rotate-90">
-      <circle cx="26" cy="26" r={r} fill="none" stroke="#f3f4f6" strokeWidth="5" />
+      <circle cx="26" cy="26" r={r} fill="none" stroke="currentColor" strokeWidth="5" className="text-gray-100 dark:text-slate-800" />
       <circle cx="26" cy="26" r={r} fill="none" stroke={color} strokeWidth="5"
         strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round"
         style={{ transition: "stroke-dashoffset 0.4s ease" }}
@@ -331,7 +331,7 @@ export default function ProjectDetailPage() {
       const res = await fetch(`/api/channels/${activeChannel.id}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ body: chatCompose.trim(), authorName: "You" }),
+        body: JSON.stringify({ body: chatCompose.trim() }),
       });
       if (res.ok) {
         setChatCompose("");
@@ -509,6 +509,9 @@ export default function ProjectDetailPage() {
       setExpenseForm(EMPTY_EXPENSE_FORM);
       fetchExpenses();
       fetchProject();
+    } else {
+      const data = await res.json().catch(() => ({}));
+      toast.error(data?.error?.message || "Failed to add expense");
     }
   };
 
@@ -1490,7 +1493,7 @@ export default function ProjectDetailPage() {
                           </td>
                           <td className="px-5 py-3 text-center">
                             <Link
-                              href={`/invoices/${inv.id}`}
+                              href="/invoices"
                               className="inline-flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-medium"
                             >
                               View <ExternalLink className="w-3 h-3" />

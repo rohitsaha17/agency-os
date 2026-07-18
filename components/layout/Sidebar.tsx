@@ -268,14 +268,11 @@ export function Sidebar() {
   }, [fetchUnread]);
 
   useEffect(() => {
-    fetch("/api/users")
-      .then((r) => r.json())
-      .then((data: AppUser[]) => {
-        if (Array.isArray(data) && data.length > 0) {
-          // Show the first ADMIN, or just the first user
-          const admin = data.find((u) => u.role === "ADMIN") ?? data[0];
-          setAppUser(admin);
-        }
+    // The footer identity is the LOGGED-IN user, not "some admin".
+    fetch("/api/users/me")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: AppUser | null) => {
+        if (data && data.id) setAppUser(data);
       })
       .catch(() => {});
   }, []);

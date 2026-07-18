@@ -59,7 +59,7 @@ export function DependencyList({ taskId, allTasks }: DependencyListProps) {
         body: JSON.stringify({ dependsOnId: selectedId }),
       });
       const data = await res.json();
-      if (!res.ok) { setError(data.error); return; }
+      if (!res.ok) { setError(typeof data.error === "string" ? data.error : data.error?.message ?? "Failed to add dependency"); return; }
       setDeps((prev) => ({ ...prev, dependsOn: [...prev.dependsOn, data] }));
       setSelectedId("");
       setAdding(false);

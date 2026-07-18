@@ -42,12 +42,15 @@ export async function POST(req: NextRequest, { params }: Params) {
     if (!hours || isNaN(parseFloat(hours)) || parseFloat(hours) <= 0) {
       throw new ApiError("Valid hours required", 400);
     }
+    const parsedDate = date ? new Date(date) : new Date();
+    if (isNaN(parsedDate.getTime())) throw new ApiError("Invalid date", 400);
 
     const entry = await prisma.timeEntry.create({
       data: {
         taskId,
+        userId: user.id,
         hours: parseFloat(hours),
-        date: date ? new Date(date) : new Date(),
+        date: parsedDate,
         notes: notes?.trim() || null,
       },
       include: { user: { select: { id: true, name: true } } },

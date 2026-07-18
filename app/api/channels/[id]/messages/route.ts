@@ -75,16 +75,17 @@ export async function POST(req: NextRequest, { params }: Params) {
     const contentType = req.headers.get("content-type") ?? "";
 
     let body = "";
-    let authorName = "Team";
-    let authorId: string | undefined;
     let taskId: string | undefined;
     const uploadedFileIds: string[] = [];
+
+    // The author is ALWAYS the authenticated caller — never taken from the
+    // request, so messages can't be posted under someone else's name.
+    const authorId = user.id;
+    const authorName = user.name;
 
     if (contentType.includes("multipart/form-data")) {
       const fd = await req.formData();
       body       = (fd.get("body") as string) ?? "";
-      authorName = (fd.get("authorName") as string) || "Team";
-      authorId   = (fd.get("authorId") as string)   || undefined;
       taskId     = (fd.get("taskId") as string)      || undefined;
 
       // Handle file attachments
@@ -127,8 +128,6 @@ export async function POST(req: NextRequest, { params }: Params) {
     } else {
       const json = await req.json();
       body       = json.body       ?? "";
-      authorName = json.authorName || "Team";
-      authorId   = json.authorId   || undefined;
       taskId     = json.taskId     || undefined;
     }
 
@@ -149,8 +148,8 @@ export async function POST(req: NextRequest, { params }: Params) {
       data: {
         channelId,
         body:       body.trim(),
-        authorName: authorName.trim() || "Team",
-        authorId:   authorId || null,
+        authorName: authorName?.trim() || "Team",
+        authorId,
         taskId:     taskId   || null,
         ...(uploadedFileIds.length > 0 && {
           attachments: { create: uploadedFileIds.map((fileId) => ({ fileId })) },

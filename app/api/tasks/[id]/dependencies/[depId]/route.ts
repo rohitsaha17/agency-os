@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
-import { handleApiError, ApiError } from "@/lib/api-errors";
+import { handleApiError, apiError, ApiError } from "@/lib/api-errors";
 
 type Params = { params: Promise<{ id: string; depId: string }> };
 
@@ -24,7 +24,7 @@ export async function DELETE(req: NextRequest, { params }: Params) {
     return NextResponse.json({ success: true });
   } catch (error: unknown) {
     if ((error as { code?: string }).code === "P2025") {
-      return NextResponse.json({ error: "Dependency not found" }, { status: 404 });
+      return apiError("Dependency not found", 404, "NOT_FOUND");
     }
     return handleApiError(error, "DELETE /api/tasks/[id]/dependencies/[depId]");
   }

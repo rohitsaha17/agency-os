@@ -47,6 +47,21 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const body = await req.json();
     const { title, type, status, projectId, clientId, fileId, startDate, endDate, value, currency, notes } = body;
 
+    // Linked records must belong to the caller's org.
+    const orgId = user.organizationId;
+    if (projectId) {
+      const ok = await prisma.project.findFirst({ where: { id: projectId, organizationId: orgId }, select: { id: true } });
+      if (!ok) throw new ApiError("Project not found", 404);
+    }
+    if (clientId) {
+      const ok = await prisma.client.findFirst({ where: { id: clientId, organizationId: orgId }, select: { id: true } });
+      if (!ok) throw new ApiError("Client not found", 404);
+    }
+    if (fileId) {
+      const ok = await prisma.file.findFirst({ where: { id: fileId, organizationId: orgId }, select: { id: true } });
+      if (!ok) throw new ApiError("File not found", 404);
+    }
+
     const contract = await prisma.contract.update({
       where: { id },
       data: {

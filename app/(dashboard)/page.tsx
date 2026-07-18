@@ -67,6 +67,7 @@ interface FeedItem {
 
 interface DashboardData {
   generatedAt: string;
+  currency?: string;
   stats: DashboardStats;
   taskStats: TaskStats;
   urgentItems: UrgentItem[];
@@ -78,9 +79,12 @@ interface DashboardData {
 // ── Helpers ───────────────────────────────────────────────────
 
 function fmt(n: number, currency = "USD") {
-  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `$${(n / 1000).toFixed(0)}K`;
-  return new Intl.NumberFormat("en-US", { style: "currency", currency, maximumFractionDigits: 0 }).format(n);
+  // Compact notation keeps the correct currency symbol (₹1.2L stays ₹, not $)
+  return new Intl.NumberFormat("en-US", {
+    style: "currency", currency,
+    notation: n >= 1_000 ? "compact" : "standard",
+    maximumFractionDigits: n >= 1_000 ? 1 : 0,
+  }).format(n);
 }
 
 function timeAgo(d: string) {
@@ -491,7 +495,7 @@ function MetricRing({ value, label, color }: { value: number; label: string; col
   return (
     <div className="flex flex-col items-center gap-1">
       <svg width="60" height="60" viewBox="0 0 60 60" className="-rotate-90">
-        <circle cx="30" cy="30" r={r} fill="none" stroke="#f3f4f6" strokeWidth="5" />
+        <circle cx="30" cy="30" r={r} fill="none" stroke="currentColor" strokeWidth="5" className="text-gray-100 dark:text-slate-800" />
         <circle cx="30" cy="30" r={r} fill="none" stroke={color} strokeWidth="5"
           strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round"
           style={{ transition: "stroke-dashoffset 0.6s ease" }} />
@@ -761,7 +765,7 @@ export default function DashboardPage() {
           <StatCard
             icon={<FileText className="w-5 h-5 text-purple-600" />}
             label="Pipeline Value"
-            value={fmt(stats.pipelineValue)}
+            value={fmt(stats.pipelineValue, data.currency)}
             sub={`${stats.openQuotations} open quotation${stats.openQuotations !== 1 ? "s" : ""}`}
             color="bg-purple-50"
             href="/quotations"
@@ -769,7 +773,7 @@ export default function DashboardPage() {
           <StatCard
             icon={<Receipt className="w-5 h-5 text-amber-600" />}
             label="Expenses (Month)"
-            value={fmt(stats.expensesThisMonth)}
+            value={fmt(stats.expensesThisMonth, data.currency)}
             sub={stats.pendingExpenses > 0 ? `${stats.pendingExpenses} pending` : `${stats.expenseCount} this month`}
             color={stats.pendingExpenses > 0 ? "bg-amber-50" : "bg-gray-50"}
             href="/expenses"
@@ -841,7 +845,7 @@ export default function DashboardPage() {
                 </div>
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-gray-600">Pipeline value</span>
-                  <span className="font-semibold text-indigo-700">{fmt(stats.pipelineValue)}</span>
+                  <span className="font-semibold text-indigo-700">{fmt(stats.pipelineValue, data.currency)}</span>
                 </div>
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-gray-600">Active clients</span>

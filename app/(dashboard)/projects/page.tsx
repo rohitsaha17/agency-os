@@ -43,7 +43,7 @@ export default function ProjectsPage() {
       if (typeFilter !== "ALL") params.set("type", typeFilter);
       const res = await fetch(`/api/projects?${params}`);
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to load projects");
+      if (!res.ok) throw new Error(data.error?.message || "Failed to load projects");
       setProjects(data);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unknown error");

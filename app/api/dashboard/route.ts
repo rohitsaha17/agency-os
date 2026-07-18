@@ -31,6 +31,8 @@ export async function GET(req: NextRequest) {
       recentComments,
       expenseThisMonth,
       pendingExpenses,
+      overdueTasksTotal,
+      orgSettings,
     ] = await Promise.all([
       // Project counts by status
       prisma.project.groupBy({
@@ -187,6 +189,22 @@ export async function GET(req: NextRequest) {
 
       // Pending expenses count
       prisma.expense.count({ where: { organizationId: orgId, status: "PENDING" } }),
+
+      // Full overdue count (the list above is capped at 8 for display)
+      prisma.task.count({
+        where: {
+          organizationId: orgId,
+          dueDate: { lt: today },
+          status: { notIn: ["DONE"] },
+          deletedAt: null,
+        },
+      }),
+
+      // Org default currency for money stats
+      prisma.organization.findUnique({
+        where: { id: orgId },
+        select: { currency: true },
+      }),
     ]);
 
     // ── Compute stats ─────────────────────────────────────────
@@ -228,11 +246,17 @@ export async function GET(req: NextRequest) {
       let risk: "red" | "amber" | "green" = "green";
       if (overdue > 0 || blocked > 0) risk = "red";
       else if (p.endDate) {
-        const start = p.startDate ? new Date(p.startDate).getTime() : 0;
-        const end   = new Date(p.endDate).getTime();
-        const elapsed = (now.getTime() - start) / (end - start);
-        if (elapsed > 0.6 && progress < 50) risk = "amber";
-        else if (new Date(p.endDate) < today) risk = "red";
+        if (new Date(p.endDate) < today) {
+          risk = "red";
+        } else if (p.startDate) {
+          const start = new Date(p.startDate).getTime();
+          const end   = new Date(p.endDate).getTime();
+          // Only meaningful with a real, non-zero-length window.
+          if (end > start) {
+            const elapsed = (now.getTime() - start) / (end - start);
+            if (elapsed > 0.6 && progress < 50) risk = "amber";
+          }
+        }
       }
 
       const daysLeft = p.endDate
@@ -376,11 +400,12 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       generatedAt: now.toISOString(),
+      currency: orgSettings?.currency ?? "USD",
 
       stats: {
         activeProjects:    projectMap["ACTIVE"] ?? 0,
         totalProjects:     Object.values(projectMap).reduce((s, v) => s + v, 0),
-        overdueTasksCount: overdueTasks.length,
+        overdueTasksCount: overdueTasksTotal,
         blockedTasksCount: taskMap["BLOCKED"] ?? 0,
         filesInReview,
         activeClients,

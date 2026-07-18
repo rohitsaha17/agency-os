@@ -122,7 +122,7 @@ function InvoiceFormModal({
         body: JSON.stringify(payload),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed");
+      if (!res.ok) throw new Error(data.error?.message || "Failed");
       toast.success("Invoice created", `${data.invoiceNumber} is ready`);
       onCreated();
       onClose();
@@ -408,9 +408,13 @@ export default function InvoicesPage() {
   };
 
   // Stats
+  const isInvOverdue = (i: Invoice) =>
+    i.status === "OVERDUE" ||
+    (i.status === "SENT" && !!i.dueDate && new Date(i.dueDate) < new Date());
+  const displayCurrency = invoices[0]?.currency ?? "USD";
   const totalRevenue = invoices.filter((i) => i.status === "PAID").reduce((s, i) => s + calcTotal(i), 0);
   const outstanding  = invoices.filter((i) => ["DRAFT", "SENT", "OVERDUE"].includes(i.status)).reduce((s, i) => s + calcTotal(i), 0);
-  const overdue      = invoices.filter((i) => i.status === "OVERDUE").length;
+  const overdue      = invoices.filter(isInvOverdue).length;
 
   const hasFilters = !!filterStatus || !!search || !!filterClient;
 
@@ -430,8 +434,8 @@ export default function InvoicesPage() {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-5">
           {[
             { label: "Total Invoices",  value: invoices.length,              sub: "records",         icon: <Receipt className="w-4 h-4 text-gray-400" /> },
-            { label: "Collected",       value: formatMoney(totalRevenue, "USD"), sub: "paid",      icon: <CheckCircle2 className="w-4 h-4 text-emerald-400" /> },
-            { label: "Outstanding",     value: formatMoney(outstanding, "USD"),  sub: "pending",   icon: <CreditCard className="w-4 h-4 text-indigo-400" /> },
+            { label: "Collected",       value: formatMoney(totalRevenue, displayCurrency), sub: "paid",      icon: <CheckCircle2 className="w-4 h-4 text-emerald-400" /> },
+            { label: "Outstanding",     value: formatMoney(outstanding, displayCurrency),  sub: "pending",   icon: <CreditCard className="w-4 h-4 text-indigo-400" /> },
             { label: "Overdue",         value: overdue,                       sub: "need attention",  icon: <Clock className="w-4 h-4 text-red-400" /> },
           ].map((s) => (
             <div key={s.label} className="bg-gray-50 rounded-xl px-4 py-3">

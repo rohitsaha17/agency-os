@@ -5,17 +5,20 @@ import { handleApiError, ApiError } from "@/lib/api-errors";
 
 // ── Helpers ──────────────────────────────────────────────────
 
-// Generate sequential quotation number, unique per organization: QUO-YYYY-NNN
+// Generate sequential quotation number, unique per organization: QUO-YYYY-NNN.
+// Max is computed numerically (string ordering would rank 999 above 1000).
 async function generateNumber(organizationId: string): Promise<string> {
   const year = new Date().getFullYear();
   const prefix = `QUO-${year}-`;
-  const latest = await prisma.quotation.findFirst({
+  const existing = await prisma.quotation.findMany({
     where: { organizationId, number: { startsWith: prefix } },
-    orderBy: { number: "desc" },
     select: { number: true },
   });
-  const seq = latest ? parseInt(latest.number.split("-")[2] ?? "0") + 1 : 1;
-  return `${prefix}${String(seq).padStart(3, "0")}`;
+  const max = existing.reduce(
+    (m, q) => Math.max(m, parseInt(q.number.slice(prefix.length), 10) || 0),
+    0
+  );
+  return `${prefix}${String(max + 1).padStart(3, "0")}`;
 }
 
 // Recompute subtotal and total from line items + discount + tax
@@ -88,7 +91,6 @@ export async function POST(req: Request) {
     });
     if (!client) throw new ApiError("Client not found", 404);
 
-    const number = await generateNumber(user.organizationId);
     const parsedItems = (lineItems as {
       title: string; description?: string; pricingType: string;
       quantity: string; unitPrice: string; unit?: string; rateCardId?: string;
@@ -111,7 +113,22 @@ export async function POST(req: Request) {
       parseFloat(taxRate) || 0
     );
 
-    const quotation = await prisma.quotation.create({
+    // Retry on number collision — two simultaneous creates in the same org
+    // can compute the same next number; the @@unique constraint catches it.
+    let quotation;
+    for (let attempt = 0; ; attempt++) {
+      const number = await generateNumber(user.organizationId);
+      try {
+        quotation = await createQuotation(number);
+        break;
+      } catch (e) {
+        if ((e as { code?: string }).code === "P2002" && attempt < 3) continue;
+        throw e;
+      }
+    }
+
+    async function createQuotation(number: string) {
+      return prisma.quotation.create({
       data: {
         organizationId: user.organizationId,
         number,
@@ -136,7 +153,8 @@ export async function POST(req: Request) {
         client: { select: { id: true, name: true, companyName: true, email: true, logoUrl: true } },
         lineItems: { orderBy: { order: "asc" } },
       },
-    });
+      });
+    }
 
     return NextResponse.json(quotation, { status: 201 });
   } catch (error) {

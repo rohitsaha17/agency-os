@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAuth } from "@/lib/auth";
+import { requireAuth, requireRole } from "@/lib/auth";
 import { handleApiError, ApiError } from "@/lib/api-errors";
+
+// Roles that can be granted to invited teammates. OWNER is never
+// assignable — it belongs to the account created at tenant setup.
+const ASSIGNABLE_ROLES = ["ADMIN", "MANAGER", "MEMBER"] as const;
 
 // GET /api/users
 export async function GET(req: NextRequest) {
@@ -31,9 +35,13 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const user = await requireAuth(req);
+    requireRole(user, ["ADMIN"]);
     const { name, email, role } = await req.json();
     if (!name?.trim()) throw new ApiError("Name is required", 400);
     if (!email?.trim()) throw new ApiError("Email is required", 400);
+    if (role !== undefined && !ASSIGNABLE_ROLES.includes(role)) {
+      throw new ApiError("Invalid role", 400);
+    }
 
     const normalizedEmail = email.trim().toLowerCase();
 

@@ -75,6 +75,14 @@ export async function POST(req: NextRequest) {
       });
       if (!c) throw new ApiError("Client not found", 404);
     }
+    if (memberIds?.length) {
+      const count = await prisma.user.count({
+        where: { id: { in: memberIds as string[] }, organizationId: user.organizationId },
+      });
+      if (count !== new Set(memberIds as string[]).size) {
+        throw new ApiError("One or more members not found", 404);
+      }
+    }
 
     const channel = await prisma.channel.create({
       data: {

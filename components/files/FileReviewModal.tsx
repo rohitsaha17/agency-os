@@ -148,13 +148,6 @@ interface FileReviewModalProps {
   projectId?: string;
 }
 
-// ── hardcoded author until auth is wired ───────────────────────
-
-const CURRENT_USER = {
-  name: "Team Member",
-  role: "MEMBER" as const,
-};
-
 // ── main component ─────────────────────────────────────────────
 
 export function FileReviewModal({
@@ -241,7 +234,6 @@ export function FileReviewModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           body: commentBody,
-          authorName: CURRENT_USER.name,
           posX: pendingPin?.x ?? null,
           posY: pendingPin?.y ?? null,
           timestamp: ts,

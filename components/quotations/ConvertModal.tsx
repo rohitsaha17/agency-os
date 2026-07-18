@@ -33,7 +33,7 @@ export function ConvertModal({ quotation, onClose }: ConvertModalProps) {
         body: JSON.stringify(form),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Conversion failed");
+      if (!res.ok) throw new Error(data.error?.message || "Conversion failed");
       router.push(`/projects/${data.projectId}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");

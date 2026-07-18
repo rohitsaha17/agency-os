@@ -75,13 +75,28 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       parentId?: string | null;
     };
 
-    // Verify moved parent is also in the caller's org (if reparenting).
+    // Verify moved parent is also in the caller's org (if reparenting),
+    // and reject moves that would create a cycle (folder into itself or
+    // one of its own descendants).
     if (parentId) {
+      if (parentId === id) throw new ApiError("A folder cannot be moved into itself", 400);
       const parent = await prisma.folder.findFirst({
         where: { id: parentId, organizationId: user.organizationId },
-        select: { id: true },
+        select: { id: true, parentId: true },
       });
       if (!parent) throw new ApiError("Parent folder not found", 404);
+
+      let ancestor = parent.parentId;
+      for (let depth = 0; ancestor && depth < 50; depth++) {
+        if (ancestor === id) {
+          throw new ApiError("A folder cannot be moved into its own subfolder", 400);
+        }
+        const next = await prisma.folder.findUnique({
+          where: { id: ancestor },
+          select: { parentId: true },
+        });
+        ancestor = next?.parentId ?? null;
+      }
     }
 
     const folder = await prisma.folder.update({

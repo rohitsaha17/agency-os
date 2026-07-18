@@ -59,6 +59,31 @@ export async function POST(req: NextRequest) {
 
     if (!title?.trim()) throw new ApiError("Title is required", 400);
 
+    // Everything the contract links to must belong to the caller's org.
+    const orgId = user.organizationId;
+    if (projectId) {
+      const ok = await prisma.project.findFirst({ where: { id: projectId, organizationId: orgId }, select: { id: true } });
+      if (!ok) throw new ApiError("Project not found", 404);
+    }
+    if (clientId) {
+      const ok = await prisma.client.findFirst({ where: { id: clientId, organizationId: orgId }, select: { id: true } });
+      if (!ok) throw new ApiError("Client not found", 404);
+    }
+    for (const p of (parties || []) as { clientId?: string; stakeholderId?: string; userId?: string }[]) {
+      if (p.clientId) {
+        const ok = await prisma.client.findFirst({ where: { id: p.clientId, organizationId: orgId }, select: { id: true } });
+        if (!ok) throw new ApiError("Party client not found", 404);
+      }
+      if (p.stakeholderId) {
+        const ok = await prisma.stakeholder.findFirst({ where: { id: p.stakeholderId, organizationId: orgId }, select: { id: true } });
+        if (!ok) throw new ApiError("Party stakeholder not found", 404);
+      }
+      if (p.userId) {
+        const ok = await prisma.user.findFirst({ where: { id: p.userId, organizationId: orgId }, select: { id: true } });
+        if (!ok) throw new ApiError("Party user not found", 404);
+      }
+    }
+
     const contract = await prisma.contract.create({
       data: {
         organizationId: user.organizationId,

@@ -85,10 +85,20 @@ export async function POST(req: NextRequest, { params }: Params) {
       throw new ApiError("Comment body is required", 400);
     }
 
+    // A reply's parent must be a comment on this same file.
+    if (parentId) {
+      const parent = await prisma.fileComment.findFirst({
+        where: { id: parentId, fileId: id },
+        select: { id: true },
+      });
+      if (!parent) throw new ApiError("Parent comment not found", 404);
+    }
+
     const comment = await prisma.fileComment.create({
       data: {
         fileId: id,
-        authorName: authorName || "Team Member",
+        authorId: user.id,
+        authorName: user.name || authorName || "Team Member",
         body: commentBody.trim(),
         posX: posX ?? null,
         posY: posY ?? null,

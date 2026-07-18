@@ -110,7 +110,7 @@ export function TaskModal({
         body: JSON.stringify(form),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Save failed");
+      if (!res.ok) throw new Error(data.error?.message || "Save failed");
       onSaved(data);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");

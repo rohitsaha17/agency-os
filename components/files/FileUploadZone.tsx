@@ -113,7 +113,7 @@ export function FileUploadZone({
 
         if (!res.ok) {
           const data = await res.json();
-          throw new Error(data.error ?? "Upload failed");
+          throw new Error(data.error?.message ?? "Upload failed");
         }
 
         const result: AssetFile = await res.json();

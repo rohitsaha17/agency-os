@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, Suspense } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Plus, Search, FileText, CheckCircle2, Clock, AlertCircle, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import type { Contract, ContractType, ContractStatus, Project, ClientSummary } from "@/types";
@@ -31,8 +31,9 @@ function formatDate(d: string) {
 
 const STATUS_ORDER: ContractStatus[] = ["DRAFT", "SENT", "PARTIALLY_SIGNED", "FULLY_SIGNED", "EXPIRED", "TERMINATED"];
 
-export default function ContractsPage() {
+function ContractsPageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -40,6 +41,7 @@ export default function ContractsPage() {
   const [filterType, setFilterType] = useState<ContractType | "">("");
   const [filterClientId, setFilterClientId] = useState("");
   const [filterProjectId, setFilterProjectId] = useState("");
+  const [filterStakeholderId, setFilterStakeholderId] = useState(() => searchParams.get("stakeholderId") ?? "");
   const [clients, setClients] = useState<Pick<ClientSummary, "id" | "name" | "companyName">[]>([]);
   const [projects, setProjects] = useState<Pick<Project, "id" | "name">[]>([]);
 
@@ -49,10 +51,11 @@ export default function ContractsPage() {
     if (search) params.set("search", search);
     if (filterStatus) params.set("status", filterStatus);
     if (filterType) params.set("type", filterType);
+    if (filterStakeholderId) params.set("stakeholderId", filterStakeholderId);
     const res = await fetch(`/api/contracts?${params}`);
     if (res.ok) setContracts(await res.json());
     setLoading(false);
-  }, [search, filterStatus, filterType]);
+  }, [search, filterStatus, filterType, filterStakeholderId]);
 
   useEffect(() => { fetchContracts(); }, [fetchContracts]);
 
@@ -158,6 +161,12 @@ export default function ContractsPage() {
               <option key={s} value={s}>{STATUS_CONFIG[s].label}</option>
             ))}
           </select>
+          {filterStakeholderId && (
+            <span className="text-xs bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-full inline-flex items-center gap-1.5">
+              Filtered by stakeholder
+              <button onClick={() => setFilterStakeholderId("")} className="hover:text-indigo-900 font-semibold">×</button>
+            </span>
+          )}
         </div>
       </div>
 
@@ -243,5 +252,13 @@ export default function ContractsPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function ContractsPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-full"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500" /></div>}>
+      <ContractsPageInner />
+    </Suspense>
   );
 }

@@ -24,7 +24,7 @@ import { useToast } from "@/components/ui/Toast";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useCurrentUser } from "@/lib/useCurrentUser";
 import { Client, ContactFormData, ClientContact, ProjectStatus, ProjectType, Quotation, AssetFile, ContractType, ContractPartyType, Stakeholder, User, Invoice, InvoiceStatus, Channel, ChatMessage, Expense, ExpenseCategory, ExpenseStatus, Receipt, ReceiptMethod } from "@/types";
-import { formatMoney } from "@/lib/format";
+import { formatMoney, calcInvoiceTotal } from "@/lib/format";
 
 // ── helpers ──────────────────────────────────────────────────
 type Tab = "overview" | "contacts" | "brand" | "tax" | "projects" | "quotations" | "files" | "contracts" | "chat" | "invoices" | "expenses" | "receipts";
@@ -155,7 +155,7 @@ function ContactModal({
         body: JSON.stringify(form),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      if (!res.ok) throw new Error(data.error?.message || "Save failed");
       onSaved(data);
       onClose();
     } catch (e) {
@@ -295,7 +295,7 @@ export default function ClientDetailPage() {
     try {
       const res = await fetch(`/api/clients/${id}`);
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      if (!res.ok) throw new Error(data.error?.message || "Failed to load client");
       setClient(data);
       setBrandColors(Array.isArray(data.brandColors) ? data.brandColors : []);
       setBrandAssets(Array.isArray(data.brandAssets) ? data.brandAssets : []);
@@ -432,7 +432,7 @@ export default function ClientDetailPage() {
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        const msg = data?.error || "Failed to create contract";
+        const msg = data?.error?.message || "Failed to create contract";
         setClientContractError(msg);
         toast.error(msg);
         return;
@@ -505,7 +505,7 @@ export default function ClientDetailPage() {
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data?.error || "Failed to create expense");
+        throw new Error(data?.error?.message || "Failed to create expense");
       }
       toast.success("Expense added");
       setExpenseModalOpen(false);
@@ -582,7 +582,7 @@ export default function ClientDetailPage() {
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data?.error || "Failed to save receipt");
+        throw new Error(data?.error?.message || "Failed to save receipt");
       }
       toast.success(receiptEditing ? "Receipt updated" : "Receipt recorded");
       setReceiptModalOpen(false);
@@ -646,7 +646,7 @@ export default function ClientDetailPage() {
       const res = await fetch(`/api/channels/${activeChannel.id}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ body: composeText.trim(), authorName: "You" }),
+        body: JSON.stringify({ body: composeText.trim() }),
       });
       if (res.ok) {
         setComposeText("");
@@ -897,13 +897,15 @@ export default function ClientDetailPage() {
           // ── Financial Summary calculations ──
           const pipelineQuotations = quotations.filter((q) => q.status === "APPROVED" || q.status === "SENT");
           const pipelineTotal = pipelineQuotations.reduce((s, q) => s + Number(q.total ?? 0), 0);
-          const invoicedTotal = invoices.reduce(
-            (s, inv) => s + inv.lineItems.reduce((ls, li) => ls + li.quantity * li.unitPrice, 0),
-            0
-          );
+          const invTotal = (inv: Invoice) =>
+            calcInvoiceTotal(inv.lineItems, { discountRate: inv.discountPct, taxRate: inv.taxPct }).total;
+          const invoicedTotal = invoices.reduce((s, inv) => s + invTotal(inv), 0);
+          // Paid = recorded receipts + PAID invoices that have no receipt
+          // against them (paid but recorded only via status) — never both.
+          const invoicesWithReceipts = new Set(receipts.map((r) => r.invoiceId).filter(Boolean));
           const paidFromInvoices = invoices
-            .filter((inv) => inv.status === "PAID")
-            .reduce((s, inv) => s + inv.lineItems.reduce((ls, li) => ls + li.quantity * li.unitPrice, 0), 0);
+            .filter((inv) => inv.status === "PAID" && !invoicesWithReceipts.has(inv.id))
+            .reduce((s, inv) => s + invTotal(inv), 0);
           const paidFromReceipts = receipts.reduce((s, r) => s + Number(r.amount ?? 0), 0);
           const paidTotal = paidFromInvoices + paidFromReceipts;
           const outstanding = Math.max(0, invoicedTotal - paidTotal);
@@ -1287,9 +1289,11 @@ export default function ClientDetailPage() {
 
         {/* ── INVOICES ── */}
         {tab === "invoices" && (() => {
-          const totalInvoiced = invoices.reduce((sum, inv) => sum + inv.lineItems.reduce((s, li) => s + li.quantity * li.unitPrice, 0), 0);
+          const tabInvTotal = (inv: Invoice) =>
+            calcInvoiceTotal(inv.lineItems, { discountRate: inv.discountPct, taxRate: inv.taxPct }).total;
+          const totalInvoiced = invoices.reduce((sum, inv) => sum + tabInvTotal(inv), 0);
           const paidInvoices = invoices.filter((inv) => inv.status === "PAID");
-          const totalPaid = paidInvoices.reduce((sum, inv) => sum + inv.lineItems.reduce((s, li) => s + li.quantity * li.unitPrice, 0), 0);
+          const totalPaid = paidInvoices.reduce((sum, inv) => sum + tabInvTotal(inv), 0);
           const totalOutstanding = totalInvoiced - totalPaid;
           const INVOICE_STATUS_COLOR: Record<InvoiceStatus, string> = {
             DRAFT: "bg-gray-100 text-gray-600",
@@ -1356,11 +1360,11 @@ export default function ClientDetailPage() {
                     </thead>
                     <tbody className="divide-y divide-gray-50">
                       {invoices.map((inv) => {
-                        const amount = inv.lineItems.reduce((s, li) => s + li.quantity * li.unitPrice, 0);
+                        const amount = calcInvoiceTotal(inv.lineItems, { discountRate: inv.discountPct, taxRate: inv.taxPct }).total;
                         return (
                           <tr key={inv.id} className="hover:bg-gray-50 transition-colors">
                             <td className="px-4 py-3">
-                              <Link href={`/invoices/${inv.id}`} className="font-medium text-gray-900 hover:text-indigo-600 font-mono text-xs">
+                              <Link href="/invoices" className="font-medium text-gray-900 hover:text-indigo-600 font-mono text-xs">
                                 {inv.invoiceNumber}
                               </Link>
                             </td>

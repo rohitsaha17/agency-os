@@ -66,7 +66,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
     const body = await req.json();
 
-    const { name, description, status, isShared, clientId, projectId, taskId, tagIds } =
+    const { name, description, status, isShared, clientId, projectId, taskId, folderId, tagIds } =
       body as {
         name?: string;
         description?: string;
@@ -75,8 +75,28 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         clientId?: string | null;
         projectId?: string | null;
         taskId?: string | null;
+        folderId?: string | null;
         tagIds?: string[];
       };
+
+    // Any record the file is being linked to must belong to the caller's org.
+    const orgId = user.organizationId;
+    if (clientId) {
+      const ok = await prisma.client.findFirst({ where: { id: clientId, organizationId: orgId }, select: { id: true } });
+      if (!ok) throw new ApiError("Client not found", 404);
+    }
+    if (projectId) {
+      const ok = await prisma.project.findFirst({ where: { id: projectId, organizationId: orgId }, select: { id: true } });
+      if (!ok) throw new ApiError("Project not found", 404);
+    }
+    if (taskId) {
+      const ok = await prisma.task.findFirst({ where: { id: taskId, organizationId: orgId, deletedAt: null }, select: { id: true } });
+      if (!ok) throw new ApiError("Task not found", 404);
+    }
+    if (folderId) {
+      const ok = await prisma.folder.findFirst({ where: { id: folderId, organizationId: orgId }, select: { id: true } });
+      if (!ok) throw new ApiError("Folder not found", 404);
+    }
 
     // If tagIds are being updated, replace them entirely
     const tagUpdate =
@@ -99,6 +119,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         ...(clientId !== undefined && { clientId }),
         ...(projectId !== undefined && { projectId }),
         ...(taskId !== undefined && { taskId }),
+        ...(folderId !== undefined && { folderId }),
         ...tagUpdate,
       },
       include: {

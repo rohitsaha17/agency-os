@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, Suspense } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { Plus, Search, TrendingDown, RefreshCw, CheckCircle2, Clock, XCircle, Filter, Paperclip, Upload } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
@@ -55,9 +56,10 @@ const EMPTY_FORM = {
   isReimbursable: false, receiptUrl: "", notes: "",
 };
 
-export default function ExpensesPage() {
+function ExpensesPageInner() {
   const toast   = useToast();
   const confirm = useConfirm();
+  const searchParams = useSearchParams();
 
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(true);
@@ -66,6 +68,7 @@ export default function ExpensesPage() {
   const [filterStatus, setFilterStatus] = useState("");
   const [filterProjectId, setFilterProjectId] = useState("");
   const [filterClientId, setFilterClientId] = useState("");
+  const [filterStakeholderId, setFilterStakeholderId] = useState(() => searchParams.get("stakeholderId") ?? "");
   const [addOpen, setAddOpen] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
@@ -182,9 +185,11 @@ export default function ExpensesPage() {
   const filteredExpenses = expenses.filter((e) => {
     if (filterProjectId && e.projectId !== filterProjectId) return false;
     if (filterClientId) {
-      const expClientId = e.projectId ? projectClientMap.get(e.projectId) : undefined;
+      // Direct client link wins; fall back to the client of the linked project.
+      const expClientId = e.clientId ?? (e.projectId ? projectClientMap.get(e.projectId) : undefined);
       if (expClientId !== filterClientId) return false;
     }
+    if (filterStakeholderId && (e.stakeholder?.id ?? e.stakeholderId) !== filterStakeholderId) return false;
     return true;
   });
 
@@ -271,8 +276,14 @@ export default function ExpensesPage() {
               <option key={s} value={s}>{s.charAt(0) + s.slice(1).toLowerCase()}</option>
             ))}
           </select>
-          {(filterCategory || filterStatus || search || filterProjectId || filterClientId) && (
-            <button onClick={() => { setSearch(""); setFilterCategory(""); setFilterStatus(""); setFilterProjectId(""); setFilterClientId(""); }} className="text-xs text-gray-500 hover:text-gray-800 flex items-center gap-1">
+          {filterStakeholderId && (
+            <span className="text-xs bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-full inline-flex items-center gap-1.5">
+              Stakeholder: {stakeholders.find((st) => st.id === filterStakeholderId)?.name ?? "filtered"}
+              <button onClick={() => setFilterStakeholderId("")} className="hover:text-indigo-900 font-semibold">×</button>
+            </span>
+          )}
+          {(filterCategory || filterStatus || search || filterProjectId || filterClientId || filterStakeholderId) && (
+            <button onClick={() => { setSearch(""); setFilterCategory(""); setFilterStatus(""); setFilterProjectId(""); setFilterClientId(""); setFilterStakeholderId(""); }} className="text-xs text-gray-500 hover:text-gray-800 flex items-center gap-1">
               <Filter className="w-3 h-3" /> Clear
             </button>
           )}
@@ -322,7 +333,16 @@ export default function ExpensesPage() {
                 {filteredExpenses.map((exp) => (
                   <tr key={exp.id} className="hover:bg-gray-50 transition-colors group">
                     <td className="px-5 py-3">
-                      <p className="font-medium text-gray-900">{exp.title}</p>
+                      <p className="font-medium text-gray-900 inline-flex items-center gap-1.5">
+                        {exp.title}
+                        {exp.receiptUrl && (
+                          <a href={exp.receiptUrl} target="_blank" rel="noreferrer" title="View receipt"
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-gray-400 hover:text-indigo-600 transition-colors">
+                            <Paperclip className="w-3.5 h-3.5" />
+                          </a>
+                        )}
+                      </p>
                       {exp.isReimbursable && (
                         <span className="text-[10px] text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded font-medium">Reimbursable</span>
                       )}
@@ -484,5 +504,13 @@ export default function ExpensesPage() {
         </Modal>
       )}
     </div>
+  );
+}
+
+export default function ExpensesPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-full"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500" /></div>}>
+      <ExpensesPageInner />
+    </Suspense>
   );
 }

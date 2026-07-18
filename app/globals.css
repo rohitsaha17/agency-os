@@ -111,6 +111,7 @@
 .dark .bg-gray-50\/50             { background-color: rgba(30, 41, 59, 0.5); }
 .dark .bg-gray-50\/80             { background-color: rgba(30, 41, 59, 0.8); }
 .dark .hover\:bg-gray-50\/80:hover { background-color: rgba(30, 41, 59, 0.7); }
+.dark .hover\:bg-gray-50\/50:hover { background-color: rgba(30, 41, 59, 0.5); }
 .dark .bg-gray-100\/80            { background-color: rgba(30, 41, 59, 0.8); }
 
 /* Translucent white surfaces — used as light "chip" backgrounds inside
@@ -213,10 +214,20 @@
 .dark .bg-red-100                 { background-color: rgba(239, 68, 68, 0.18); }
 .dark .text-red-700               { color: #f87171; }
 .dark .text-red-600               { color: #f87171; }
+.dark .text-red-800               { color: #fca5a5; }
+.dark .text-red-900               { color: #fca5a5; }
 .dark .border-red-200             { border-color: rgba(239, 68, 68, 0.3); }
 .dark .ring-red-200               { --tw-ring-color: rgba(239, 68, 68, 0.3); }
 .dark .hover\:bg-red-50:hover     { background-color: rgba(239, 68, 68, 0.15); }
 .dark .hover\:text-red-600:hover  { color: #f87171; }
+
+/* Slate (neutral badges — e.g. LOW-priority calendar events). Only the
+   light-surface classes are remapped; the Files module's slate-800/900/950
+   dark theme is intentionally left untouched. */
+.dark .bg-slate-50                { background-color: #1e293b; }
+.dark .bg-slate-100               { background-color: #1e293b; }
+.dark .text-slate-700             { color: #cbd5e1; }
+.dark .border-slate-200           { border-color: #334155; }
 
 /* Blue (info/in-progress) */
 .dark .bg-blue-50                 { background-color: rgba(59, 130, 246, 0.1); }

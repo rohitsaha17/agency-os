@@ -99,6 +99,12 @@ export async function GET(req: NextRequest) {
     if (tagId) {
       where.fileTags = { some: { tagId } };
     }
+    // unlinked=1 → files not attached to any client, project, or task
+    if (searchParams.get("unlinked") === "1") {
+      where.clientId = null;
+      where.projectId = null;
+      where.taskId = null;
+    }
 
     const [files, total] = await Promise.all([
       prisma.file.findMany({
@@ -145,6 +151,25 @@ export async function POST(req: NextRequest) {
     const projectId = (formData.get("projectId") as string) || null;
     const taskId = (formData.get("taskId") as string) || null;
     const folderId = (formData.get("folderId") as string) || null;
+
+    // Every record the upload is linked to must belong to the caller's org.
+    const orgId = user.organizationId;
+    if (clientId) {
+      const ok = await prisma.client.findFirst({ where: { id: clientId, organizationId: orgId }, select: { id: true } });
+      if (!ok) throw new ApiError("Client not found", 404);
+    }
+    if (projectId) {
+      const ok = await prisma.project.findFirst({ where: { id: projectId, organizationId: orgId }, select: { id: true } });
+      if (!ok) throw new ApiError("Project not found", 404);
+    }
+    if (taskId) {
+      const ok = await prisma.task.findFirst({ where: { id: taskId, organizationId: orgId, deletedAt: null }, select: { id: true } });
+      if (!ok) throw new ApiError("Task not found", 404);
+    }
+    if (folderId) {
+      const ok = await prisma.folder.findFirst({ where: { id: folderId, organizationId: orgId }, select: { id: true } });
+      if (!ok) throw new ApiError("Folder not found", 404);
+    }
     const description = (formData.get("description") as string) || null;
     const tagIdsRaw = formData.getAll("tagIds[]");
     const tagIds = tagIdsRaw.map((t) => t.toString()).filter(Boolean);

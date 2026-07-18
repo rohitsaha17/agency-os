@@ -47,7 +47,7 @@ export default function QuotationDetailPage() {
     try {
       const res = await fetch(`/api/quotations/${id}`);
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Not found");
+      if (!res.ok) throw new Error(data.error?.message || "Not found");
       setQuotation(data);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unknown error");
@@ -88,14 +88,17 @@ export default function QuotationDetailPage() {
 
     setActionLoading(status);
     try {
-      if (status === "SENT") {
-        await fetch(`/api/quotations/${id}/send`, { method: "POST" });
-      } else {
-        await fetch(`/api/quotations/${id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status }),
-        });
+      const res = status === "SENT"
+        ? await fetch(`/api/quotations/${id}/send`, { method: "POST" })
+        : await fetch(`/api/quotations/${id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status }),
+          });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data?.error?.message || "Failed to update quotation");
+        return;
       }
       await fetchQuotation();
     } finally {

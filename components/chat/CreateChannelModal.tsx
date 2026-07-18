@@ -81,7 +81,7 @@ export function CreateChannelModal({ open, onClose, onCreated }: CreateChannelMo
         }),
       });
       const data = await res.json();
-      if (!res.ok) { setError(data.error ?? "Failed to create channel"); return; }
+      if (!res.ok) { setError(data.error?.message ?? "Failed to create channel"); return; }
       onCreated(data);
       onClose();
       setName(""); setDescription(""); setType("GENERAL"); setProjectId(""); setClientId("");

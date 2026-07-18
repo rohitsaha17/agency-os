@@ -172,7 +172,7 @@ function CompanyTab({
         toast.success("Organization settings saved");
       } else {
         const d = await res.json();
-        toast.error(d.error ?? "Failed to save settings");
+        toast.error(d.error?.message ?? "Failed to save settings");
       }
     } catch {
       toast.error("Failed to save settings");
@@ -187,8 +187,8 @@ function CompanyTab({
       return;
     }
     // Warn if too large (>500KB — still works, just stores as base64)
-    if (file.size > 2 * 1024 * 1024) {
-      setLogoError("File too large. Please use an image under 2MB.");
+    if (file.size > 1.5 * 1024 * 1024) {
+      setLogoError("File too large. Please use an image under 1.5 MB.");
       return;
     }
     const seq = ++uploadSeqRef.current;
@@ -747,7 +747,7 @@ function LetterheadTab({
         toast.success("Letterhead settings saved");
       } else {
         const d = await res.json();
-        toast.error(d.error ?? "Failed to save letterhead");
+        toast.error(d.error?.message ?? "Failed to save letterhead");
       }
     } catch {
       toast.error("Failed to save letterhead");
@@ -758,7 +758,7 @@ function LetterheadTab({
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith("image/")) { setLogoError("Please select an image file"); return; }
-    if (file.size > 2 * 1024 * 1024) { setLogoError("Image must be under 2 MB"); return; }
+    if (file.size > 1.5 * 1024 * 1024) { setLogoError("Image must be under 1.5 MB"); return; }
     setLogoError("");
     const seq = ++uploadSeqRef.current;
     setLogoUploading(true);
@@ -778,6 +778,12 @@ function LetterheadTab({
         }
       } finally {
         if (uploadSeqRef.current === seq) setLogoUploading(false);
+      }
+    };
+    reader.onerror = () => {
+      if (uploadSeqRef.current === seq) {
+        setLogoUploading(false);
+        setLogoError("Could not read the image file. Please try again.");
       }
     };
     reader.readAsDataURL(file);
@@ -1068,7 +1074,7 @@ function UsersTab() {
         body: JSON.stringify(newForm),
       });
       const data = await res.json();
-      if (!res.ok) { setError(data.error ?? "Failed"); return; }
+      if (!res.ok) { setError(data.error?.message ?? "Failed"); return; }
       setUsers((p) => [...p, data]);
       setNewForm({ name: "", email: "", role: "MEMBER" });
       setShowAdd(false);
@@ -1378,7 +1384,7 @@ export default function SettingsPage() {
       .then(async (r) => {
         const d = await r.json();
         if (r.ok && d.id) setSettings(d);
-        else setSettingsError(d.error ?? "Could not load settings");
+        else setSettingsError(d.error?.message ?? "Could not load settings");
       })
       .catch(() => setSettingsError("Could not reach the settings API"))
       .finally(() => setSettingsLoading(false));

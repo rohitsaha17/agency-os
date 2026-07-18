@@ -64,6 +64,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
     // companyName is the entity identifier — when it changes, mirror it onto
     // Client.name so the rest of the app (which reads `name`) stays in sync.
+    // It can never be blanked out (that would leave a nameless client).
+    if (companyName !== undefined && !companyName?.trim()) {
+      throw new ApiError("Company name cannot be empty", 400);
+    }
     const company = companyName !== undefined ? (companyName?.trim() || null) : undefined;
     const trimmedContactName = name !== undefined ? (name?.trim() || null) : undefined;
 

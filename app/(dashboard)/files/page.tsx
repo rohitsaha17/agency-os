@@ -480,6 +480,7 @@ export default function FilesPage() {
   const [unlinkedCount, setUnlinkedCount] = useState(0);
   const [hubLoading, setHubLoading] = useState(true);
   const [hubLabel, setHubLabel] = useState<string | null>(null);
+  const [unlinkedOnly, setUnlinkedOnly] = useState(false);
 
   // ── folder navigation state ─────────────────────────────────
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
@@ -597,6 +598,7 @@ export default function FilesPage() {
     if (debouncedSearch) params.set("search", debouncedSearch);
     if (filterProjectId) params.set("projectId", filterProjectId);
     if (filterClientId) params.set("clientId", filterClientId);
+    if (unlinkedOnly) params.set("unlinked", "1");
 
     return params;
   }, [
@@ -606,6 +608,7 @@ export default function FilesPage() {
     debouncedSearch,
     filterProjectId,
     filterClientId,
+    unlinkedOnly,
   ]);
 
   // ── fetch folders ───────────────────────────────────────────
@@ -774,6 +777,7 @@ export default function FilesPage() {
   const handleShowAllFiles = useCallback(() => {
     setFilterProjectId("");
     setFilterClientId("");
+    setUnlinkedOnly(false);
     setHubLabel(null);
     setPageMode("browse");
   }, []);
@@ -781,6 +785,7 @@ export default function FilesPage() {
   const handleShowUnlinked = useCallback(() => {
     setFilterProjectId("");
     setFilterClientId("");
+    setUnlinkedOnly(true);
     setHubLabel("Unlinked Files");
     setPageMode("browse");
   }, []);
@@ -788,6 +793,7 @@ export default function FilesPage() {
   const handleBackToHub = useCallback(() => {
     setFilterProjectId("");
     setFilterClientId("");
+    setUnlinkedOnly(false);
     setScopeFilter("");
     setStatusFilter("");
     setCategoryFilter("");

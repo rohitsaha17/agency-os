@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
-import { handleApiError, ApiError } from "@/lib/api-errors";
+import { handleApiError, apiError, ApiError } from "@/lib/api-errors";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -77,7 +77,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     return NextResponse.json(dep, { status: 201 });
   } catch (error: unknown) {
     if ((error as { code?: string }).code === "P2002") {
-      return NextResponse.json({ error: "Dependency already exists" }, { status: 409 });
+      return apiError("Dependency already exists", 409, "CONFLICT");
     }
     return handleApiError(error, "POST /api/tasks/[id]/dependencies");
   }

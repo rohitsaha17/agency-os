@@ -31,7 +31,7 @@ export default function ClientsPage() {
       if (statusFilter !== "ALL") params.set("status", statusFilter);
       const res = await fetch(`/api/clients?${params}`);
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to load clients");
+      if (!res.ok) throw new Error(data.error?.message || "Failed to load clients");
       setClients(data);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unknown error");

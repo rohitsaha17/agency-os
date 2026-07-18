@@ -207,7 +207,7 @@ export default function RateCardsPage() {
     try {
       const res = await fetch("/api/rate-cards");
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      if (!res.ok) throw new Error(data.error?.message || "Failed to load rate cards");
       setRateCards(Array.isArray(data) ? data : []);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error");
@@ -230,7 +230,7 @@ export default function RateCardsPage() {
         body: JSON.stringify(form),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      if (!res.ok) throw new Error(data.error?.message || "Failed to create rate card");
       setRateCards((p) => [data, ...p]);
       setForm(EMPTY_FORM);
       setShowForm(false);

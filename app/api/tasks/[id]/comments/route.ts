@@ -43,15 +43,17 @@ export async function POST(req: NextRequest, { params }: Params) {
     const user = await requireAuth(req);
     await assertTaskInOrg(taskId, user.organizationId);
 
-    const { body, authorName, type } = await req.json();
+    const { body, type } = await req.json();
     if (!body?.trim()) {
       throw new ApiError("Comment body is required", 400);
     }
+    // Author is always the authenticated caller — never client-supplied.
     const comment = await prisma.comment.create({
       data: {
         taskId,
         body: body.trim(),
-        authorName: authorName?.trim() || "Anonymous",
+        authorId: user.id,
+        authorName: user.name,
         type: (type === "UPDATE" ? "UPDATE" : "COMMENT") as never,
       },
       include: {

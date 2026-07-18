@@ -63,18 +63,16 @@ async function nextInvoiceNumber(
 ): Promise<string> {
   const year = new Date().getFullYear();
   const prefix = `INV-${year}-`;
-  const latest = await tx.invoice.findFirst({
-    where:   { organizationId, invoiceNumber: { startsWith: prefix } },
-    orderBy: { invoiceNumber: "desc" },
-    select:  { invoiceNumber: true },
+  // Numeric max, not string ordering — "INV-2026-999" sorts above "INV-2026-1000".
+  const existing = await tx.invoice.findMany({
+    where:  { organizationId, invoiceNumber: { startsWith: prefix } },
+    select: { invoiceNumber: true },
   });
-  let seq = 1;
-  if (latest) {
-    const parts = latest.invoiceNumber.split("-");
-    const n = parseInt(parts[parts.length - 1], 10);
-    if (!isNaN(n)) seq = n + 1;
-  }
-  return `${prefix}${String(seq).padStart(3, "0")}`;
+  const max = existing.reduce(
+    (m, inv) => Math.max(m, parseInt(inv.invoiceNumber.slice(prefix.length), 10) || 0),
+    0
+  );
+  return `${prefix}${String(max + 1).padStart(3, "0")}`;
 }
 
 export async function POST(req: NextRequest) {
@@ -122,13 +120,28 @@ export async function POST(req: NextRequest) {
 
     // Wrap the whole create (invoice number lookup + invoice + line items) in a
     // single transaction so a mid-flight failure doesn't leave orphan rows or
-    // claim an invoice number that wasn't actually used.
-    const invoice = await prisma.$transaction(async (tx) => {
+    // claim an invoice number that wasn't actually used. Retried on number
+    // collision (two concurrent creates computing the same next number).
+    let invoice;
+    for (let attempt = 0; ; attempt++) {
+      try {
+        invoice = await createInvoiceTx();
+        break;
+      } catch (e) {
+        if ((e as { code?: string }).code === "P2002" && attempt < 3) continue;
+        throw e;
+      }
+    }
+
+    async function createInvoiceTx() {
+      return prisma.$transaction(async (tx) => {
       const invoiceNumber = await nextInvoiceNumber(tx, user.organizationId);
 
       let resolvedLineItems = lineItems as {
         description: string; quantity: number; unitPrice: number; unit?: string; order?: number;
       }[] | undefined;
+      let resolvedDiscountPct = discountPct != null ? parseFloat(discountPct) : null;
+      let resolvedTaxPct = taxPct != null ? parseFloat(taxPct) : null;
 
       if (fromQuotationId && !resolvedLineItems?.length) {
         const quotation = await tx.quotation.findFirst({
@@ -143,6 +156,20 @@ export async function POST(req: NextRequest) {
             unit: li.unit ?? undefined,
             order: i,
           }));
+          // Inherit the quotation's discount/tax when the form left them
+          // blank, so the invoice total matches the approved quote. A fixed
+          // discount amount is converted to its percentage of the subtotal.
+          if (resolvedTaxPct == null && quotation.taxRate != null) {
+            resolvedTaxPct = Number(quotation.taxRate);
+          }
+          if (resolvedDiscountPct == null && quotation.discountType) {
+            const subtotal = Number(quotation.subtotal ?? 0);
+            if (quotation.discountType === "PERCENT") {
+              resolvedDiscountPct = Number(quotation.discountValue ?? 0);
+            } else if (subtotal > 0) {
+              resolvedDiscountPct = (Number(quotation.discountValue ?? 0) / subtotal) * 100;
+            }
+          }
         }
       }
 
@@ -156,8 +183,8 @@ export async function POST(req: NextRequest) {
           status:      "DRAFT",
           dueDate:     dueDate ? new Date(dueDate) : null,
           currency:    currency || "USD",
-          discountPct: discountPct != null ? parseFloat(discountPct) : null,
-          taxPct:      taxPct     != null ? parseFloat(taxPct)     : null,
+          discountPct: resolvedDiscountPct,
+          taxPct:      resolvedTaxPct,
           notes:       notes?.trim() || null,
           lineItems: {
             create: (resolvedLineItems ?? []).map((li, i) => ({
@@ -171,7 +198,8 @@ export async function POST(req: NextRequest) {
         },
         include: INCLUDE,
       });
-    });
+      });
+    }
 
     return NextResponse.json(invoice, { status: 201 });
   } catch (error) {

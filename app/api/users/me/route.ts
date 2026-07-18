@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
-import { handleApiError } from "@/lib/api-errors";
+import { handleApiError, apiError } from "@/lib/api-errors";
 
 // GET /api/users/me — the current user plus their organization details
 export async function GET(req: NextRequest) {
@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
     });
 
     if (!user) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+      return apiError("Not authenticated", 401, "UNAUTHORIZED");
     }
 
     return NextResponse.json(user);

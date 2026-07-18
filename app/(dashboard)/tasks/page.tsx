@@ -66,11 +66,12 @@ function formatDate(d: string | null) {
   return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-function flattenTasks(tasks: Task[], parentId: string | null = null): Task[] {
-  return tasks.flatMap((t) => {
-    const withParent = { ...t, parentId: t.parentId ?? parentId } as Task;
-    return [withParent, ...flattenTasks(t.children ?? [], t.id)];
-  });
+// The API already returns every task (including subtasks) as its own full
+// row; each row's `children` array holds {id,status} STUBS only. Recursing
+// into those stubs would shadow the real rows with title-less ghosts, so we
+// deliberately treat the list as flat.
+function flattenTasks(tasks: Task[]): Task[] {
+  return tasks;
 }
 
 // ── Component ────────────────────────────────────────────────
@@ -109,7 +110,7 @@ export default function MyTasksPage() {
     try {
       const projRes = await fetch("/api/projects");
       const projects = await projRes.json();
-      if (!projRes.ok) throw new Error(projects.error || "Failed to load");
+      if (!projRes.ok) throw new Error(projects.error?.message || "Failed to load");
       const projectsArray: ProjectSummary[] = Array.isArray(projects) ? projects : [];
       setProjectsList(projectsArray);
 
@@ -119,9 +120,9 @@ export default function MyTasksPage() {
       // TODO: if/when the API supports a multi-project filter (e.g. ?projects=a,b,c),
       // switch to that for more precise scoping per user role.
       const projectMap = new Map(projectsArray.map((p) => [p.id, p]));
-      const res = await fetch("/api/tasks?includeCompleted=true");
+      const res = await fetch("/api/tasks?includeCompleted=true&all=1");
       const raw = await res.json();
-      if (!res.ok) throw new Error((raw && raw.error) || "Failed to load tasks");
+      if (!res.ok) throw new Error(raw?.error?.message || "Failed to load tasks");
       const list: Task[] = Array.isArray(raw) ? raw : [];
 
       // Dedupe by id in case the endpoint ever returns overlapping rows.
@@ -190,7 +191,7 @@ export default function MyTasksPage() {
 
     if (statusFilter !== "ALL" && t.status !== statusFilter) return false;
     if (priorityFilter !== "ALL" && t.priority !== priorityFilter) return false;
-    if (search && !t.title.toLowerCase().includes(search.toLowerCase())) return false;
+    if (search && !(t.title ?? "").toLowerCase().includes(search.toLowerCase())) return false;
     if (filterProjectId && t.projectId !== filterProjectId) return false;
     if (filterClientId && (t as FlatTask).clientId !== filterClientId) return false;
     return true;

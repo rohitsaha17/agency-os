@@ -10,9 +10,11 @@ export async function GET(req: NextRequest) {
     const orgId = currentUser.organizationId;
 
     const { searchParams } = new URL(req.url);
-    const year      = parseInt(searchParams.get("year")  ?? String(new Date().getFullYear()));
-    const month     = parseInt(searchParams.get("month") ?? String(new Date().getMonth() + 1));
-    const filterUserId    = searchParams.get("userId")    ?? undefined;
+    let year  = parseInt(searchParams.get("year")  ?? String(new Date().getFullYear()));
+    let month = parseInt(searchParams.get("month") ?? String(new Date().getMonth() + 1));
+    if (!Number.isFinite(year))  year  = new Date().getFullYear();
+    if (!Number.isFinite(month) || month < 1 || month > 12) month = new Date().getMonth() + 1;
+    let filterUserId    = searchParams.get("userId")    ?? undefined;
     const filterProjectId = searchParams.get("projectId") ?? undefined;
     const filterClientId  = searchParams.get("clientId")  ?? undefined;
     const filterPriority  = searchParams.get("priority")  ?? undefined;
@@ -22,6 +24,11 @@ export async function GET(req: NextRequest) {
 
     const role = currentUser.role ?? "ADMIN";
     const myId = currentUser.id;
+
+    // Members can't use the userId filter to peek at colleagues' calendars.
+    if (role === "MEMBER" && filterUserId && filterUserId !== myId) {
+      filterUserId = myId;
+    }
 
     // ── Build task where clause with role scoping ──────────────
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -36,11 +43,11 @@ export async function GET(req: NextRequest) {
       // Members see only their assigned tasks
       taskWhere.assignees = { some: { userId: myId } };
     } else if (role === "MANAGER" && myId && !filterUserId) {
-      // Managers see tasks they manage, are assigned to, or in their projects
+      // Managers see tasks they manage, are assigned to, or in projects they created
       taskWhere.OR = [
         { managerId: myId },
         { assignees: { some: { userId: myId } } },
-        { project: { managerId: myId } },
+        { project: { createdById: myId } },
       ];
     }
     // ADMIN or explicit userId filter override role scoping
@@ -77,7 +84,7 @@ export async function GET(req: NextRequest) {
         ...(projectWhere.AND ?? []),
         {
           OR: [
-            { managerId: myId },
+            { createdById: myId },
             { tasks: { some: { OR: [{ managerId: myId }, { assignees: { some: { userId: myId } } }], deletedAt: null } } },
           ],
         },

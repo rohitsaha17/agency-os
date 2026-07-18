@@ -15,29 +15,13 @@ export type AuthUser = {
 };
 
 /**
- * Resolve the current user for an API request.
- *
- * Priority:
- *   1. `x-user-id` header
- *   2. Existing `getCurrentUser()` helper (cookie / dev-fallback)
+ * Resolve the current user for an API request (login cookie only —
+ * client-supplied headers are never trusted for identity).
  *
  * Throws `ApiError(401)` when no user can be resolved.
  * The returned user has `organizationId` — always filter tenant data by it.
  */
 export async function requireAuth(req: Request): Promise<AuthUser> {
-  const headerUserId = req.headers.get("x-user-id");
-
-  if (headerUserId) {
-    const user = await prisma.user.findUnique({
-      where: { id: headerUserId },
-      select: {
-        id: true, name: true, email: true, role: true,
-        avatarUrl: true, organizationId: true,
-      },
-    });
-    if (user) return user as AuthUser;
-  }
-
   const user = await getCurrentUser(req);
   if (!user) {
     throw new ApiError("Authentication required", 401, "UNAUTHORIZED");
@@ -52,6 +36,8 @@ export async function requireAuth(req: Request): Promise<AuthUser> {
  * Use on destructive routes: `requireRole(user, ["OWNER", "ADMIN"])`.
  */
 export function requireRole(user: AuthUser, roles: UserRole[]): void {
+  // OWNER is the organization's super admin — passes every role gate.
+  if (user.role === "OWNER") return;
   if (!roles.includes(user.role)) {
     throw new ApiError(
       "You do not have permission to perform this action",

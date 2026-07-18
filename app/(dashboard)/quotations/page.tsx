@@ -46,7 +46,7 @@ export default function QuotationsPage() {
     try {
       const res = await fetch("/api/quotations");
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      if (!res.ok) throw new Error(data.error?.message || "Failed to load quotations");
       setQuotations(Array.isArray(data) ? data : []);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unknown error");
@@ -99,7 +99,7 @@ export default function QuotationsPage() {
             { label: "Total",    value: stats.total,    color: "text-gray-900" },
             { label: "Draft",    value: stats.draft,    color: "text-gray-600" },
             { label: "Sent",     value: stats.sent,     color: "text-blue-700" },
-            { label: "Approved value", value: `${stats.value > 0 ? formatMoney(stats.value, "USD") : stats.approved + " approved"}`, color: "text-emerald-700" },
+            { label: "Approved value", value: `${stats.value > 0 ? formatMoney(stats.value, quotations[0]?.currency ?? "USD") : stats.approved + " approved"}`, color: "text-emerald-700" },
           ].map(({ label, value, color }) => (
             <div key={label} className="bg-gray-50 rounded-xl px-4 py-3">
               <p className="text-xs text-gray-500">{label}</p>

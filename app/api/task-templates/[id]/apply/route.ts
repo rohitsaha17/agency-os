@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
-import { handleApiError, ApiError } from "@/lib/api-errors";
+import { handleApiError, apiError, ApiError } from "@/lib/api-errors";
 
 // Inline builtin templates (same data as the list route)
 const BUILTIN_TEMPLATES: Record<string, {
@@ -79,7 +79,7 @@ export async function POST(req: NextRequest, { params }: Params) {
   const template = BUILTIN_TEMPLATES[templateId];
 
   if (!template) {
-    return NextResponse.json({ error: "Template not found" }, { status: 404 });
+    return apiError("Template not found", 404, "NOT_FOUND");
   }
 
   try {
@@ -97,50 +97,64 @@ export async function POST(req: NextRequest, { params }: Params) {
     if (!project) throw new ApiError("Project not found", 404);
 
     const baseDate = startDate ? new Date(startDate) : null;
-
-    // Two-pass: create top-level tasks first, then subtasks
-    // Map from template item order → created task id
-    const orderToId = new Map<number, string>();
-
-    // Pass 1: top-level tasks (parentOrder === null)
-    const topLevel = template.items.filter((i) => i.parentOrder === null);
-    for (const item of topLevel) {
-      const dueDate = baseDate && item.offsetDays != null
-        ? new Date(baseDate.getTime() + item.offsetDays * 86400000)
-        : null;
-      const task = await prisma.task.create({
-        data: {
-          organizationId: user.organizationId,
-          projectId,
-          title: item.title,
-          priority: item.priority as never,
-          order: item.order,
-          dueDate,
-        },
-      });
-      orderToId.set(item.order, task.id);
+    if (baseDate && isNaN(baseDate.getTime())) {
+      throw new ApiError("Invalid start date", 400);
     }
 
-    // Pass 2: subtasks
-    const subtasks = template.items.filter((i) => i.parentOrder !== null);
-    for (const item of subtasks) {
-      const parentId = orderToId.get(item.parentOrder!);
-      const dueDate = baseDate && item.offsetDays != null
-        ? new Date(baseDate.getTime() + item.offsetDays * 86400000)
-        : null;
-      const task = await prisma.task.create({
-        data: {
-          organizationId: user.organizationId,
-          projectId,
-          parentId: parentId ?? null,
-          title: item.title,
-          priority: item.priority as never,
-          order: item.order,
-          dueDate,
-        },
-      });
-      orderToId.set(item.order, task.id);
-    }
+    // Offset template orders past any existing tasks so the new plan
+    // doesn't interleave with what's already in the project.
+    const maxOrder = await prisma.task.aggregate({
+      where: { projectId, deletedAt: null },
+      _max: { order: true },
+    });
+    const orderBase = (maxOrder._max.order ?? -1) + 1;
+
+    // All-or-nothing: a mid-apply failure must not leave a half-created plan.
+    await prisma.$transaction(async (tx) => {
+      // Two-pass: create top-level tasks first, then subtasks
+      // Map from template item order → created task id
+      const orderToId = new Map<number, string>();
+
+      // Pass 1: top-level tasks (parentOrder === null)
+      const topLevel = template.items.filter((i) => i.parentOrder === null);
+      for (const item of topLevel) {
+        const dueDate = baseDate && item.offsetDays != null
+          ? new Date(baseDate.getTime() + item.offsetDays * 86400000)
+          : null;
+        const task = await tx.task.create({
+          data: {
+            organizationId: user.organizationId,
+            projectId,
+            title: item.title,
+            priority: item.priority as never,
+            order: orderBase + item.order,
+            dueDate,
+          },
+        });
+        orderToId.set(item.order, task.id);
+      }
+
+      // Pass 2: subtasks
+      const subtasks = template.items.filter((i) => i.parentOrder !== null);
+      for (const item of subtasks) {
+        const parentId = orderToId.get(item.parentOrder!);
+        const dueDate = baseDate && item.offsetDays != null
+          ? new Date(baseDate.getTime() + item.offsetDays * 86400000)
+          : null;
+        const task = await tx.task.create({
+          data: {
+            organizationId: user.organizationId,
+            projectId,
+            parentId: parentId ?? null,
+            title: item.title,
+            priority: item.priority as never,
+            order: orderBase + item.order,
+            dueDate,
+          },
+        });
+        orderToId.set(item.order, task.id);
+      }
+    });
 
     return NextResponse.json({ success: true, count: template.items.length });
   } catch (error) {

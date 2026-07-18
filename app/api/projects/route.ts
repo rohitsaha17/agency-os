@@ -17,10 +17,13 @@ export async function GET(req: NextRequest) {
     const clientId = searchParams.get("clientId") ?? undefined;
     const pagination = parsePagination(searchParams);
 
+    // status supports a comma-separated list, e.g. ?status=ACTIVE,DRAFT
+    const statuses = status?.split(",").map((s) => s.trim()).filter(Boolean);
     const where = {
       organizationId: user.organizationId,
       ...(clientId && { clientId }),
-      ...(status && { status: status as never }),
+      ...(statuses?.length === 1 && { status: statuses[0] as never }),
+      ...(statuses && statuses.length > 1 && { status: { in: statuses as never[] } }),
       ...(type && { type: type as never }),
       ...(search && {
         OR: [
@@ -100,6 +103,14 @@ export async function POST(req: NextRequest) {
 
     if (!clientId?.trim()) throw new ApiError("Client is required", 400);
     if (!name?.trim()) throw new ApiError("Project name is required", 400);
+    if (budget != null && budget !== "" && !Number.isFinite(parseFloat(budget))) {
+      throw new ApiError("Budget must be a number", 400);
+    }
+    for (const [label, value] of [["Start date", startDate], ["End date", endDate]] as const) {
+      if (value && isNaN(new Date(value).getTime())) {
+        throw new ApiError(`${label} is invalid`, 400);
+      }
+    }
 
     // Verify the client is in the caller's org before creating a project against it.
     const client = await prisma.client.findFirst({
@@ -137,7 +148,7 @@ export async function POST(req: NextRequest) {
           status: status || "DRAFT",
           startDate: startDate ? new Date(startDate) : null,
           endDate: endDate ? new Date(endDate) : null,
-          budget: budget ? parseFloat(budget) : null,
+          budget: budget != null && budget !== "" ? parseFloat(budget) : null,
           currency: currency || "USD",
         },
         include: {

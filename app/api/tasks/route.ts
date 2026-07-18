@@ -18,6 +18,7 @@ export async function GET(req: NextRequest) {
     const assigneeId      = searchParams.get("assigneeId") ?? undefined;
     const q               = searchParams.get("q") ?? undefined;
     const includeCompleted = searchParams.get("includeCompleted") === "true";
+    const all = searchParams.get("all") === "1"; // explicit opt-out of the cap
     const pagination = parsePagination(searchParams);
 
     const where = {
@@ -39,7 +40,8 @@ export async function GET(req: NextRequest) {
 
     // Take cap: default page size when no pagination flag,
     // otherwise honor `pageSize` (validated/clamped upstream).
-    const take = pagination.paginated ? pagination.take : DEFAULT_PAGE_SIZE;
+    // `?all=1` returns everything (the tasks page groups client-side).
+    const take = pagination.paginated ? pagination.take : all ? undefined : DEFAULT_PAGE_SIZE;
 
     const [tasks, total] = await Promise.all([
       prisma.task.findMany({

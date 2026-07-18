@@ -28,6 +28,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const body = await req.json();
     const { name, email, phone, jobTitle, isPrimary } = body;
 
+    if (name !== undefined && !name?.trim()) {
+      throw new ApiError("Contact name cannot be empty", 400);
+    }
+
     // If promoting to primary, demote all others
     if (isPrimary) {
       await prisma.clientContact.updateMany({

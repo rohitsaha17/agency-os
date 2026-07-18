@@ -62,7 +62,7 @@ export function TemplatePickerModal({
         body: JSON.stringify({ projectId, startDate: startDate ?? null }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Apply failed");
+      if (!res.ok) throw new Error(data.error?.message ?? "Apply failed");
       toast.success(`Generated ${data.count} tasks from “${template.name}”`);
       onApplied?.();
       onClose();

@@ -15,41 +15,25 @@ import { requireAuth } from "@/lib/auth";
 export async function GET(req: NextRequest) {
   try {
     const user = await requireAuth(req);
-    // Fetch all non-archived channels with their members' lastReadAt and message counts
-    const channels = await prisma.channel.findMany({
-      where: { organizationId: user.organizationId, isArchived: false },
-      select: {
-        id: true,
-        members: {
-          select: { lastReadAt: true },
-        },
-        _count: { select: { messages: true } },
+    // Only channels the CALLER is a member of, using the caller's own
+    // lastReadAt — and never counting the caller's own messages.
+    const memberships = await prisma.channelMember.findMany({
+      where: {
+        userId: user.id,
+        channel: { organizationId: user.organizationId, isArchived: false },
       },
+      select: { channelId: true, lastReadAt: true },
     });
 
     let totalUnread = 0;
-
-    for (const ch of channels) {
-      // Find the most recent lastReadAt across all members of this channel
-      const lastRead = ch.members.reduce<Date | null>((latest, m) => {
-        if (!m.lastReadAt) return latest;
-        if (!latest) return m.lastReadAt;
-        return m.lastReadAt > latest ? m.lastReadAt : latest;
-      }, null);
-
-      if (!lastRead) {
-        // Nobody has read this channel yet — all messages are "unread"
-        totalUnread += ch._count.messages;
-      } else {
-        // Count messages created after the latest read timestamp
-        const unread = await prisma.chatMessage.count({
-          where: {
-            channelId: ch.id,
-            createdAt: { gt: lastRead },
-          },
-        });
-        totalUnread += unread;
-      }
+    for (const m of memberships) {
+      totalUnread += await prisma.chatMessage.count({
+        where: {
+          channelId: m.channelId,
+          ...(m.lastReadAt ? { createdAt: { gt: m.lastReadAt } } : {}),
+          NOT: { authorId: user.id },
+        },
+      });
     }
 
     return NextResponse.json({ unreadCount: totalUnread });

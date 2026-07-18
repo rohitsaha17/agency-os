@@ -55,11 +55,21 @@ export async function PATCH(req: Request, { params }: Params) {
     // Verify org ownership before mutating.
     const existing = await prisma.quotation.findFirst({
       where: { id, organizationId: user.organizationId },
-      select: { id: true, discountType: true, discountValue: true, taxRate: true },
+      select: { id: true, status: true, discountType: true, discountValue: true, taxRate: true },
     });
     if (!existing) throw new ApiError("Not found", 404);
 
     const body = await req.json();
+
+    // CONVERTED is set only by the convert endpoint, and a converted
+    // quotation's line items are frozen (the generated project/invoice
+    // were built from them).
+    if (body.status === "CONVERTED" && existing.status !== "CONVERTED") {
+      throw new ApiError("Use the convert action to convert a quotation", 400);
+    }
+    if (existing.status === "CONVERTED" && body.lineItems !== undefined) {
+      throw new ApiError("A converted quotation's line items can no longer be edited", 400);
+    }
     const {
       title, description, pricingType, validUntil,
       currency, discountType, discountValue, taxRate,

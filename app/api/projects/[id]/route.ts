@@ -66,6 +66,15 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       if (!client) throw new ApiError("Client not found", 404);
     }
 
+    if (budget !== undefined && budget != null && budget !== "" && !Number.isFinite(parseFloat(budget))) {
+      throw new ApiError("Budget must be a number", 400);
+    }
+    for (const [label, value] of [["Start date", startDate], ["End date", endDate]] as const) {
+      if (value && isNaN(new Date(value).getTime())) {
+        throw new ApiError(`${label} is invalid`, 400);
+      }
+    }
+
     const project = await prisma.project.update({
       where: { id },
       data: {
@@ -78,7 +87,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         ...(status !== undefined && { status }),
         ...(startDate !== undefined && { startDate: startDate ? new Date(startDate) : null }),
         ...(endDate !== undefined && { endDate: endDate ? new Date(endDate) : null }),
-        ...(budget !== undefined && { budget: budget ? parseFloat(budget) : null }),
+        ...(budget !== undefined && { budget: budget != null && budget !== "" ? parseFloat(budget) : null }),
         ...(currency !== undefined && { currency }),
       },
       include: {

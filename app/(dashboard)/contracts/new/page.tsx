@@ -103,7 +103,7 @@ export default function NewContractPage() {
         body: JSON.stringify({ ...form, parties }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to create contract");
+      if (!res.ok) throw new Error(data.error?.message || "Failed to create contract");
       router.push(`/contracts/${data.id}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error");

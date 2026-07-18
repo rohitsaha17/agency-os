@@ -4,28 +4,21 @@ import { cookies } from "next/headers";
 /**
  * Lightweight current-user resolver for API routes (server-side).
  *
- * Priority:
- *   1. `x-user-id` header (set by middleware or client)
- *   2. `userId` cookie (set by POST /api/auth/login)
+ * Identity comes ONLY from the httpOnly `userId` cookie set by
+ * POST /api/auth/login — client-supplied headers are never trusted.
  *
  * Returns the user with organizationId, or null when unauthenticated /
  * inactive. Every tenant-scoped query MUST filter by the returned
  * organizationId.
  */
-export async function getCurrentUser(req?: Request) {
+export async function getCurrentUser(_req?: Request) {
   let userId: string | null = null;
 
-  if (req) {
-    userId = req.headers.get("x-user-id");
-  }
-
-  if (!userId) {
-    try {
-      const cookieStore = await cookies();
-      userId = cookieStore.get("userId")?.value ?? null;
-    } catch {
-      // cookies() not available outside server components — ignore
-    }
+  try {
+    const cookieStore = await cookies();
+    userId = cookieStore.get("userId")?.value ?? null;
+  } catch {
+    // cookies() not available outside a request scope — ignore
   }
 
   // No fallback: with multiple tenants, "first OWNER in the DB" would leak

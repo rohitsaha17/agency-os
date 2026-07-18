@@ -44,7 +44,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     // Verify the task belongs to the caller's org before mutating.
     const existing = await prisma.task.findFirst({
       where: { id, deletedAt: null, organizationId: user.organizationId },
-      select: { id: true },
+      select: { id: true, projectId: true },
     });
     if (!existing) throw new ApiError("Task not found", 404);
 
@@ -55,6 +55,43 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       isClientVisible, showSubtasksToClient,
       cascadeToChildren, // if true and status=DONE, mark all children DONE too
     } = body;
+
+    // A new parent must be a different task in the same project (same org).
+    if (parentId) {
+      if (parentId === id) throw new ApiError("A task cannot be its own parent", 400);
+      const parent = await prisma.task.findFirst({
+        where: {
+          id: parentId, deletedAt: null,
+          projectId: existing.projectId,
+          organizationId: user.organizationId,
+        },
+        select: { id: true },
+      });
+      if (!parent) throw new ApiError("Parent task not found", 404);
+    }
+
+    // Manager/assignees must be members of the caller's organization.
+    if (managerId) {
+      const manager = await prisma.user.findFirst({
+        where: { id: managerId, organizationId: user.organizationId },
+        select: { id: true },
+      });
+      if (!manager) throw new ApiError("Manager not found", 404);
+    }
+    if (assigneeIds !== undefined && Array.isArray(assigneeIds) && assigneeIds.length > 0) {
+      const count = await prisma.user.count({
+        where: { id: { in: assigneeIds }, organizationId: user.organizationId },
+      });
+      if (count !== new Set(assigneeIds).size) {
+        throw new ApiError("One or more assignees not found", 404);
+      }
+    }
+
+    if (estimatedHours !== undefined && estimatedHours !== null && estimatedHours !== "") {
+      if (!Number.isFinite(parseFloat(estimatedHours))) {
+        throw new ApiError("Estimated hours must be a number", 400);
+      }
+    }
 
     const task = await prisma.task.update({
       where: { id },
@@ -67,7 +104,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         ...(parentId    !== undefined && { parentId: parentId ?? null }),
         ...(order       !== undefined && { order }),
         ...(managerId   !== undefined && { managerId: managerId ?? null }),
-        ...(estimatedHours !== undefined && { estimatedHours: estimatedHours ? parseFloat(estimatedHours) : null }),
+        ...(estimatedHours !== undefined && { estimatedHours: estimatedHours !== null && estimatedHours !== "" ? parseFloat(estimatedHours) : null }),
         ...(isClientVisible !== undefined && { isClientVisible }),
         ...(showSubtasksToClient !== undefined && { showSubtasksToClient }),
         // Sync assignees if provided
@@ -171,12 +208,19 @@ async function recomputeAncestorProgress(taskId: string, depth: number): Promise
     children.reduce((sum, c) => sum + (c.status === "DONE" ? 100 : c.progress), 0) / children.length
   );
 
+  const parent = await prisma.task.findUnique({
+    where: { id: taskId },
+    select: { status: true },
+  });
+
   const updated = await prisma.task.update({
     where: { id: taskId },
     data: {
       progress: avg,
-      // Auto-complete parent when ALL children are done
+      // Auto-complete parent when ALL children are done; reopen it when a
+      // child gets reopened after the parent was auto-completed.
       ...(allDone && { status: "DONE" }),
+      ...(!allDone && parent?.status === "DONE" && { status: "IN_PROGRESS" }),
     },
     select: { parentId: true },
   });

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { X, ArrowRight, ArrowLeft, Sparkles } from "lucide-react";
+import { X, ArrowRight, ArrowLeft } from "lucide-react";
 import { useCurrentUser } from "@/lib/useCurrentUser";
 import { BrandLogo } from "@/components/ui/BrandLogo";
 
@@ -200,11 +200,7 @@ export function AppTour() {
       >
         <div className="flex items-start justify-between gap-3 mb-2">
           <div className="flex items-center gap-2">
-            {step === 0 ? (
-              <BrandLogo className="w-6 h-6 text-white" />
-            ) : (
-              <Sparkles className="w-4 h-4 text-indigo-400" />
-            )}
+            {step === 0 && <BrandLogo className="w-6 h-6 text-white" />}
             <h3 className="text-sm font-bold">{current.title}</h3>
           </div>
           <button

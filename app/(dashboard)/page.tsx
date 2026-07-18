@@ -138,9 +138,9 @@ function StatCard({ icon, label, value, sub, color, href, accent = false }: {
         {icon}
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-xs font-medium text-gray-500 truncate">{label}</p>
-        <p className="text-2xl font-bold text-gray-900 leading-tight">{value}</p>
-        {sub && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}
+        <p className="text-xs font-medium text-gray-500">{label}</p>
+        <p className="text-2xl font-bold text-gray-900 leading-tight truncate">{value}</p>
+        {sub && <p className="text-xs text-gray-400 mt-0.5 truncate">{sub}</p>}
       </div>
       {href && <ArrowRight className="w-4 h-4 text-gray-200 group-hover:text-indigo-400 transition-colors flex-shrink-0" />}
     </div>
@@ -737,7 +737,7 @@ export default function DashboardPage() {
       <div className="flex-1 px-4 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-5 overflow-auto">
 
         {/* ── Row 1: Stats ───────────────────────────────────── */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <StatCard
             icon={<FolderKanban className="w-5 h-5 text-indigo-600" />}
             label="Active Projects"

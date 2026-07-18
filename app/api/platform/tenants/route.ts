@@ -29,11 +29,15 @@ export async function GET(req: NextRequest) {
         onboardingCompleted: true,
         onboardedAt: true,
         createdAt: true,
+        plan: true,
+        trialEndsAt: true,
+        uploadLimitMb: true,
         users: {
           where: { role: "OWNER" },
           select: { id: true, name: true, email: true },
           take: 1,
         },
+        files: { select: { size: true } },
         _count: { select: { users: true, clients: true, projects: true, invoices: true } },
       },
     });
@@ -46,6 +50,10 @@ export async function GET(req: NextRequest) {
         onboardingCompleted: o.onboardingCompleted,
         onboardedAt: o.onboardedAt,
         createdAt: o.createdAt,
+        plan: o.plan,
+        trialEndsAt: o.trialEndsAt,
+        uploadLimitMb: o.uploadLimitMb,
+        storageUsedBytes: o.files.reduce((s, f) => s + (f.size ?? 0), 0),
         owner: o.users[0] ?? null,
         counts: o._count,
       }))
@@ -82,9 +90,12 @@ export async function POST(req: NextRequest) {
       throw new ApiError("That email is already used by another workspace", 409, "CONFLICT");
     }
 
+    // New workspaces start on a 14-day trial by default.
+    const trialEndsAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+
     const result = await prisma.$transaction(async (tx) => {
       const org = await tx.organization.create({
-        data: { name: orgName, onboardingCompleted: false },
+        data: { name: orgName, onboardingCompleted: false, plan: "TRIAL", trialEndsAt },
       });
       const owner = await tx.user.create({
         data: {

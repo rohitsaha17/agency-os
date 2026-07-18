@@ -97,7 +97,7 @@ export async function POST(req: NextRequest, { params }: Params) {
         const rl = checkRateLimit(req, `chat:upload:${user.id}`, WRITE_RATE_LIMITS.heavy);
         if (!rl.allowed) return apiError("Too many uploads, please slow down", 429);
         const totalBytes = realFiles.reduce((s, f) => s + (f as File).size, 0);
-        await assertUploadWithinQuota(user.id, totalBytes);
+        await assertUploadWithinQuota(user.organizationId, totalBytes);
       }
       for (const file of realFiles) {
         if (!(file instanceof Blob)) continue;

@@ -3,9 +3,31 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   Building2, Plus, Loader2, KeyRound, RefreshCw, CheckCircle2,
-  Clock, Users, FolderKanban, Receipt, LogOut, Copy, Inbox, Mail,
+  Clock, Users, FolderKanban, Receipt, LogOut, Copy, Inbox, Mail, Gauge, Sparkles,
 } from "lucide-react";
 import { BrandLogo } from "@/components/ui/BrandLogo";
+
+/** Plan status pill: Full, active Trial (with days left), or Trial ended. */
+function PlanBadge({ plan, trialEndsAt }: { plan: "TRIAL" | "FULL"; trialEndsAt: string | null }) {
+  if (plan === "FULL") {
+    return (
+      <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300 ring-1 ring-indigo-500/30">
+        <Sparkles className="w-2.5 h-2.5" /> Full access
+      </span>
+    );
+  }
+  const end = trialEndsAt ? new Date(trialEndsAt).getTime() : null;
+  const daysLeft = end ? Math.ceil((end - Date.now()) / 86_400_000) : null;
+  const ended = end !== null && end < Date.now();
+  return (
+    <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full ring-1 ${
+      ended ? "bg-red-500/15 text-red-300 ring-red-500/30" : "bg-amber-500/15 text-amber-300 ring-amber-500/30"
+    }`}>
+      <Clock className="w-2.5 h-2.5" />
+      {ended ? "Trial ended" : daysLeft !== null ? `Trial · ${daysLeft}d left` : "Trial"}
+    </span>
+  );
+}
 
 interface Tenant {
   id: string;
@@ -14,6 +36,10 @@ interface Tenant {
   onboardingCompleted: boolean;
   onboardedAt: string | null;
   createdAt: string;
+  plan: "TRIAL" | "FULL";
+  trialEndsAt: string | null;
+  uploadLimitMb: number;
+  storageUsedBytes: number;
   owner: { id: string; name: string; email: string } | null;
   counts: { users: number; clients: number; projects: number; invoices: number };
 }
@@ -82,6 +108,36 @@ export default function PlatformAdminPage() {
       setResetBusy(false);
     }
   }, [adminKey, resetPw]);
+
+  // Per-tenant plan / trial / storage management
+  const [manageFor, setManageFor] = useState<string | null>(null);
+  const [trialDaysInput, setTrialDaysInput] = useState("14");
+  const [storageInput, setStorageInput] = useState("");
+  const [planBusy, setPlanBusy] = useState<string | null>(null);
+  const [planMsg, setPlanMsg] = useState<{ id: string; text: string; error?: boolean } | null>(null);
+
+  const patchTenant = useCallback(async (tenantId: string, patch: Record<string, unknown>, okText: string) => {
+    if (!adminKey) return;
+    setPlanBusy(tenantId);
+    setPlanMsg(null);
+    try {
+      const res = await fetch(`/api/platform/tenants/${tenantId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", "x-admin-key": adminKey },
+        body: JSON.stringify(patch),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error?.message || "Update failed");
+      setTenants((prev) => prev.map((t) => t.id === tenantId
+        ? { ...t, plan: data.plan, trialEndsAt: data.trialEndsAt, uploadLimitMb: data.uploadLimitMb }
+        : t));
+      setPlanMsg({ id: tenantId, text: okText });
+    } catch (err) {
+      setPlanMsg({ id: tenantId, text: err instanceof Error ? err.message : "Update failed", error: true });
+    } finally {
+      setPlanBusy(null);
+    }
+  }, [adminKey]);
 
   // Restore key from sessionStorage
   useEffect(() => {
@@ -326,9 +382,12 @@ export default function PlatformAdminPage() {
                             <Clock className="w-2.5 h-2.5" /> Pending onboarding
                           </span>
                         )}
+                        <PlanBadge plan={t.plan} trialEndsAt={t.trialEndsAt} />
                       </div>
                       <p className="text-xs text-slate-500 mt-1 truncate">
                         Owner: {t.owner ? `${t.owner.name} · ${t.owner.email}` : "—"}
+                        {" · "}
+                        {(t.storageUsedBytes / (1024 * 1024)).toFixed(1)} / {t.uploadLimitMb} MB used
                       </p>
                     </div>
                     <div className="flex items-center gap-4 text-xs text-slate-400">
@@ -347,6 +406,20 @@ export default function PlatformAdminPage() {
                     </div>
                     <button
                       onClick={() => {
+                        const opening = manageFor !== t.id;
+                        setManageFor(opening ? t.id : null);
+                        setPlanMsg(null);
+                        if (opening) {
+                          setTrialDaysInput("14");
+                          setStorageInput(String(t.uploadLimitMb));
+                        }
+                      }}
+                      className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border border-white/[0.08] text-slate-300 hover:bg-white/[0.05] transition-colors"
+                    >
+                      <Gauge className="w-3.5 h-3.5" /> Manage plan
+                    </button>
+                    <button
+                      onClick={() => {
                         setResetFor(resetFor === t.id ? null : t.id);
                         setResetPw("");
                         setResetMsg(null);
@@ -358,6 +431,68 @@ export default function PlatformAdminPage() {
                       <KeyRound className="w-3.5 h-3.5" /> Reset password
                     </button>
                   </div>
+
+                  {manageFor === t.id && (
+                    <div className="mt-3 pt-3 border-t border-white/[0.06] space-y-3">
+                      {/* Plan */}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs text-slate-500 w-20">Plan</span>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number" min={1} value={trialDaysInput}
+                            onChange={(e) => setTrialDaysInput(e.target.value)}
+                            className="w-16 px-2 py-1.5 text-sm rounded-lg bg-slate-900 border border-slate-700 text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          />
+                          <button
+                            onClick={() => patchTenant(t.id, { trialDays: Number(trialDaysInput) }, `Trial set to ${trialDaysInput} days from now.`)}
+                            disabled={planBusy === t.id}
+                            className="text-xs font-medium px-3 py-1.5 rounded-lg border border-white/[0.08] text-slate-300 hover:bg-white/[0.05] disabled:opacity-60 transition-colors"
+                          >
+                            Set trial (days)
+                          </button>
+                        </div>
+                        <button
+                          onClick={() => patchTenant(t.id, { plan: "FULL" }, "Upgraded to full access.")}
+                          disabled={planBusy === t.id}
+                          className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-60 transition-colors"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" /> Grant full access
+                        </button>
+                        {t.plan === "FULL" && (
+                          <button
+                            onClick={() => patchTenant(t.id, { trialDays: 14 }, "Moved back to a 14-day trial.")}
+                            disabled={planBusy === t.id}
+                            className="text-xs font-medium px-3 py-1.5 rounded-lg border border-white/[0.08] text-slate-300 hover:bg-white/[0.05] disabled:opacity-60 transition-colors"
+                          >
+                            Back to trial
+                          </button>
+                        )}
+                      </div>
+                      {/* Storage */}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs text-slate-500 w-20">Storage</span>
+                        <input
+                          type="number" min={1} value={storageInput}
+                          onChange={(e) => setStorageInput(e.target.value)}
+                          className="w-24 px-2 py-1.5 text-sm rounded-lg bg-slate-900 border border-slate-700 text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                        <span className="text-xs text-slate-500">MB total for the organization</span>
+                        <button
+                          onClick={() => patchTenant(t.id, { uploadLimitMb: Number(storageInput) }, `Storage limit set to ${storageInput} MB.`)}
+                          disabled={planBusy === t.id}
+                          className="text-xs font-medium px-3 py-1.5 rounded-lg border border-white/[0.08] text-slate-300 hover:bg-white/[0.05] disabled:opacity-60 transition-colors"
+                        >
+                          Set limit
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {planMsg?.id === t.id && (
+                    <p className={`mt-2 text-xs rounded-lg px-3 py-2 border ${planMsg.error ? "text-red-300 bg-red-500/10 border-red-500/25" : "text-emerald-300 bg-emerald-500/10 border-emerald-500/25"}`}>
+                      {planMsg.text}
+                    </p>
+                  )}
 
                   {resetFor === t.id && (
                     <div className="mt-3 pt-3 border-t border-white/[0.06]">

@@ -150,7 +150,7 @@ export async function POST(req: NextRequest) {
     const file = rawFile as File;
 
     // Enforce the per-user upload storage quota (200 MB).
-    await assertUploadWithinQuota(user.id, file.size);
+    await assertUploadWithinQuota(user.organizationId, file.size);
 
     const clientId = (formData.get("clientId") as string) || null;
     const projectId = (formData.get("projectId") as string) || null;

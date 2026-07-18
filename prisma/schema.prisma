@@ -1011,6 +1011,13 @@ model MessageAttachment {
   @@map("message_attachments")
 }
 
+// Billing plan for a tenant. TRIAL is time-limited (see trialEndsAt);
+// FULL is a paid/comped workspace with no trial expiry.
+enum PlanTier {
+  TRIAL
+  FULL
+}
+
 // ─── Organization (the agency itself — multi-tenant root) ──────────────────
 // Every user, client, project, invoice, etc. belongs to exactly one
 // Organization. Data is fully isolated across organizations.
@@ -1047,6 +1054,14 @@ model Organization {
   // which flips it true and unlocks the dashboard.
   onboardingCompleted Boolean   @default(false)
   onboardedAt         DateTime?
+
+  // Billing / plan — controlled by the platform admin.
+  // TRIAL with a trialEndsAt in the past blocks the workspace until upgraded.
+  // A null trialEndsAt means no expiry has been set yet (open trial).
+  plan          PlanTier  @default(TRIAL)
+  trialEndsAt   DateTime?
+  // Total upload storage allowed for the WHOLE organization, in MB.
+  uploadLimitMb Int       @default(200)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

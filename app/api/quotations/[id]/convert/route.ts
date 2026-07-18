@@ -35,8 +35,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       throw new ApiError("A project already exists for this quotation", 400);
     }
 
+    // All-or-nothing: project + tasks + status flip in one transaction.
+    const project = await prisma.$transaction(async (tx) => {
     // ── 1. Create the project ─────────────────────────────────
-    const project = await prisma.project.create({
+    const created = await tx.project.create({
       data: {
         organizationId: user.organizationId,
         clientId: quotation.clientId,
@@ -53,10 +55,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     // ── 2. Create tasks from line items ───────────────────────
     if (createTasks && quotation.lineItems.length > 0) {
-      await prisma.task.createMany({
+      await tx.task.createMany({
         data: quotation.lineItems.map((item, i) => ({
           organizationId: user.organizationId,
-          projectId: project.id,
+          projectId: created.id,
           title: item.title,
           description: item.description,
           status: "TODO" as const,
@@ -76,9 +78,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
 
     // ── 3. Mark quotation as CONVERTED ────────────────────────
-    await prisma.quotation.update({
+    await tx.quotation.update({
       where: { id },
       data: { status: "CONVERTED" },
+    });
+
+    return created;
     });
 
     return NextResponse.json({ projectId: project.id, projectName: project.name });

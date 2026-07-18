@@ -5,7 +5,7 @@ import {
   Building2, Users, Shield, Palette, Save, Plus,
   Trash2, Edit2, Check, X, Upload, RefreshCw, Eye,
   EyeOff, Mail, Phone, Globe, MapPin, DollarSign,
-  Clock, FileText, ChevronDown,
+  Clock, FileText, ChevronDown, KeyRound, Loader2,
 } from "lucide-react";
 import type { CompanySettings, TeamUser } from "@/types";
 import { useToast } from "@/components/ui/Toast";
@@ -14,7 +14,7 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 /* ─────────────────────────────────────────────────────────────
    Helpers
    ───────────────────────────────────────────────────────────── */
-type Tab = "company" | "letterhead" | "users" | "roles";
+type Tab = "company" | "letterhead" | "users" | "roles" | "account";
 
 function initials(name: string) {
   return name.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase();
@@ -1354,11 +1354,105 @@ function RolesTab() {
 /* ─────────────────────────────────────────────────────────────
    Main Settings Page
    ───────────────────────────────────────────────────────────── */
+/* ─────────────────────────────────────────────────────────────
+   Account tab — change your login password
+   ───────────────────────────────────────────────────────────── */
+function AccountTab() {
+  const toast = useToast();
+  const [hasPassword, setHasPassword] = useState<boolean | null>(null);
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [show, setShow] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/users/me")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setHasPassword(d ? !!d.hasPassword : false))
+      .catch(() => setHasPassword(false));
+  }, []);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (next.length < 8) { toast.error("Password must be at least 8 characters"); return; }
+    if (next !== confirm) { toast.error("Passwords do not match"); return; }
+    setSaving(true);
+    try {
+      const res = await fetch("/api/auth/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword: current, newPassword: next }),
+      });
+      const d = await res.json();
+      if (!res.ok) { toast.error(d.error?.message ?? "Could not update password"); return; }
+      toast.success("Password updated");
+      setCurrent(""); setNext(""); setConfirm(""); setHasPassword(true);
+    } catch {
+      toast.error("Could not update password");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const inputCls = "w-full px-3.5 py-2.5 text-sm rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500";
+
+  return (
+    <div className="space-y-6">
+      <SectionCard
+        title={hasPassword === false ? "Set a Password" : "Change Password"}
+        desc="Your password secures sign-in to this workspace. Minimum 8 characters."
+      >
+        <form onSubmit={submit} className="space-y-4 max-w-md">
+          {hasPassword && (
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1.5">Current password</label>
+              <input
+                type={show ? "text" : "password"} required value={current}
+                onChange={(e) => setCurrent(e.target.value)} className={inputCls}
+                placeholder="Enter your current password"
+              />
+            </div>
+          )}
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1.5">New password</label>
+            <input
+              type={show ? "text" : "password"} required value={next}
+              onChange={(e) => setNext(e.target.value)} className={inputCls}
+              placeholder="At least 8 characters"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1.5">Confirm new password</label>
+            <input
+              type={show ? "text" : "password"} required value={confirm}
+              onChange={(e) => setConfirm(e.target.value)} className={inputCls}
+              placeholder="Re-enter the new password"
+            />
+          </div>
+          <label className="flex items-center gap-2 text-xs text-gray-500 select-none cursor-pointer">
+            <input type="checkbox" checked={show} onChange={(e) => setShow(e.target.checked)} className="rounded border-gray-300" />
+            Show passwords
+          </label>
+          <button
+            type="submit" disabled={saving}
+            className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition-colors disabled:opacity-60"
+          >
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
+            {hasPassword === false ? "Set password" : "Update password"}
+          </button>
+        </form>
+      </SectionCard>
+    </div>
+  );
+}
+
 const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: "company",     label: "Organization", icon: Building2 },
   { id: "letterhead",  label: "Letterhead",   icon: FileText  },
   { id: "users",       label: "Users",        icon: Users     },
   { id: "roles",       label: "Roles",        icon: Shield    },
+  { id: "account",     label: "Account",      icon: KeyRound  },
 ];
 
 const DEFAULT_SETTINGS: CompanySettings = {
@@ -1435,6 +1529,7 @@ export default function SettingsPage() {
             {tab === "letterhead" && <LetterheadTab settings={settings} onSaved={setSettings} />}
             {tab === "users"      && <UsersTab />}
             {tab === "roles"      && <RolesTab />}
+            {tab === "account"    && <AccountTab />}
           </>
         )}
       </div>

@@ -17,13 +17,29 @@ const FEATURES = [
   { icon: MessageSquare, label: "Team Chat",           desc: "Per-project and per-client channels" },
 ];
 
+type Phase = "email" | "password" | "setup";
+
 export default function LoginPage() {
   const router = useRouter();
+  const [phase, setPhase] = useState<Phase>("email");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const errMsg = (data: unknown) => {
+    const e = (data as { error?: unknown })?.error;
+    return typeof e === "string" ? e : (e as { message?: string })?.message;
+  };
+
+  const goNext = (needsOnboarding: boolean) => {
+    router.push(needsOnboarding ? "/onboarding" : "/");
+    router.refresh();
+  };
+
+  // Phase 1 — identify the account and branch to password / setup.
+  const submitEmail = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim()) return;
     setLoading(true);
@@ -35,16 +51,63 @@ export default function LoginPage() {
         body: JSON.stringify({ email: email.trim() }),
       });
       const data = await res.json();
-      if (!res.ok) {
-        const msg = typeof data?.error === "string" ? data.error : data?.error?.message;
-        throw new Error(msg || "Login failed");
-      }
-      router.push(data.needsOnboarding ? "/onboarding" : "/");
-      router.refresh();
+      if (!res.ok) throw new Error(errMsg(data) || "Login failed");
+      if (data.needsPasswordSetup) setPhase("setup");
+      else setPhase("password");
+      setLoading(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
       setLoading(false);
     }
+  };
+
+  // Phase 2a — verify an existing password.
+  const submitPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim(), password }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(errMsg(data) || "Login failed");
+      goNext(!!data.needsOnboarding);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Login failed");
+      setLoading(false);
+    }
+  };
+
+  // Phase 2b — set the initial password for a first-time / legacy account.
+  const submitSetup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    if (password.length < 8) { setError("Password must be at least 8 characters"); return; }
+    if (password !== confirm) { setError("Passwords do not match"); return; }
+    setLoading(true);
+    try {
+      const res = await fetch("/api/auth/set-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim(), password }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(errMsg(data) || "Could not set password");
+      goNext(!!data.needsOnboarding);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
+      setLoading(false);
+    }
+  };
+
+  const backToEmail = () => {
+    setPhase("email");
+    setPassword("");
+    setConfirm("");
+    setError(null);
   };
 
   return (
@@ -105,52 +168,118 @@ export default function LoginPage() {
       {/* ── Right: login card ── */}
       <div className="flex items-center justify-center p-8 sm:p-12 lg:w-[480px] lg:border-l lg:border-white/[0.06] bg-slate-900/40">
         <div className="w-full max-w-sm">
-          <h2 className="text-2xl font-bold tracking-tight">Welcome back</h2>
+          <h2 className="text-2xl font-bold tracking-tight">
+            {phase === "setup" ? "Set your password" : "Welcome back"}
+          </h2>
           <p className="mt-2 text-sm text-slate-400">
-            Sign in with the email your workspace was set up with.
-          </p>
-
-          <form onSubmit={handleSubmit} className="mt-8 space-y-4">
-            {error && (
-              <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2.5">
-                {error}
-              </p>
+            {phase === "email" && "Sign in with the email your workspace was set up with."}
+            {phase === "password" && (
+              <>Signing in as <span className="text-slate-200 font-medium">{email}</span>.</>
             )}
-            <div>
-              <label htmlFor="email" className="block text-xs font-medium text-slate-400 mb-1.5">
-                Work email
-              </label>
-              <input
-                id="email"
-                type="email"
-                required
-                autoFocus
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@youragency.com"
-                className="w-full px-4 py-3 text-sm rounded-xl bg-slate-900 border border-slate-700 text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-semibold rounded-xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white transition-colors disabled:opacity-60"
-            >
-              {loading ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <>
-                  Continue <ArrowRight className="w-4 h-4" />
-                </>
-              )}
-            </button>
-          </form>
-
-          <p className="mt-8 text-xs text-slate-500 leading-relaxed">
-            New agency? Workspaces are created by the Vibrnd team — once
-            yours is set up, sign in here with your owner email to complete
-            onboarding.
+            {phase === "setup" && (
+              <>First time in? Create a password for <span className="text-slate-200 font-medium">{email}</span> to secure your account.</>
+            )}
           </p>
+
+          {error && (
+            <p className="mt-5 text-xs text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2.5">
+              {error}
+            </p>
+          )}
+
+          {/* Phase 1 — email */}
+          {phase === "email" && (
+            <form onSubmit={submitEmail} className="mt-6 space-y-4">
+              <div>
+                <label htmlFor="email" className="block text-xs font-medium text-slate-400 mb-1.5">
+                  Work email
+                </label>
+                <input
+                  id="email" type="email" required autoFocus value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@youragency.com"
+                  className="w-full px-4 py-3 text-sm rounded-xl bg-slate-900 border border-slate-700 text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                />
+              </div>
+              <button
+                type="submit" disabled={loading}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-semibold rounded-xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white transition-colors disabled:opacity-60"
+              >
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <>Continue <ArrowRight className="w-4 h-4" /></>}
+              </button>
+            </form>
+          )}
+
+          {/* Phase 2a — existing password */}
+          {phase === "password" && (
+            <form onSubmit={submitPassword} className="mt-6 space-y-4">
+              <div>
+                <label htmlFor="password" className="block text-xs font-medium text-slate-400 mb-1.5">
+                  Password
+                </label>
+                <input
+                  id="password" type="password" required autoFocus value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Your password"
+                  className="w-full px-4 py-3 text-sm rounded-xl bg-slate-900 border border-slate-700 text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                />
+              </div>
+              <button
+                type="submit" disabled={loading}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-semibold rounded-xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white transition-colors disabled:opacity-60"
+              >
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <>Sign in <ArrowRight className="w-4 h-4" /></>}
+              </button>
+              <button type="button" onClick={backToEmail} className="w-full text-center text-xs text-slate-500 hover:text-slate-300 transition-colors">
+                Use a different email
+              </button>
+            </form>
+          )}
+
+          {/* Phase 2b — set initial password */}
+          {phase === "setup" && (
+            <form onSubmit={submitSetup} className="mt-6 space-y-4">
+              <div>
+                <label htmlFor="new-password" className="block text-xs font-medium text-slate-400 mb-1.5">
+                  New password
+                </label>
+                <input
+                  id="new-password" type="password" required autoFocus value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="At least 8 characters"
+                  className="w-full px-4 py-3 text-sm rounded-xl bg-slate-900 border border-slate-700 text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                />
+              </div>
+              <div>
+                <label htmlFor="confirm-password" className="block text-xs font-medium text-slate-400 mb-1.5">
+                  Confirm password
+                </label>
+                <input
+                  id="confirm-password" type="password" required value={confirm}
+                  onChange={(e) => setConfirm(e.target.value)}
+                  placeholder="Re-enter your password"
+                  className="w-full px-4 py-3 text-sm rounded-xl bg-slate-900 border border-slate-700 text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                />
+              </div>
+              <button
+                type="submit" disabled={loading}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-semibold rounded-xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white transition-colors disabled:opacity-60"
+              >
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <>Set password &amp; continue <ArrowRight className="w-4 h-4" /></>}
+              </button>
+              <button type="button" onClick={backToEmail} className="w-full text-center text-xs text-slate-500 hover:text-slate-300 transition-colors">
+                Use a different email
+              </button>
+            </form>
+          )}
+
+          {phase === "email" && (
+            <p className="mt-8 text-xs text-slate-500 leading-relaxed">
+              New agency? Workspaces are created by the Vibrnd team — once
+              yours is set up, sign in here with your owner email to complete
+              onboarding.
+            </p>
+          )}
         </div>
       </div>
     </div>

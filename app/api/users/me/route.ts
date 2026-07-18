@@ -19,6 +19,7 @@ export async function GET(req: NextRequest) {
         isActive: true,
         createdAt: true,
         organizationId: true,
+        passwordHash: true,
         organization: {
           select: {
             id: true,
@@ -38,7 +39,9 @@ export async function GET(req: NextRequest) {
       return apiError("Not authenticated", 401, "UNAUTHORIZED");
     }
 
-    return NextResponse.json(user);
+    // Never expose the hash — surface only whether a password is set.
+    const { passwordHash, ...safe } = user;
+    return NextResponse.json({ ...safe, hasPassword: !!passwordHash });
   } catch (error) {
     return handleApiError(error, "GET /api/users/me");
   }

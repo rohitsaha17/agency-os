@@ -23,23 +23,26 @@ export default async function DashboardLayout({
   const userId = cookieStore.get("userId")?.value;
   if (!userId) redirect("/login");
 
-  let gate: "login" | "onboarding" | null = null;
+  let gate: "login" | "onboarding" | "set-password" | null = null;
   try {
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: {
         isActive: true,
+        passwordHash: true,
         organization: { select: { onboardingCompleted: true } },
       },
     });
     if (!user || !user.isActive) gate = "login";
     else if (!user.organization.onboardingCompleted) gate = "onboarding";
+    else if (!user.passwordHash) gate = "set-password";
   } catch {
     // DB unreachable — let the page render; individual API calls will
     // surface their own errors rather than trapping the user in a loop.
   }
   if (gate === "login") redirect("/login");
   if (gate === "onboarding") redirect("/onboarding");
+  if (gate === "set-password") redirect("/set-password");
 
   return (
     <ToastProvider>

@@ -162,15 +162,19 @@ enum ProjectRole {
 // ============================================================
 
 model User {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   organizationId String
   email          String
   name           String
   avatarUrl      String?
-  role           UserRole @default(MEMBER)
-  isActive       Boolean  @default(true)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  role           UserRole  @default(MEMBER)
+  isActive       Boolean   @default(true)
+  // Login password. Nullable so users created before passwords existed (and
+  // freshly-invited teammates) are prompted to set one on first sign-in.
+  passwordHash   String?
+  passwordSetAt  DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 

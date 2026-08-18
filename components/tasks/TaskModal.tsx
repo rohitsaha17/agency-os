@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { X, ChevronDown } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { X, ChevronDown, Link2, Upload, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import type { Task, TaskFormData, TaskStatus, Priority, User } from "@/types";
 
@@ -24,6 +24,8 @@ const EMPTY: TaskFormData = {
   title: "", description: "", status: "TODO", priority: "MEDIUM",
   dueDate: "", parentId: null, managerId: null,
   assigneeIds: [], estimatedHours: "",
+  topic: "", content: "", referenceUrl: "", referenceFileId: null,
+  extraNote: "", clientId: "", preferredAssigneeId: "",
 };
 
 function SelectInput({ value, onChange, options }: {
@@ -45,22 +47,29 @@ function SelectInput({ value, onChange, options }: {
 }
 
 interface TaskModalProps {
-  projectId: string;
+  /** Fixed project context (project page). Omit for the global modal. */
+  projectId?: string | null;
+  /** When set (and no projectId), lets the user pick client + project. */
+  global?: boolean;
   defaultStatus?: TaskStatus;
   parentTask?: Task | null;
   editTask?: Task | null;
   allTasks?: Task[];
+  /** v2: prefill (used by the content calendar "Assign task" spine). */
+  prefill?: Partial<TaskFormData> & { contentItemId?: string };
   onClose: () => void;
   onSaved: (task: Task) => void;
 }
 
 export function TaskModal({
-  projectId, defaultStatus, parentTask, editTask, allTasks = [], onClose, onSaved,
+  projectId, global, defaultStatus, parentTask, editTask, allTasks = [], prefill, onClose, onSaved,
 }: TaskModalProps) {
   const isEdit = Boolean(editTask);
+  const isGlobal = !projectId && !isEdit;
   const [form, setForm] = useState<TaskFormData>({
     ...EMPTY,
     status: defaultStatus ?? "TODO",
+    ...(prefill && { ...prefill }),
     ...(parentTask && { parentId: parentTask.id }),
     ...(editTask && {
       title: editTask.title,
@@ -72,9 +81,23 @@ export function TaskModal({
       managerId: editTask.manager?.id ?? null,
       assigneeIds: editTask.assignees.map((a) => a.userId),
       estimatedHours: editTask.estimatedHours?.toString() ?? "",
+      topic: editTask.topic ?? "",
+      content: editTask.content ?? "",
+      referenceUrl: editTask.referenceUrl ?? "",
+      referenceFileId: editTask.referenceFileId ?? null,
+      extraNote: editTask.extraNote ?? "",
+      clientId: editTask.clientId ?? "",
+      preferredAssigneeId: editTask.preferredAssigneeId ?? "",
     }),
   });
   const [users, setUsers] = useState<User[]>([]);
+  const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
+  const [projects, setProjects] = useState<{ id: string; name: string; clientId?: string; client?: { id: string } }[]>([]);
+  const [pickedProjectId, setPickedProjectId] = useState<string>("");
+  const [refMode, setRefMode] = useState<"url" | "file">("url");
+  const [refFileName, setRefFileName] = useState<string | null>(null);
+  const [uploadingRef, setUploadingRef] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -86,7 +109,11 @@ export function TaskModal({
 
   useEffect(() => {
     fetch("/api/users").then((r) => r.json()).then((d) => { if (Array.isArray(d)) setUsers(d); });
-  }, []);
+    if (isGlobal) {
+      fetch("/api/clients").then((r) => r.json()).then((d) => { if (Array.isArray(d)) setClients(d); });
+      fetch("/api/projects").then((r) => r.json()).then((d) => { if (Array.isArray(d)) setProjects(d); });
+    }
+  }, [isGlobal]);
 
   const set = <K extends keyof TaskFormData>(field: K, value: TaskFormData[K]) =>
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -97,17 +124,50 @@ export function TaskModal({
       : [...form.assigneeIds, userId]);
   };
 
+  const handleRefFile = async (file: File) => {
+    setUploadingRef(true);
+    setError(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      if (form.clientId) fd.append("clientId", form.clientId);
+      const res = await fetch("/api/files", { method: "POST", body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error?.message || "Upload failed");
+      const uploaded = Array.isArray(data) ? data[0] : data.files?.[0] ?? data;
+      set("referenceFileId", uploaded.id ?? null);
+      setRefFileName(file.name);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Reference upload failed");
+    } finally {
+      setUploadingRef(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.title.trim()) { setError("Task title is required"); return; }
+    const title = form.title.trim() || form.topic?.trim() || "";
+    if (!title) { setError("A title or topic is required"); return; }
     setSaving(true);
     setError(null);
     try {
-      const url = isEdit ? `/api/tasks/${editTask!.id}` : `/api/projects/${projectId}/tasks`;
+      const payload = {
+        ...form,
+        title,
+        clientId: form.clientId || null,
+        preferredAssigneeId: form.preferredAssigneeId || null,
+        ...(isGlobal && { projectId: pickedProjectId || null }),
+        ...(prefill?.contentItemId && { contentItemId: prefill.contentItemId }),
+      };
+      const url = isEdit
+        ? `/api/tasks/${editTask!.id}`
+        : projectId
+          ? `/api/projects/${projectId}/tasks`
+          : "/api/tasks";
       const res = await fetch(url, {
         method: isEdit ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error?.message || "Save failed");
@@ -122,14 +182,26 @@ export function TaskModal({
     .filter((t) => !isEdit || t.id !== editTask!.id)
     .map((t) => ({ value: t.id, label: t.title }));
 
+  const filteredProjects = form.clientId
+    ? projects.filter((p) => (p.clientId ?? p.client?.id) === form.clientId)
+    : projects;
+  const isGeneral = isGlobal && !form.clientId && !pickedProjectId;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 flex-shrink-0">
-          <h2 className="text-base font-semibold text-gray-900">
-            {isEdit ? "Edit Task" : parentTask ? `Subtask of "${parentTask.title}"` : "New Task"}
-          </h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-base font-semibold text-gray-900">
+              {isEdit ? "Edit Task" : parentTask ? `Subtask of "${parentTask.title}"` : "New Task"}
+            </h2>
+            {isGeneral && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-gray-100 text-gray-500 rounded-full">
+                <Sparkles className="w-3 h-3" /> General task
+              </span>
+            )}
+          </div>
           <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
             <X className="w-4 h-4 text-gray-500" />
           </button>
@@ -141,26 +213,102 @@ export function TaskModal({
             <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">{error}</div>
           )}
 
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1.5">Topic</label>
+              <input
+                autoFocus type="text" value={form.topic ?? ""}
+                onChange={(e) => set("topic", e.target.value)}
+                placeholder="e.g. Diwali teaser"
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                Task Title <span className="text-gray-400 font-normal">(defaults to topic)</span>
+              </label>
+              <input
+                type="text" value={form.title}
+                onChange={(e) => set("title", e.target.value)}
+                placeholder="What needs to be done?"
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+          </div>
+
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1.5">
-              Task Title <span className="text-red-500">*</span>
-            </label>
-            <input
-              autoFocus type="text" value={form.title}
-              onChange={(e) => set("title", e.target.value)}
-              placeholder="What needs to be done?"
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            <label className="block text-xs font-medium text-gray-700 mb-1.5">Content / Brief</label>
+            <textarea
+              value={form.content ?? ""} onChange={(e) => set("content", e.target.value)}
+              rows={3} placeholder="Caption, copy, or brief for this deliverable…"
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
             />
+          </div>
+
+          {/* Reference: URL or file */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-medium text-gray-700">Reference</label>
+              <div className="flex rounded-lg border border-gray-200 overflow-hidden text-[11px]">
+                <button type="button" onClick={() => setRefMode("url")}
+                  className={`px-2 py-0.5 flex items-center gap-1 ${refMode === "url" ? "bg-indigo-50 text-indigo-700 font-medium" : "text-gray-500"}`}>
+                  <Link2 className="w-3 h-3" /> URL
+                </button>
+                <button type="button" onClick={() => setRefMode("file")}
+                  className={`px-2 py-0.5 flex items-center gap-1 ${refMode === "file" ? "bg-indigo-50 text-indigo-700 font-medium" : "text-gray-500"}`}>
+                  <Upload className="w-3 h-3" /> Upload
+                </button>
+              </div>
+            </div>
+            {refMode === "url" ? (
+              <input
+                type="url" value={form.referenceUrl ?? ""}
+                onChange={(e) => set("referenceUrl", e.target.value)}
+                placeholder="https://…"
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            ) : (
+              <div>
+                <input ref={fileInputRef} type="file" className="hidden"
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) handleRefFile(f); }} />
+                <button type="button" onClick={() => fileInputRef.current?.click()}
+                  className="w-full px-3 py-2 text-sm border border-dashed border-gray-300 rounded-lg text-gray-500 hover:border-indigo-300 hover:text-indigo-600 transition-colors">
+                  {uploadingRef ? "Uploading…" : refFileName ?? (form.referenceFileId ? "Reference file attached" : "Choose a file…")}
+                </button>
+              </div>
+            )}
           </div>
 
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1.5">Description</label>
             <textarea
               value={form.description} onChange={(e) => set("description", e.target.value)}
-              rows={3} placeholder="Additional details…"
+              rows={2} placeholder="Additional details…"
               className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
             />
           </div>
+
+          {/* Client + Project (global modal only) */}
+          {isGlobal && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1.5">Client (optional)</label>
+                <SelectInput
+                  value={form.clientId ?? ""}
+                  onChange={(v) => { set("clientId", v); setPickedProjectId(""); }}
+                  options={[{ value: "", label: "No client" }, ...clients.map((c) => ({ value: c.id, label: c.name }))]}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1.5">Project (optional)</label>
+                <SelectInput
+                  value={pickedProjectId}
+                  onChange={setPickedProjectId}
+                  options={[{ value: "", label: "No project" }, ...filteredProjects.map((p) => ({ value: p.id, label: p.name }))]}
+                />
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -175,7 +323,7 @@ export function TaskModal({
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1.5">Due Date</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1.5">Delivery Due Date</label>
               <input
                 type="date" value={form.dueDate} onChange={(e) => set("dueDate", e.target.value)}
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -192,24 +340,42 @@ export function TaskModal({
             </div>
           </div>
 
-          {/* Manager */}
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1.5">Extra Note</label>
+            <input
+              type="text" value={form.extraNote ?? ""}
+              onChange={(e) => set("extraNote", e.target.value)}
+              placeholder="Anything the assignee should know…"
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+
+          {/* Preferred assignee + Manager */}
           {users.length > 0 && (
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1.5">Manager / Reviewer</label>
-                <div className="relative">
-                  <select
-                    value={form.managerId ?? ""}
-                    onChange={(e) => set("managerId", e.target.value || null)}
-                    className="w-full appearance-none px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-                  >
-                    <option value="">Unassigned</option>
-                    {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-                  </select>
-                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                </div>
+                <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                  Preference — editor/designer
+                </label>
+                <SelectInput
+                  value={form.preferredAssigneeId ?? ""}
+                  onChange={(v) => set("preferredAssigneeId", v)}
+                  options={[{ value: "", label: "No preference" }, ...users.map((u) => ({ value: u.id, label: u.name }))]}
+                />
+                {form.preferredAssigneeId && (
+                  <p className="text-[11px] text-amber-600 mt-1">
+                    Routed via Head of Design for approval.
+                  </p>
+                )}
               </div>
-              <div />
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1.5">Manager / Reviewer</label>
+                <SelectInput
+                  value={form.managerId ?? ""}
+                  onChange={(v) => set("managerId", v || null)}
+                  options={[{ value: "", label: "Unassigned" }, ...users.map((u) => ({ value: u.id, label: u.name }))]}
+                />
+              </div>
             </div>
           )}
 

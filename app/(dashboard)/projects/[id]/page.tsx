@@ -19,6 +19,7 @@ import { TaskBoard } from "@/components/tasks/TaskBoard";
 import { TaskList } from "@/components/tasks/TaskList";
 import { TaskModal } from "@/components/tasks/TaskModal";
 import { TaskPanel } from "@/components/tasks/TaskPanel";
+import { DeliveryDialog } from "@/components/tasks/DeliveryDialog";
 import type {
   Project, Task, TaskStatus, ProjectFormData, QuotationStatus,
   Expense, Contract, ExpenseCategory, ExpenseStatus,
@@ -187,6 +188,8 @@ export default function ProjectDetailPage() {
     open: boolean; defaultStatus?: TaskStatus; parentTask?: Task | null;
   }>({ open: false });
   const [taskPanel, setTaskPanel] = useState<{ open: boolean; task?: Task }>({ open: false });
+  // v2: delivery-proof dialog when completing from list/kanban
+  const [deliveryFor, setDeliveryFor] = useState<{ id: string; title: string } | null>(null);
 
   // Inline expense modal
   const [expenseModalOpen, setExpenseModalOpen] = useState(false);
@@ -290,6 +293,22 @@ export default function ProjectDetailPage() {
   }, [fetchProject, fetchTasks, fetchExpenses, fetchContracts]);
 
   const handleStatusChange = async (taskId: string, status: TaskStatus) => {
+    // v2: completing a task (from list or kanban) goes through the
+    // delivery-proof dialog instead of a bare status PATCH.
+    if (status === "DONE") {
+      const findTask = (list: Task[]): Task | undefined => {
+        for (const t of list) {
+          if (t.id === taskId) return t;
+          const child = t.children ? findTask(t.children) : undefined;
+          if (child) return child;
+        }
+      };
+      const target = findTask(tasks);
+      if (target && target.status !== "DONE") {
+        setDeliveryFor({ id: taskId, title: target.title });
+        return;
+      }
+    }
     const updateStatus = (list: Task[]): Task[] =>
       list.map((t) => ({ ...t, status: t.id === taskId ? status : t.status, children: t.children ? updateStatus(t.children) : [] }));
     setTasks((prev) => updateStatus(prev));
@@ -1642,6 +1661,16 @@ export default function ProjectDetailPage() {
           onClose={() => setTaskPanel({ open: false })}
           onUpdated={handleTaskPanelUpdated}
           onDeleted={handleTaskPanelDeleted}
+        />
+      )}
+
+      {/* v2: delivery proof when completing from list/kanban */}
+      {deliveryFor && (
+        <DeliveryDialog
+          taskId={deliveryFor.id}
+          taskTitle={deliveryFor.title}
+          onClose={() => setDeliveryFor(null)}
+          onCompleted={() => { setDeliveryFor(null); fetchTasks(); fetchProject(); }}
         />
       )}
 

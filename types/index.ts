@@ -257,9 +257,41 @@ export interface Comment {
   author?: { id: string; name: string; avatarUrl: string | null } | null;
 }
 
+export type AssignmentStatus = "NONE" | "PENDING_HEAD_APPROVAL" | "APPROVED" | "REASSIGNED";
+export type DeliveryMethod = "FILE_UPLOAD" | "LINK" | "WHATSAPP" | "SLACK" | "OTHER";
+
+export interface TaskDeliveryRecord {
+  id: string;
+  method: DeliveryMethod;
+  url: string | null;
+  note: string | null;
+  deliveredAt: string;
+  deliveredBy?: { id: string; name: string } | null;
+  file?: { id: string; name: string; url: string | null } | null;
+}
+
+export interface TaskChangeRequest {
+  id: string;
+  note: string;
+  status: "OPEN" | "RESOLVED";
+  createdAt: string;
+  resolvedAt: string | null;
+  requestedBy?: { id: string; name: string } | null;
+}
+
+export interface TaskHistoryEntry {
+  id: string;
+  fromStatus: string | null;
+  toStatus: string;
+  changedAt: string;
+  note: string | null;
+  changedBy?: { id: string; name: string } | null;
+}
+
 export interface Task {
   id: string;
-  projectId: string;
+  /** v2: null for general tasks (no project) */
+  projectId: string | null;
   parentId: string | null;
   title: string;
   description: string | null;
@@ -272,6 +304,20 @@ export interface Task {
   loggedHours: number;
   isClientVisible: boolean;
   showSubtasksToClient: boolean;
+  // ── v2 fields ──
+  topic?: string | null;
+  content?: string | null;
+  referenceUrl?: string | null;
+  referenceFileId?: string | null;
+  extraNote?: string | null;
+  clientId?: string | null;
+  contentItemId?: string | null;
+  preferredAssigneeId?: string | null;
+  assignmentStatus?: AssignmentStatus;
+  sortOrder?: number;
+  isAdHoc?: boolean;
+  client?: { id: string; name: string } | null;
+  preferredAssignee?: { id: string; name: string } | null;
   manager?: { id: string; name: string } | null;
   assignees: TaskAssignee[];
   children?: Task[];
@@ -292,6 +338,14 @@ export interface TaskFormData {
   managerId: string | null;
   assigneeIds: string[];
   estimatedHours: string;
+  // v2 (all optional so old call sites keep compiling)
+  topic?: string;
+  content?: string;
+  referenceUrl?: string;
+  referenceFileId?: string | null;
+  extraNote?: string;
+  clientId?: string;
+  preferredAssigneeId?: string;
 }
 
 // ── Task Templates ───────────────────────────────────────────

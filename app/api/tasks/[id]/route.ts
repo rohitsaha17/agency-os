@@ -59,6 +59,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       parentId, order, managerId, assigneeIds, estimatedHours,
       isClientVisible, showSubtasksToClient,
       cascadeToChildren, // if true and status=DONE, mark all children DONE too
+      // v2 fields
+      topic, content, referenceUrl, referenceFileId, extraNote,
+      clientId, preferredAssigneeId, isAdHoc, sortOrder, reassignNote,
     } = body;
 
     // A new parent must be a different task in the same project (same org).
@@ -112,6 +115,16 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         ...(estimatedHours !== undefined && { estimatedHours: estimatedHours !== null && estimatedHours !== "" ? parseFloat(estimatedHours) : null }),
         ...(isClientVisible !== undefined && { isClientVisible }),
         ...(showSubtasksToClient !== undefined && { showSubtasksToClient }),
+        // v2 fields
+        ...(topic !== undefined && { topic: topic?.trim() || null }),
+        ...(content !== undefined && { content: content?.trim() || null }),
+        ...(referenceUrl !== undefined && { referenceUrl: referenceUrl?.trim() || null }),
+        ...(referenceFileId !== undefined && { referenceFileId: referenceFileId || null }),
+        ...(extraNote !== undefined && { extraNote: extraNote?.trim() || null }),
+        ...(clientId !== undefined && { clientId: clientId || null }),
+        ...(preferredAssigneeId !== undefined && { preferredAssigneeId: preferredAssigneeId || null }),
+        ...(isAdHoc !== undefined && { isAdHoc: !!isAdHoc }),
+        ...(sortOrder !== undefined && { sortOrder }),
         // Sync assignees if provided
         ...(assigneeIds !== undefined && {
           assignees: {
@@ -155,19 +168,34 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         });
       }
     }
-    // Newly added assignees → "task assigned" notification.
+    // Newly added assignees → "task assigned" notification (+ audit on reassign).
     if (assigneeIds !== undefined && Array.isArray(assigneeIds)) {
       const before = new Set(existing.assignees.map((a) => a.userId));
       const added = (assigneeIds as string[]).filter(
         (uid) => !before.has(uid) && uid !== user.id,
       );
+      const removed = existing.assignees.filter((a) => !(assigneeIds as string[]).includes(a.userId));
+      const taskLink = task.projectId ? `/projects/${task.projectId}?task=${id}` : `/tasks?task=${id}`;
       await notifyMany(added, {
         organizationId: user.organizationId,
         type: "TASK_ASSIGNED",
         title: `You were assigned: "${task.title}"`,
-        body: `Assigned by ${user.name}.`,
-        link: `/projects/${task.projectId}?task=${id}`,
+        body: reassignNote ? `${user.name}: ${String(reassignNote).slice(0, 140)}` : `Assigned by ${user.name}.`,
+        link: taskLink,
       });
+      if (added.length || removed.length) {
+        await logStatus({
+          organizationId: user.organizationId,
+          entityType: "TASK",
+          entityId: id,
+          from: null,
+          to: "REASSIGNED_MEMBERS",
+          userId: user.id,
+          note: reassignNote
+            ? `assignees changed — ${String(reassignNote).slice(0, 120)}`
+            : "assignees changed",
+        });
+      }
     }
 
     return NextResponse.json(serializeTask(task));

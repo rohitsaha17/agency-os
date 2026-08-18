@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
-import { handleApiError } from "@/lib/api-errors";
+import { handleApiError, ApiError } from "@/lib/api-errors";
 import { parsePagination, paginationMeta, DEFAULT_PAGE_SIZE } from "@/lib/pagination";
+import { logStatus } from "@/lib/audit";
+import { notifyMany } from "@/lib/notify";
+import { resolveRouting, notifyHeads } from "@/lib/task-routing";
 
 // GET /api/tasks — global tasks list with filters
 // Query params: projectId, clientId, status, priority, assigneeId, q (search), includeCompleted, page, pageSize
@@ -34,7 +37,8 @@ export async function GET(req: NextRequest) {
           { description: { contains: q, mode: "insensitive" as const } },
         ],
       }),
-      ...(clientId && { project: { clientId } }),
+      // v2: a task may be linked to a client directly OR through its project
+      ...(clientId && { OR: [{ clientId }, { project: { clientId } }] }),
       ...(assigneeId && { assignees: { some: { userId: assigneeId } } }),
     };
 
@@ -53,7 +57,9 @@ export async function GET(req: NextRequest) {
               client: { select: { id: true, name: true } },
             },
           },
+          client:    { select: { id: true, name: true } },
           manager:   { select: { id: true, name: true } },
+          preferredAssignee: { select: { id: true, name: true } },
           assignees: {
             include: { user: { select: { id: true, name: true, avatarUrl: true } } },
           },
@@ -78,5 +84,132 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(tasks);
   } catch (error) {
     return handleApiError(error, "GET /api/tasks");
+  }
+}
+
+// POST /api/tasks — v2 global task creation. Supports "general tasks"
+// (no client, no project), client-only tasks, and project tasks, with
+// preferred-assignee routing through the Head-of-Design queue.
+export async function POST(req: NextRequest) {
+  try {
+    const user = await requireAuth(req);
+    const body = await req.json();
+    const {
+      title, topic, description, content, referenceUrl, referenceFileId,
+      extraNote, status, priority, dueDate, clientId, projectId,
+      managerId, assigneeIds, preferredAssigneeId, estimatedHours,
+      contentItemId, isAdHoc, parentId,
+    } = body;
+
+    const finalTitle = (title ?? topic ?? "").toString().trim();
+    if (!finalTitle) throw new ApiError("Title is required", 400);
+
+    // Validate org ownership of every referenced entity.
+    if (projectId) {
+      const project = await prisma.project.findFirst({
+        where: { id: projectId, organizationId: user.organizationId },
+        select: { id: true, clientId: true },
+      });
+      if (!project) throw new ApiError("Project not found", 404);
+    }
+    if (clientId) {
+      const client = await prisma.client.findFirst({
+        where: { id: clientId, organizationId: user.organizationId },
+        select: { id: true },
+      });
+      if (!client) throw new ApiError("Client not found", 404);
+    }
+    const peopleIds = [
+      ...(assigneeIds ?? []),
+      ...(managerId ? [managerId] : []),
+      ...(preferredAssigneeId ? [preferredAssigneeId] : []),
+    ];
+    if (peopleIds.length) {
+      const count = await prisma.user.count({
+        where: { id: { in: peopleIds }, organizationId: user.organizationId },
+      });
+      if (count !== new Set(peopleIds).size) throw new ApiError("One or more users not found", 404);
+    }
+
+    const routing = resolveRouting(user, preferredAssigneeId, assigneeIds);
+
+    const task = await prisma.task.create({
+      data: {
+        organizationId: user.organizationId,
+        projectId: projectId || null,
+        clientId: clientId || null,
+        parentId: parentId || null,
+        title: finalTitle,
+        topic: topic?.trim() || null,
+        description: description?.trim() || null,
+        content: content?.trim() || null,
+        referenceUrl: referenceUrl?.trim() || null,
+        referenceFileId: referenceFileId || null,
+        extraNote: extraNote?.trim() || null,
+        status: status || "TODO",
+        priority: priority || "MEDIUM",
+        dueDate: dueDate ? new Date(dueDate) : null,
+        managerId: managerId || null,
+        preferredAssigneeId: preferredAssigneeId || null,
+        assignmentStatus: routing.assignmentStatus,
+        contentItemId: contentItemId || null,
+        isAdHoc: !!isAdHoc,
+        estimatedHours: estimatedHours ? parseFloat(estimatedHours) : null,
+        ...(routing.assigneeIds.length && {
+          assignees: { create: routing.assigneeIds.map((userId: string) => ({ userId })) },
+        }),
+      },
+      include: {
+        project: { select: { id: true, name: true, client: { select: { id: true, name: true } } } },
+        client: { select: { id: true, name: true } },
+        manager: { select: { id: true, name: true } },
+        preferredAssignee: { select: { id: true, name: true } },
+        assignees: { include: { user: { select: { id: true, name: true, avatarUrl: true } } } },
+      },
+    });
+
+    await logStatus({
+      organizationId: user.organizationId,
+      entityType: "TASK",
+      entityId: task.id,
+      from: null,
+      to: task.status,
+      userId: user.id,
+      note: routing.assignmentStatus === "PENDING_HEAD_APPROVAL" ? "created — pending head approval" : "created",
+    });
+
+    const taskLink = task.projectId ? `/projects/${task.projectId}?task=${task.id}` : `/tasks?task=${task.id}`;
+    if (routing.assignmentStatus === "PENDING_HEAD_APPROVAL") {
+      await notifyHeads(
+        user.organizationId,
+        `Task "${task.title}" needs assignment approval`,
+        "/tasks?tab=approvals",
+      );
+    } else if (routing.assigneeIds.length) {
+      await notifyMany(
+        routing.assigneeIds.filter((uid: string) => uid !== user.id),
+        {
+          organizationId: user.organizationId,
+          type: "TASK_ASSIGNED",
+          title: `You were assigned: "${task.title}"`,
+          body: `Assigned by ${user.name}.`,
+          link: taskLink,
+        },
+      );
+    }
+
+    return NextResponse.json(
+      {
+        ...task,
+        dueDate: task.dueDate?.toISOString() ?? null,
+        createdAt: task.createdAt.toISOString(),
+        updatedAt: task.updatedAt.toISOString(),
+        children: [],
+        progress: 0,
+      },
+      { status: 201 },
+    );
+  } catch (error) {
+    return handleApiError(error, "POST /api/tasks");
   }
 }

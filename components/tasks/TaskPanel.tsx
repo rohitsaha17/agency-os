@@ -13,9 +13,23 @@ import { DependencyList } from "./DependencyList";
 import { TimeTracker } from "./TimeTracker";
 import { TaskUpdates } from "./TaskUpdates";
 import { TaskFiles } from "./TaskFiles";
-import type { Task, TaskStatus, Priority, User } from "@/types";
+import { DeliveryDialog } from "./DeliveryDialog";
+import type {
+  Task, TaskStatus, Priority, User,
+  TaskHistoryEntry, TaskDeliveryRecord,
+} from "@/types";
 
-type Tab = "details" | "updates" | "files" | "comments" | "dependencies" | "time";
+type Tab = "details" | "updates" | "files" | "comments" | "dependencies" | "time" | "history";
+
+function timeAgoShort(iso: string) {
+  const diff = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
 
 const STATUS_OPTIONS: { value: TaskStatus; label: string; icon: React.ReactNode; color: string }[] = [
   { value: "TODO",        label: "To Do",       icon: <Circle className="w-3.5 h-3.5 text-gray-400" />,          color: "text-gray-500"   },
@@ -117,9 +131,27 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
   const [dirty, setDirty] = useState(false);
   const [showCascade, setShowCascade] = useState(false);
   const [pendingStatus, setPendingStatus] = useState<TaskStatus | null>(null);
+  // ── v2 state ──
+  const [showDelivery, setShowDelivery] = useState(false);
+  const [cascadeAfterDelivery, setCascadeAfterDelivery] = useState(false);
+  const [deliveries, setDeliveries] = useState<TaskDeliveryRecord[]>([]);
+  const [history, setHistory] = useState<TaskHistoryEntry[] | null>(null);
+  const [showChangeReq, setShowChangeReq] = useState(false);
+  const [changeNote, setChangeNote] = useState("");
+  const [submittingCR, setSubmittingCR] = useState(false);
+
   useEffect(() => {
     fetch("/api/users").then((r) => r.json()).then((data) => { if (Array.isArray(data)) setUsers(data); });
-  }, []);
+    fetch(`/api/tasks/${task.id}/delivery`).then((r) => (r.ok ? r.json() : []))
+      .then((d) => { if (Array.isArray(d)) setDeliveries(d); }).catch(() => {});
+  }, [task.id]);
+
+  useEffect(() => {
+    if (tab === "history" && history === null) {
+      fetch(`/api/tasks/${task.id}/history`).then((r) => (r.ok ? r.json() : []))
+        .then((d) => setHistory(Array.isArray(d) ? d : [])).catch(() => setHistory([]));
+    }
+  }, [tab, history, task.id]);
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -151,9 +183,17 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
   };
 
   const handleStatusChange = async (newStatus: TaskStatus, cascade = false) => {
-    if (newStatus === "DONE" && hasChildren && !cascade) {
+    if (newStatus === "DONE" && hasChildren && !cascade && !showCascade) {
       setPendingStatus(newStatus);
       setShowCascade(true);
+      return;
+    }
+    // v2: completing a task goes through the Delivery dialog for proof.
+    if (newStatus === "DONE" && task.status !== "DONE") {
+      setShowCascade(false);
+      setPendingStatus(null);
+      setCascadeAfterDelivery(cascade);
+      setShowDelivery(true);
       return;
     }
     setStatus(newStatus);
@@ -165,6 +205,42 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
       body: JSON.stringify({ status: newStatus, ...(cascade && { cascadeToChildren: true }) }),
     });
     onUpdated({ ...task, status: newStatus });
+  };
+
+  const handleDelivered = async () => {
+    setShowDelivery(false);
+    setStatus("DONE");
+    if (cascadeAfterDelivery) {
+      await fetch(`/api/tasks/${task.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "DONE", cascadeToChildren: true }),
+      });
+    }
+    fetch(`/api/tasks/${task.id}/delivery`).then((r) => (r.ok ? r.json() : []))
+      .then((d) => { if (Array.isArray(d)) setDeliveries(d); }).catch(() => {});
+    onUpdated({ ...task, status: "DONE" });
+  };
+
+  const submitChangeRequest = async () => {
+    if (!changeNote.trim()) return;
+    setSubmittingCR(true);
+    try {
+      const res = await fetch(`/api/tasks/${task.id}/change-requests`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ note: changeNote }),
+      });
+      if (res.ok) {
+        setStatus("IN_PROGRESS");
+        setShowChangeReq(false);
+        setChangeNote("");
+        setHistory(null); // refetch lazily
+        onUpdated({ ...task, status: "IN_PROGRESS" });
+      }
+    } finally {
+      setSubmittingCR(false);
+    }
   };
 
   const handleDelete = async () => {
@@ -181,6 +257,7 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
     { id: "comments",     label: "Discussion", icon: <MessageSquare className="w-3.5 h-3.5" /> },
     { id: "dependencies", label: "Depends",    icon: <GitBranch className="w-3.5 h-3.5" /> },
     { id: "time",         label: "Time",       icon: <Clock className="w-3.5 h-3.5" /> },
+    { id: "history",      label: "History",    icon: <Activity className="w-3.5 h-3.5" /> },
   ];
 
   return (
@@ -240,13 +317,42 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
             </button>
           </div>
 
-          {status !== "IN_REVIEW" && status !== "DONE" && (
-            <div className="mt-2.5 ml-7">
+          <div className="mt-2.5 ml-7 flex items-center gap-2 flex-wrap">
+            {status !== "IN_REVIEW" && status !== "DONE" && (
               <button onClick={() => handleStatusChange("IN_REVIEW")}
                 className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg transition-colors">
                 <Send className="w-3 h-3" />
                 Send for Review
               </button>
+            )}
+            {status !== "DONE" && (
+              <button onClick={() => setShowChangeReq(true)}
+                className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors">
+                <AlertCircle className="w-3 h-3" />
+                Request changes
+              </button>
+            )}
+          </div>
+
+          {/* v2: change-request dialog */}
+          {showChangeReq && (
+            <div className="mt-2.5 ml-7 p-3 bg-rose-50 border border-rose-200 rounded-xl">
+              <p className="text-xs font-semibold text-rose-800 mb-1.5">What needs to change?</p>
+              <textarea
+                autoFocus value={changeNote} onChange={(e) => setChangeNote(e.target.value)} rows={2}
+                placeholder="Describe the changes needed…"
+                className="w-full px-2.5 py-1.5 text-xs border border-rose-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-400 resize-none bg-white"
+              />
+              <div className="flex gap-2 mt-2">
+                <button onClick={submitChangeRequest} disabled={submittingCR || !changeNote.trim()}
+                  className="px-3 py-1.5 text-xs font-medium bg-rose-600 text-white rounded-lg hover:bg-rose-700 disabled:opacity-50 transition-colors">
+                  {submittingCR ? "Sending…" : "Send request"}
+                </button>
+                <button onClick={() => { setShowChangeReq(false); setChangeNote(""); }}
+                  className="px-3 py-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors">
+                  Cancel
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -292,6 +398,50 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
 
           {tab === "details" && (
             <div className="space-y-4">
+              {/* v2: brief block (topic / content / reference / extra note) */}
+              {(task.topic || task.content || task.referenceUrl || task.extraNote) && (
+                <div className="border border-indigo-100 bg-indigo-50/50 rounded-xl p-3 space-y-1.5">
+                  {task.topic && (
+                    <p className="text-xs"><span className="font-semibold text-indigo-700">Topic:</span>{" "}
+                      <span className="text-gray-700">{task.topic}</span></p>
+                  )}
+                  {task.content && (
+                    <p className="text-xs"><span className="font-semibold text-indigo-700">Content:</span>{" "}
+                      <span className="text-gray-700 whitespace-pre-wrap">{task.content}</span></p>
+                  )}
+                  {task.referenceUrl && (
+                    <p className="text-xs"><span className="font-semibold text-indigo-700">Reference:</span>{" "}
+                      <a href={task.referenceUrl} target="_blank" rel="noreferrer"
+                        className="text-indigo-600 underline underline-offset-2 break-all">{task.referenceUrl}</a></p>
+                  )}
+                  {task.extraNote && (
+                    <p className="text-xs"><span className="font-semibold text-indigo-700">Note:</span>{" "}
+                      <span className="text-gray-700">{task.extraNote}</span></p>
+                  )}
+                </div>
+              )}
+
+              {/* v2: delivery proof */}
+              {deliveries.length > 0 && (
+                <div className="border border-emerald-100 bg-emerald-50/60 rounded-xl p-3 space-y-1.5">
+                  {deliveries.map((d) => (
+                    <div key={d.id} className="text-xs text-emerald-800">
+                      <span className="font-semibold">
+                        Delivered via {d.method.toLowerCase().replace("_", " ")}
+                      </span>
+                      {d.deliveredBy && <> by {d.deliveredBy.name}</>} · {timeAgoShort(d.deliveredAt)}
+                      {d.url && (
+                        <> — <a href={d.url} target="_blank" rel="noreferrer" className="underline underline-offset-2 break-all">{d.url}</a></>
+                      )}
+                      {d.file && (
+                        <> — <a href={d.file.url ?? "#"} target="_blank" rel="noreferrer" className="underline underline-offset-2">{d.file.name}</a></>
+                      )}
+                      {d.note && <p className="text-emerald-700 mt-0.5">{d.note}</p>}
+                    </div>
+                  ))}
+                </div>
+              )}
+
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">Description</label>
                 <textarea value={description} onChange={(e) => { setDescription(e.target.value); markDirty(); }}
@@ -371,6 +521,37 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
           {tab === "comments"     && <CommentThread taskId={task.id} />}
           {tab === "dependencies" && <DependencyList taskId={task.id} allTasks={allTasks.filter((t) => t.id !== task.id)} />}
           {tab === "time"         && <TimeTracker taskId={task.id} estimatedHours={task.estimatedHours} loggedHours={logged} onUpdate={(est, log) => { setLogged(log); if (est !== null) setEstimated(est.toString()); }} />}
+
+          {/* v2: status history */}
+          {tab === "history" && (
+            history === null ? (
+              <div className="space-y-2">
+                {[1, 2, 3].map((i) => <div key={i} className="h-10 bg-gray-100 rounded-lg animate-pulse" />)}
+              </div>
+            ) : history.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-8">No status changes recorded yet.</p>
+            ) : (
+              <ul className="space-y-2">
+                {history.map((h) => (
+                  <li key={h.id} className="flex items-start gap-2.5 text-xs border border-gray-100 rounded-lg px-3 py-2">
+                    <Activity className="w-3.5 h-3.5 text-gray-300 mt-0.5 flex-shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-gray-700">
+                        <span className="font-medium">{h.changedBy?.name ?? "System"}</span>
+                        {h.fromStatus ? (
+                          <> moved <span className="font-mono text-[10px] bg-gray-100 px-1 rounded">{h.fromStatus}</span> → <span className="font-mono text-[10px] bg-gray-100 px-1 rounded">{h.toStatus}</span></>
+                        ) : (
+                          <> — <span className="font-mono text-[10px] bg-gray-100 px-1 rounded">{h.toStatus}</span></>
+                        )}
+                      </p>
+                      {h.note && <p className="text-gray-400 mt-0.5">{h.note}</p>}
+                      <p className="text-gray-300 mt-0.5">{timeAgoShort(h.changedAt)}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )
+          )}
         </div>
 
         {/* Footer */}
@@ -391,6 +572,16 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
           )}
         </div>
       </div>
+
+      {/* v2: delivery-proof dialog when completing */}
+      {showDelivery && (
+        <DeliveryDialog
+          taskId={task.id}
+          taskTitle={task.title}
+          onClose={() => setShowDelivery(false)}
+          onCompleted={handleDelivered}
+        />
+      )}
     </>
   );
 }

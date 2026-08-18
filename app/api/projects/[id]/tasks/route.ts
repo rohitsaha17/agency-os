@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 import { notifyMany } from "@/lib/notify";
+import { logStatus } from "@/lib/audit";
+import { resolveRouting, notifyHeads } from "@/lib/task-routing";
 import type { Task } from "@/types";
 
 type Params = { params: Promise<{ id: string }> };
@@ -18,7 +20,7 @@ async function assertProjectInOrg(projectId: string, organizationId: string) {
 }
 
 type PrismaTask = {
-  id: string; projectId: string; parentId: string | null;
+  id: string; projectId: string | null; parentId: string | null;
   title: string; description: string | null;
   status: string; priority: string;
   dueDate: Date | null; order: number;
@@ -27,6 +29,12 @@ type PrismaTask = {
   createdAt: Date; updatedAt: Date;
   manager: { id: string; name: string } | null;
   assignees: { userId: string; user: { id: string; organizationId: string; name: string; email: string; avatarUrl: string | null; role: string } }[];
+  // v2 fields
+  topic: string | null; content: string | null;
+  referenceUrl: string | null; referenceFileId: string | null;
+  extraNote: string | null; clientId: string | null;
+  contentItemId: string | null; preferredAssigneeId: string | null;
+  assignmentStatus: string; sortOrder: number; isAdHoc: boolean;
 };
 
 function computeProgress(task: Task): number {
@@ -50,6 +58,13 @@ function buildTree(flat: PrismaTask[]): Task[] {
       estimatedHours: t.estimatedHours, loggedHours: t.loggedHours,
       isClientVisible: t.isClientVisible,
       showSubtasksToClient: t.showSubtasksToClient,
+      // v2 fields
+      topic: t.topic, content: t.content,
+      referenceUrl: t.referenceUrl, referenceFileId: t.referenceFileId,
+      extraNote: t.extraNote, clientId: t.clientId,
+      contentItemId: t.contentItemId, preferredAssigneeId: t.preferredAssigneeId,
+      assignmentStatus: t.assignmentStatus as Task["assignmentStatus"],
+      sortOrder: t.sortOrder, isAdHoc: t.isAdHoc,
       manager: t.manager,
       assignees: t.assignees.map((a) => ({ userId: a.userId, user: { ...a.user, isActive: true, organizationId: a.user.organizationId, role: a.user.role as import("@/types").UserRole } })),
       children: [],
@@ -120,11 +135,17 @@ export async function POST(req: NextRequest, { params }: Params) {
     const {
       title, description, status, priority, dueDate, parentId,
       managerId, assigneeIds, estimatedHours,
+      // v2 fields
+      topic, content, referenceUrl, referenceFileId, extraNote,
+      preferredAssigneeId, contentItemId, isAdHoc,
     } = body;
 
     if (!title?.trim()) {
       throw new ApiError("Task title is required", 400);
     }
+
+    // v2: preferred-assignee routing through the Head-of-Design queue
+    const routing = resolveRouting(user, preferredAssigneeId, assigneeIds);
 
     // If parentId provided, verify it belongs to the same project (and thus org).
     if (parentId) {
@@ -154,8 +175,18 @@ export async function POST(req: NextRequest, { params }: Params) {
         dueDate: dueDate ? new Date(dueDate) : null,
         order: (lastSibling?.order ?? -1) + 1,
         estimatedHours: estimatedHours ? parseFloat(estimatedHours) : null,
-        ...(assigneeIds?.length && {
-          assignees: { create: (assigneeIds as string[]).map((userId) => ({ userId })) },
+        // v2 fields
+        topic: topic?.trim() || null,
+        content: content?.trim() || null,
+        referenceUrl: referenceUrl?.trim() || null,
+        referenceFileId: referenceFileId || null,
+        extraNote: extraNote?.trim() || null,
+        contentItemId: contentItemId || null,
+        isAdHoc: !!isAdHoc,
+        preferredAssigneeId: preferredAssigneeId || null,
+        assignmentStatus: routing.assignmentStatus,
+        ...(routing.assigneeIds.length && {
+          assignees: { create: routing.assigneeIds.map((userId) => ({ userId })) },
         }),
       },
       include: {
@@ -168,10 +199,25 @@ export async function POST(req: NextRequest, { params }: Params) {
       },
     });
 
-    // v2: notify anyone assigned at creation (except the creator themselves)
-    if (assigneeIds?.length) {
+    // v2: audit + notifications
+    await logStatus({
+      organizationId: user.organizationId,
+      entityType: "TASK",
+      entityId: task.id,
+      from: null,
+      to: task.status,
+      userId: user.id,
+      note: routing.assignmentStatus === "PENDING_HEAD_APPROVAL" ? "created — pending head approval" : "created",
+    });
+    if (routing.assignmentStatus === "PENDING_HEAD_APPROVAL") {
+      await notifyHeads(
+        user.organizationId,
+        `Task "${task.title}" needs assignment approval`,
+        "/tasks?tab=approvals",
+      );
+    } else if (routing.assigneeIds.length) {
       await notifyMany(
-        (assigneeIds as string[]).filter((uid) => uid !== user.id),
+        routing.assigneeIds.filter((uid) => uid !== user.id),
         {
           organizationId: user.organizationId,
           type: "TASK_ASSIGNED",

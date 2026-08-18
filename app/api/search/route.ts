@@ -92,9 +92,9 @@ export async function GET(req: NextRequest) {
         id: t.id,
         type: "task" as const,
         label: t.title,
-        sublabel: t.project.name,
+        sublabel: t.project?.name ?? "General task",
         status: t.status,
-        href: `/projects/${t.project.id}`,
+        href: t.project ? `/projects/${t.project.id}` : "/tasks",
       })),
       ...files.map((f) => ({
         id: f.id,

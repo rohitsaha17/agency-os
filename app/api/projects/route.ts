@@ -62,6 +62,7 @@ export async function GET(req: NextRequest) {
     const totals = new Map<string, number>();
     const dones  = new Map<string, number>();
     for (const row of grouped) {
+      if (!row.projectId) continue; // v2: general tasks have no project
       totals.set(row.projectId, (totals.get(row.projectId) ?? 0) + row._count._all);
       if (row.status === "DONE") {
         dones.set(row.projectId, (dones.get(row.projectId) ?? 0) + row._count._all);

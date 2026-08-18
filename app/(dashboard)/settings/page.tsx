@@ -1633,6 +1633,41 @@ function CreativeTypesTab() {
   );
 }
 
+/* v2 Phase 8: manual daily-scan trigger (admin/dev) */
+function RunScanCard() {
+  const toast = useToast();
+  const [running, setRunning] = useState(false);
+  const [last, setLast] = useState<string | null>(null);
+  const run = async () => {
+    setRunning(true);
+    try {
+      const res = await fetch("/api/jobs/daily", { method: "POST" });
+      const d = await res.json();
+      if (!res.ok) { toast.error(d.error?.message ?? "Scan failed"); return; }
+      const s = d.summary ?? {};
+      setLast(`missed tasks: ${s.deadlineMissed ?? 0} · items → MISSED: ${s.itemsMissed ?? 0} · follow-ups: ${s.followUps ?? 0} · reminders: ${s.reminders ?? 0} · digests: ${s.digests ?? 0}`);
+      toast.success("Daily scan complete");
+    } finally { setRunning(false); }
+  };
+  return (
+    <div className="mt-6 bg-white border border-gray-200 rounded-2xl p-5 flex items-center justify-between gap-4 flex-wrap">
+      <div>
+        <p className="text-sm font-semibold text-gray-800">Daily scan</p>
+        <p className="text-xs text-gray-500 mt-0.5">
+          Detects missed deadlines, marks lapsed content, fires follow-ups and reminders.
+          Schedule it externally by POSTing /api/jobs/daily with the x-job-secret header (e.g. a cron at 08:00 IST).
+        </p>
+        {last && <p className="text-[11px] text-emerald-600 mt-1">{last}</p>}
+      </div>
+      <button onClick={run} disabled={running}
+        className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 disabled:opacity-50">
+        <RefreshCw className={`w-3.5 h-3.5 ${running ? "animate-spin" : ""}`} />
+        {running ? "Scanning…" : "Run daily scan now"}
+      </button>
+    </div>
+  );
+}
+
 const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: "company",        label: "Organization",   icon: Building2 },
   { id: "letterhead",     label: "Letterhead",     icon: FileText  },
@@ -1712,7 +1747,12 @@ export default function SettingsPage() {
           </div>
         ) : (
           <>
-            {tab === "company"    && <CompanyTab    settings={settings} onSaved={setSettings} />}
+            {tab === "company"    && (
+              <>
+                <CompanyTab settings={settings} onSaved={setSettings} />
+                <RunScanCard />
+              </>
+            )}
             {tab === "letterhead" && <LetterheadTab settings={settings} onSaved={setSettings} />}
             {tab === "users"      && <UsersTab />}
             {tab === "roles"      && <RolesTab />}

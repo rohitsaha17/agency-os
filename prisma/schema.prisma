@@ -259,6 +259,8 @@ model User {
   personalItems        PersonalItem[] @relation("PersonalItems")
   createdPersonalItems PersonalItem[] @relation("CreatedPersonalItems")
   createdEvents        CalendarEvent[] @relation("CreatedEvents")
+  assignedFollowUps    FollowUp[]      @relation("AssignedFollowUps")
+  createdFollowUps     FollowUp[]      @relation("CreatedFollowUps")
 
   @@unique([organizationId, email])
   @@index([organizationId])
@@ -340,6 +342,7 @@ model Client {
   contentItems    ContentItem[]   @relation("ClientContentItems")
   events          CalendarEvent[] @relation("ClientEvents")
   packages        ClientPackage[] @relation("ClientPackages")
+  followUps       FollowUp[]      @relation("ClientFollowUps")
 
   @@index([organizationId])
   @@map("clients")
@@ -1308,8 +1311,52 @@ model Organization {
   contentItems  ContentItem[]
   events        CalendarEvent[]
   clientPackages ClientPackage[]
+  followUps     FollowUp[]
 
   @@map("organizations")
+}
+
+// ============================================================
+// V2 — FOLLOW-UPS + JOB RUNS (notifications engine)
+// ============================================================
+
+enum FollowUpStatus {
+  PENDING
+  DONE
+  SNOOZED
+}
+
+model FollowUp {
+  id             String         @id @default(cuid())
+  organizationId String
+  clientId       String
+  assignedToId   String
+  note           String
+  dueAt          DateTime
+  status         FollowUpStatus @default(PENDING)
+  snoozedTo      DateTime?
+  createdById    String?
+  createdAt      DateTime       @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  client       Client       @relation("ClientFollowUps", fields: [clientId], references: [id], onDelete: Cascade)
+  assignedTo   User         @relation("AssignedFollowUps", fields: [assignedToId], references: [id], onDelete: Cascade)
+  createdBy    User?        @relation("CreatedFollowUps", fields: [createdById], references: [id])
+
+  @@index([organizationId, status, dueAt])
+  @@index([clientId])
+  @@map("follow_ups")
+}
+
+// Idempotency ledger for scheduled jobs — one row per job per calendar day
+model JobRun {
+  id      String   @id @default(cuid())
+  jobName String
+  runDate String // YYYY-MM-DD
+  ranAt   DateTime @default(now())
+
+  @@unique([jobName, runDate])
+  @@map("job_runs")
 }
 
 // ============================================================

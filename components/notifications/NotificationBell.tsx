@@ -99,15 +99,23 @@ export function NotificationBell({ align = "left" }: { align?: "left" | "right" 
         <div className={`absolute ${align === "right" ? "right-0" : "left-0"} top-full mt-2 w-80 max-h-[420px] flex flex-col rounded-xl bg-white dark:bg-slate-800 shadow-2xl border border-gray-200 dark:border-slate-700 z-50 overflow-hidden`}>
           <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 dark:border-slate-700">
             <span className="text-sm font-semibold text-gray-900 dark:text-slate-100">Notifications</span>
-            {unreadCount > 0 && (
+            <div className="flex items-center gap-3">
+              {unreadCount > 0 && (
+                <button
+                  onClick={markAllRead}
+                  className="flex items-center gap-1 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:underline"
+                >
+                  <CheckCheck className="w-3.5 h-3.5" />
+                  Mark all read
+                </button>
+              )}
               <button
-                onClick={markAllRead}
-                className="flex items-center gap-1 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:underline"
+                onClick={() => { setOpen(false); router.push("/notifications"); }}
+                className="text-xs font-medium text-gray-500 dark:text-slate-400 hover:underline"
               >
-                <CheckCheck className="w-3.5 h-3.5" />
-                Mark all read
+                View all
               </button>
-            )}
+            </div>
           </div>
 
           <div className="flex-1 overflow-y-auto">

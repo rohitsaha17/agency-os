@@ -21,6 +21,7 @@ import { ClientForm } from "@/components/clients/ClientForm";
 import { ContentCalendarTab } from "@/components/content/ContentCalendarTab";
 import { PackageTab } from "@/components/content/PackageTab";
 import { FulfillmentLine } from "@/components/content/FulfillmentLine";
+import { FollowUpsCard } from "@/components/content/FollowUpsCard";
 import { ProjectForm } from "@/components/projects/ProjectForm";
 import { QuotationBuilder } from "@/components/quotations/QuotationBuilder";
 import { useToast } from "@/components/ui/Toast";
@@ -951,6 +952,9 @@ export default function ClientDetailPage() {
           <div className="max-w-2xl space-y-6">
             {/* v2 Phase 6: current-month package fulfillment */}
             <FulfillmentLine clientId={id} />
+
+            {/* v2 Phase 8: POC/SME follow-ups */}
+            <FollowUpsCard clientId={id} />
 
             {/* Financial Summary — hidden from MEMBERs (v2; API strips values too) */}
             {!isMember && (

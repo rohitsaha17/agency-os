@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Users, FolderKanban, CheckSquare,
   Calendar, CalendarClock, FileText, Tag, Receipt, Settings,
   HardDrive, Users2, TrendingDown, Scroll, Menu, X,
-  Sun, MessageSquare, LogOut,
+  Sun, MessageSquare, LogOut, BarChart3,
 } from "lucide-react";
 import { ThemeToggle, ThemeToggleIcon } from "@/components/ui/ThemeToggle";
 import { BrandLogo } from "@/components/ui/BrandLogo";
@@ -38,6 +38,7 @@ const navItems = [
       { href: "/quotations",   label: "Quotations",   icon: FileText      },
       { href: "/rate-cards",   label: "Rate Cards",   icon: Tag           },
       { href: "/stakeholders", label: "Stakeholders", icon: Users2        },
+      { href: "/reports",      label: "Reports",      icon: BarChart3     },
     ],
   },
   {
@@ -137,12 +138,16 @@ function NavContent({
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
 
-  // v2 visibility rule: MEMBERs never see the Finance section.
-  // (Server-side stripping is the real enforcement — this is the UI layer.)
-  const visibleNavItems =
-    appUser?.role === "MEMBER"
-      ? navItems.filter((section) => section.group !== "Finance")
-      : navItems;
+  // v2 visibility rule: MEMBERs never see the Finance section, and Reports
+  // is managers/admins only. (Server-side enforcement is the real gate.)
+  const isMember = appUser?.role === "MEMBER";
+  const visibleNavItems = navItems
+    .filter((section) => !(isMember && section.group === "Finance"))
+    .map((section) =>
+      section.group === "Work" && isMember
+        ? { ...section, links: section.links.filter((l) => l.href !== "/reports") }
+        : section,
+    );
 
   return (
     <div className="flex flex-col flex-1 min-h-0">

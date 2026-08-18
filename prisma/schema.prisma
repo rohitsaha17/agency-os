@@ -258,6 +258,7 @@ model User {
   createdContentItems ContentItem[]  @relation("CreatedContentItems")
   personalItems        PersonalItem[] @relation("PersonalItems")
   createdPersonalItems PersonalItem[] @relation("CreatedPersonalItems")
+  createdEvents        CalendarEvent[] @relation("CreatedEvents")
 
   @@unique([organizationId, email])
   @@index([organizationId])
@@ -337,6 +338,7 @@ model Client {
   receipts        Receipt[]
   tasks           Task[]          @relation("ClientTasks")
   contentItems    ContentItem[]   @relation("ClientContentItems")
+  events          CalendarEvent[] @relation("ClientEvents")
 
   @@index([organizationId])
   @@map("clients")
@@ -1289,8 +1291,43 @@ model Organization {
   notifications Notification[]
   creativeTypes CreativeType[]
   contentItems  ContentItem[]
+  events        CalendarEvent[]
 
   @@map("organizations")
+}
+
+// ============================================================
+// V2 — CALENDAR EVENTS (festivals, campaigns, shoots, internal)
+// ============================================================
+
+enum EventKind {
+  FESTIVAL
+  CAMPAIGN
+  SHOOT
+  INTERNAL
+  OTHER
+}
+
+model CalendarEvent {
+  id                 String    @id @default(cuid())
+  organizationId     String
+  title              String
+  date               DateTime
+  endDate            DateTime?
+  kind               EventKind @default(OTHER)
+  clientId           String?
+  reminderDaysBefore Int?
+  isAdHoc            Boolean   @default(false)
+  notes              String?
+  createdById        String?
+  createdAt          DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  client       Client?      @relation("ClientEvents", fields: [clientId], references: [id], onDelete: Cascade)
+  createdBy    User?        @relation("CreatedEvents", fields: [createdById], references: [id])
+
+  @@index([organizationId, date])
+  @@map("calendar_events")
 }
 
 // ============================================================

@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
     if (!from || !to) throw new ApiError("from and to are required", 400);
     const range = { gte: new Date(from), lt: new Date(to) };
 
-    const [tasks, contentItems, personal] = await Promise.all([
+    const [tasks, contentItems, personal, events] = await Promise.all([
       // (a) tasks assigned to me, by due date
       prisma.task.findMany({
         where: {
@@ -51,6 +51,15 @@ export async function GET(req: NextRequest) {
       prisma.personalItem.findMany({
         where: { userId: user.id, date: range },
         include: { createdBy: { select: { id: true, name: true } } },
+      }),
+      // (d) org events — all-day strip (members: org-wide only)
+      prisma.calendarEvent.findMany({
+        where: {
+          organizationId: user.organizationId,
+          date: range,
+          ...(user.role === "MEMBER" ? { clientId: null } : {}),
+        },
+        include: { client: { select: { id: true, name: true } } },
       }),
     ]);
 
@@ -88,6 +97,14 @@ export async function GET(req: NextRequest) {
         note: p.note,
         done: p.done,
         addedBy: p.createdById && p.createdById !== user.id ? p.createdBy?.name ?? null : null,
+      })),
+      ...events.map((e) => ({
+        kind: "event" as const,
+        id: e.id,
+        date: e.date.toISOString(),
+        title: e.title,
+        eventKind: e.kind,
+        clientName: e.client?.name ?? null,
       })),
     ].sort((a, b) => a.date.localeCompare(b.date));
 

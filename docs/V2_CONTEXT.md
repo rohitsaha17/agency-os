@@ -134,3 +134,11 @@ Master Calendar = all clients' entries in one view (filters + access levels)
 | 10 | Review links + hardening | Client approve/request-changes via share link; permission audit; polish |
 
 Build order is 0→10. Phases 4/5 may swap, 8/9 may swap; 6 must precede 7. The spine is complete after Phase 4.
+
+---
+
+## Naming corrections (verified against the real schema in Phase 0)
+
+- Model and enum names match this document: `Task`, `Client`, `Invoice`; `TaskStatus` (TODO/IN_PROGRESS/IN_REVIEW/DONE/BLOCKED), `InvoiceStatus` (DRAFT/SENT/PAID/OVERDUE/CANCELLED), `UserRole` (OWNER/ADMIN/MANAGER/MEMBER). The task priority enum is named **`Priority`** (not `TaskPriority`), values LOW/MEDIUM/HIGH/URGENT.
+- Database: PostgreSQL (`datasource db { provider = "postgresql" }`, URL resolved via prisma.config.ts / lib/db-url.ts).
+- **Migration workflow correction:** `prisma migrate dev/deploy` is broken on a fresh DB — the checked-in `20260404_baseline` migration re-creates enums the earlier `init` migration already created ("type UserRole already exists"). The project's effective workflow (used in production per prisma/manual-migrations/*.sql) is **`prisma db push` + idempotent manual SQL files**. v2 phases should apply schema changes with `npx prisma db push` (plus an idempotent SQL file in prisma/manual-migrations/ mirroring the change for production), instead of `prisma migrate dev`.

@@ -304,6 +304,7 @@ export interface ContentItem {
   teamApprovedAt: string | null;
   clientApprovedAt: string | null;
   invoicedInId: string | null;
+  reviewToken?: string | null;
   createdBy?: { id: string; name: string } | null;
   client?: { id: string; name: string };
   tasks: ContentItemTask[];

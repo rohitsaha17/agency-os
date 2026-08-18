@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   ChevronLeft, ChevronRight, Plus, X, Calendar as CalIcon, List as ListIcon,
-  LayoutGrid, Link2, Zap, ArrowRightCircle, CheckCircle2, UserPlus,
+  LayoutGrid, Link2, Zap, ArrowRightCircle, CheckCircle2, UserPlus, Share2,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { TaskModal } from "@/components/tasks/TaskModal";
@@ -356,9 +356,35 @@ function ItemPanel({
               )}
               {item.status === "TEAM_APPROVED" && canClientApprove && (
                 <button onClick={() => setStatus("CLIENT_APPROVED", "manual client approval")} disabled={busy}
-                  title="Manual — share-link approval comes in a later phase"
+                  title="Manual fallback — or share the review link below"
                   className="px-2.5 py-1.5 text-xs font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">
                   Mark Client Approved
+                </button>
+              )}
+              {item.status === "TEAM_APPROVED" && (
+                <button
+                  onClick={async () => {
+                    const res = await fetch(`/api/content-items/${item.id}/share`, { method: "POST" });
+                    const d = await res.json();
+                    if (!res.ok) { toast.error(d.error?.message ?? "Failed"); return; }
+                    const url = `${window.location.origin}${d.url}`;
+                    try { await navigator.clipboard.writeText(url); toast.success(`Review link copied: ${url}`); }
+                    catch { toast.success(`Review link: ${url}`); }
+                  }}
+                  disabled={busy}
+                  className="px-2.5 py-1.5 text-xs font-medium border border-indigo-300 text-indigo-600 rounded-lg hover:bg-indigo-50 inline-flex items-center gap-1">
+                  <Share2 className="w-3 h-3" /> Share for approval
+                </button>
+              )}
+              {item.reviewToken && (
+                <button
+                  onClick={async () => {
+                    await fetch(`/api/content-items/${item.id}/share`, { method: "DELETE" });
+                    toast.success("Review link revoked");
+                    onChanged();
+                  }}
+                  className="px-2.5 py-1.5 text-xs text-gray-400 hover:text-red-500 underline underline-offset-2">
+                  Revoke link
                 </button>
               )}
               {item.status === "CLIENT_APPROVED" && (
@@ -594,6 +620,23 @@ export function ContentCalendarTab({ clientId }: { clientId: string }) {
             <span><b className="text-fuchsia-600">{counters.extra}</b> extra</span>
             <span><b className="text-orange-600">{counters.carried}</b> carried</span>
           </div>
+          <button
+            title="Create a public review link listing every team-approved item this month"
+            onClick={async () => {
+              const res = await fetch(`/api/clients/${clientId}/share-month`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ month: monthKey }),
+              });
+              const d = await res.json();
+              if (!res.ok) { toast.error(d.error?.message ?? "Failed"); return; }
+              const url = `${window.location.origin}${d.url}`;
+              try { await navigator.clipboard.writeText(url); toast.success(`Month review link copied: ${url}`); }
+              catch { toast.success(`Month review link: ${url}`); }
+            }}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border border-indigo-300 text-indigo-600 rounded-lg hover:bg-indigo-50">
+            <Share2 className="w-3.5 h-3.5" /> Share month
+          </button>
           <Button size="sm" icon={<Plus className="w-3.5 h-3.5" />}
             onClick={() => setDialog({ open: true, date: selectedDay ?? null })}>
             Add content

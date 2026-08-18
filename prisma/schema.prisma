@@ -263,6 +263,7 @@ model User {
   createdFollowUps     FollowUp[]      @relation("CreatedFollowUps")
   photographerBookings Booking[]       @relation("PhotographerBookings")
   createdBookings      Booking[]       @relation("CreatedBookings")
+  createdReviewBatches ReviewBatch[]   @relation("CreatedReviewBatches")
 
   @@unique([organizationId, email])
   @@index([organizationId])
@@ -346,6 +347,7 @@ model Client {
   packages        ClientPackage[] @relation("ClientPackages")
   followUps       FollowUp[]      @relation("ClientFollowUps")
   bookings        Booking[]       @relation("ClientBookings")
+  reviewBatches   ReviewBatch[]   @relation("ClientReviewBatches")
 
   @@index([organizationId])
   @@map("clients")
@@ -1318,8 +1320,32 @@ model Organization {
   clientPackages ClientPackage[]
   followUps     FollowUp[]
   bookings      Booking[]
+  reviewBatches ReviewBatch[]
 
   @@map("organizations")
+}
+
+// ============================================================
+// V2 — CLIENT REVIEW BATCHES (tokenized share links, no login)
+// ============================================================
+
+model ReviewBatch {
+  id             String   @id @default(cuid())
+  token          String   @unique
+  organizationId String
+  clientId       String
+  month          String // YYYY-MM
+  expiresAt      DateTime
+  revokedAt      DateTime?
+  createdById    String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  client       Client       @relation("ClientReviewBatches", fields: [clientId], references: [id], onDelete: Cascade)
+  createdBy    User?        @relation("CreatedReviewBatches", fields: [createdById], references: [id])
+
+  @@index([clientId])
+  @@map("review_batches")
 }
 
 // ============================================================

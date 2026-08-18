@@ -257,6 +257,60 @@ export interface Comment {
   author?: { id: string; name: string; avatarUrl: string | null } | null;
 }
 
+// ── v2 Content Calendar ──────────────────────────────────────
+
+export type ContentStatus =
+  | "PLANNED" | "ASSIGNED" | "IN_PROGRESS" | "IN_REVIEW"
+  | "TEAM_APPROVED" | "CLIENT_APPROVED" | "SCHEDULED" | "POSTED" | "MISSED";
+
+export interface CreativeType {
+  id: string;
+  name: string;
+  slug: string;
+  icon: string | null;
+  color: string | null;
+  countsAsShoot: boolean;
+  isActive: boolean;
+  sortOrder: number;
+}
+
+export interface ContentItemTask {
+  id: string;
+  title: string;
+  status: TaskStatus;
+  projectId: string | null;
+  assignmentStatus?: string;
+  assignees: { user: { id: string; name: string; avatarUrl: string | null } }[];
+}
+
+export interface ContentItem {
+  id: string;
+  clientId: string;
+  projectId: string | null;
+  date: string;
+  creativeTypeId: string;
+  creativeType: CreativeType;
+  topic: string;
+  description: string | null;
+  referenceUrl: string | null;
+  referenceFileId: string | null;
+  status: ContentStatus;
+  isExtra: boolean;
+  isAdHoc: boolean;
+  carriedFromId: string | null;
+  carriedFrom?: { id: string; date: string } | null;
+  countAgainstPrevMonth: boolean;
+  postedAt: string | null;
+  teamApprovedAt: string | null;
+  clientApprovedAt: string | null;
+  invoicedInId: string | null;
+  createdBy?: { id: string; name: string } | null;
+  client?: { id: string; name: string };
+  tasks: ContentItemTask[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type AssignmentStatus = "NONE" | "PENDING_HEAD_APPROVAL" | "APPROVED" | "REASSIGNED";
 export type DeliveryMethod = "FILE_UPLOAD" | "LINK" | "WHATSAPP" | "SLACK" | "OTHER";
 

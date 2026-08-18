@@ -100,6 +100,19 @@ enum ChangeRequestStatus {
   RESOLVED
 }
 
+// v2: content-item pipeline (every transition logged + timestamped)
+enum ContentStatus {
+  PLANNED
+  ASSIGNED
+  IN_PROGRESS
+  IN_REVIEW
+  TEAM_APPROVED
+  CLIENT_APPROVED
+  SCHEDULED
+  POSTED
+  MISSED
+}
+
 enum QuotationStatus {
   DRAFT
   SENT
@@ -242,6 +255,7 @@ model User {
   preferredForTasks  Task[]          @relation("TaskPreferredAssignee")
   deliveries         TaskDelivery[]  @relation("Deliveries")
   changeRequests     ChangeRequest[] @relation("ChangeRequests")
+  createdContentItems ContentItem[]  @relation("CreatedContentItems")
 
   @@unique([organizationId, email])
   @@index([organizationId])
@@ -320,6 +334,7 @@ model Client {
   expenses        Expense[]
   receipts        Receipt[]
   tasks           Task[]          @relation("ClientTasks")
+  contentItems    ContentItem[]   @relation("ClientContentItems")
 
   @@index([organizationId])
   @@map("clients")
@@ -376,6 +391,7 @@ model Project {
   contracts    Contract[]
   channels     Channel[]
   members      ProjectMember[]
+  contentItems ContentItem[]   @relation("ProjectContentItems")
 
   @@index([status, clientId])
   @@index([clientId])
@@ -423,8 +439,9 @@ model Task {
   extraNote            String?
   // v2: direct client link (independent of project)
   clientId             String?
-  // v2: link back to the content-calendar entry (FK enforced in Phase 3)
+  // v2: link back to the content-calendar entry
   contentItemId        String?
+  contentItem          ContentItem? @relation("ContentItemTasks", fields: [contentItemId], references: [id])
   preferredAssigneeId  String?
   assignmentStatus     AssignmentStatus @default(NONE)
   sortOrder            Int        @default(0) // personal-queue rank
@@ -470,6 +487,73 @@ model Task {
   @@index([contentItemId])
   @@index([organizationId, assignmentStatus])
   @@map("tasks")
+}
+
+// ============================================================
+// V2 — CONTENT CALENDAR (one per client; the spine)
+// ============================================================
+
+// Org catalog of creative types: Post, Reel, Story, Photo Shoot, …
+model CreativeType {
+  id             String  @id @default(cuid())
+  organizationId String
+  name           String
+  slug           String
+  icon           String? // lucide icon name or emoji
+  color          String? // hex chip color
+  countsAsShoot  Boolean @default(false)
+  isActive       Boolean @default(true)
+  sortOrder      Int     @default(0)
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contentItems ContentItem[]
+
+  @@unique([organizationId, slug])
+  @@index([organizationId, isActive])
+  @@map("creative_types")
+}
+
+// One planned deliverable on a client's content calendar
+model ContentItem {
+  id                    String        @id @default(cuid())
+  organizationId        String
+  clientId              String
+  projectId             String?
+  date                  DateTime
+  creativeTypeId        String
+  topic                 String
+  description           String?
+  referenceUrl          String?
+  referenceFileId       String?
+  status                ContentStatus @default(PLANNED)
+  isExtra               Boolean       @default(false)
+  isAdHoc               Boolean       @default(false)
+  carriedFromId         String?
+  countAgainstPrevMonth Boolean       @default(false)
+  postedAt              DateTime?
+  teamApprovedAt        DateTime?
+  clientApprovedAt      DateTime?
+  invoicedInId          String? // stamped by Phase 7 invoicing
+  reviewToken           String?       @unique // Phase 10 share link
+  reviewTokenExpiresAt  DateTime?
+  createdById           String?
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  organization  Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  client        Client        @relation("ClientContentItems", fields: [clientId], references: [id], onDelete: Cascade)
+  project       Project?      @relation("ProjectContentItems", fields: [projectId], references: [id], onDelete: SetNull)
+  creativeType  CreativeType  @relation(fields: [creativeTypeId], references: [id])
+  referenceFile File?         @relation("ContentReferenceFiles", fields: [referenceFileId], references: [id])
+  carriedFrom   ContentItem?  @relation("CarryForward", fields: [carriedFromId], references: [id])
+  carriedTo     ContentItem[] @relation("CarryForward")
+  createdBy     User?         @relation("CreatedContentItems", fields: [createdById], references: [id])
+  tasks         Task[]        @relation("ContentItemTasks")
+
+  @@index([organizationId, clientId, date])
+  @@index([clientId, status])
+  @@index([organizationId, date])
+  @@map("content_items")
 }
 
 // v2: delivery proof recorded when a task is completed
@@ -940,6 +1024,7 @@ model File {
   messageAttachments MessageAttachment[]
   referencedByTasks  Task[]              @relation("TaskReferenceFile")
   deliveries         TaskDelivery[]      @relation("DeliveryFiles")
+  contentReferences  ContentItem[]       @relation("ContentReferenceFiles")
 
   @@index([projectId])
   @@index([clientId])
@@ -1200,6 +1285,8 @@ model Organization {
   taskTemplates TaskTemplate[]
   statusHistory StatusHistory[]
   notifications Notification[]
+  creativeTypes CreativeType[]
+  contentItems  ContentItem[]
 
   @@map("organizations")
 }

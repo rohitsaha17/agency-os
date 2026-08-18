@@ -18,6 +18,7 @@ import { PhoneInput } from "@/components/ui/PhoneInput";
 import { StatusBadge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
 import { ClientForm } from "@/components/clients/ClientForm";
+import { ContentCalendarTab } from "@/components/content/ContentCalendarTab";
 import { ProjectForm } from "@/components/projects/ProjectForm";
 import { QuotationBuilder } from "@/components/quotations/QuotationBuilder";
 import { useToast } from "@/components/ui/Toast";
@@ -28,7 +29,7 @@ import { calcInvoiceTotal } from "@/lib/format";
 import { formatMoney, resolveClientCurrency } from "@/lib/money";
 
 // ── helpers ──────────────────────────────────────────────────
-type Tab = "overview" | "contacts" | "brand" | "tax" | "projects" | "quotations" | "files" | "contracts" | "chat" | "invoices" | "expenses" | "receipts";
+type Tab = "content" | "overview" | "contacts" | "brand" | "tax" | "projects" | "quotations" | "files" | "contracts" | "chat" | "invoices" | "expenses" | "receipts";
 
 const EXPENSE_CATEGORY_LABELS: Record<ExpenseCategory, string> = {
   SOFTWARE_TOOLS: "Software & Tools",
@@ -224,6 +225,12 @@ export default function ClientDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("overview");
+
+  // Deep link: /clients/[id]?tab=content (used by notification links)
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get("tab");
+    if (t) setTab(t as Tab);
+  }, []);
   const [editOpen, setEditOpen] = useState(false);
   const [contactModal, setContactModal] = useState<{ open: boolean; editing?: ClientContact }>({ open: false });
   const [archiving, setArchiving] = useState(false);
@@ -803,6 +810,8 @@ export default function ClientDetailPage() {
   const primaryContact = client.contacts.find((c) => c.isPrimary) ?? client.contacts[0];
   const initials = displayName.split(" ").map((w) => w[0]).filter(Boolean).join("").slice(0, 2).toUpperCase();
   const tabs: { id: Tab; label: string }[] = [
+    // v2: the client's ONE content calendar — first tab, the source of all work
+    { id: "content",     label: "Content Calendar" },
     { id: "overview",    label: "Overview" },
     // v2: MEMBERs never see client contacts (API strips them too)
     ...(isMember ? [] : [{ id: "contacts" as Tab, label: `Contacts (${client.contacts.length})` }]),
@@ -895,6 +904,9 @@ export default function ClientDetailPage() {
 
       {/* Tab Content */}
       <div className="flex-1 px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
+        {/* ── CONTENT CALENDAR (v2 — the client's ONE calendar) ── */}
+        {tab === "content" && <ContentCalendarTab clientId={id} />}
+
         {/* ── OVERVIEW ── */}
         {tab === "overview" && (() => {
           // ── Financial Summary calculations ──

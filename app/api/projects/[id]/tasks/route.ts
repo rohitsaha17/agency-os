@@ -209,6 +209,25 @@ export async function POST(req: NextRequest, { params }: Params) {
       userId: user.id,
       note: routing.assignmentStatus === "PENDING_HEAD_APPROVAL" ? "created — pending head approval" : "created",
     });
+    // v2 spine: content-calendar entry moves PLANNED → ASSIGNED
+    if (contentItemId) {
+      const item = await prisma.contentItem.findFirst({
+        where: { id: contentItemId, organizationId: user.organizationId },
+        select: { id: true, status: true },
+      });
+      if (item && item.status === "PLANNED") {
+        await prisma.contentItem.update({ where: { id: item.id }, data: { status: "ASSIGNED" } });
+        await logStatus({
+          organizationId: user.organizationId,
+          entityType: "CONTENT_ITEM",
+          entityId: item.id,
+          from: "PLANNED",
+          to: "ASSIGNED",
+          userId: user.id,
+          note: `task "${task.title}" created`,
+        });
+      }
+    }
     if (routing.assignmentStatus === "PENDING_HEAD_APPROVAL") {
       await notifyHeads(
         user.organizationId,

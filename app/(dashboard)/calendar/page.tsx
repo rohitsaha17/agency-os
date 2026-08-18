@@ -8,14 +8,11 @@ import {
 } from "lucide-react";
 import type { CalendarEvent } from "@/types";
 import { useCurrentUser } from "@/lib/useCurrentUser";
+import {
+  MonthGrid, MONTH_NAMES, isSameDay,
+} from "@/components/calendar/MonthGrid";
 
 // ── Constants ────────────────────────────────────────────────
-
-const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const MONTH_NAMES = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
 
 const PRIORITY_DOT: Record<string, string> = {
   LOW: "bg-slate-400", MEDIUM: "bg-indigo-500", HIGH: "bg-orange-500", URGENT: "bg-red-500",
@@ -32,41 +29,6 @@ const PROJECT_BG: Record<string, string> = {
   ACTIVE: "bg-emerald-500", DRAFT: "bg-slate-400", ON_HOLD: "bg-amber-500",
   COMPLETED: "bg-blue-500", CANCELLED: "bg-red-400",
 };
-
-// ── Helpers ──────────────────────────────────────────────────
-
-function getDaysInGrid(year: number, month: number): Date[] {
-  const firstDay = new Date(year, month, 1);
-  const lastDay = new Date(year, month + 1, 0);
-  const days: Date[] = [];
-  for (let i = 0; i < firstDay.getDay(); i++) {
-    days.push(new Date(year, month, -firstDay.getDay() + i + 1));
-  }
-  for (let d = 1; d <= lastDay.getDate(); d++) {
-    days.push(new Date(year, month, d));
-  }
-  while (days.length % 7 !== 0) {
-    const last = days[days.length - 1];
-    days.push(new Date(last.getTime() + 86400000));
-  }
-  return days;
-}
-
-function isSameDay(a: Date, b: Date) {
-  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
-}
-
-function isToday(d: Date) { return isSameDay(d, new Date()); }
-
-function getWeekDays(date: Date): Date[] {
-  const start = new Date(date);
-  start.setDate(start.getDate() - start.getDay());
-  return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(start);
-    d.setDate(d.getDate() + i);
-    return d;
-  });
-}
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -173,7 +135,6 @@ export default function CalendarPage() {
     }));
   }, [events]);
 
-  const days = view === "month" ? getDaysInGrid(year, month) : getWeekDays(weekStart);
   const selectedEvents = selected ? eventsOnDay(selected) : [];
 
   // Summary counts
@@ -298,49 +259,24 @@ export default function CalendarPage() {
             </div>
           )}
 
-          {/* Weekday headers */}
-          <div className="grid grid-cols-7 mb-2">
-            {WEEKDAYS.map((d) => (
-              <div key={d} className="text-center text-xs font-medium text-gray-400 py-2">{d}</div>
-            ))}
-          </div>
-
-          {/* Day grid */}
-          <div className={`grid grid-cols-7 gap-px bg-gray-200 rounded-xl overflow-hidden ${view === "week" ? "" : ""}`}>
-            {days.map((day, i) => {
-              const inMonth = view === "week" || day.getMonth() === month;
-              const todayCell = isToday(day);
-              const isSelected = selected && isSameDay(day, selected);
-              const dayEvents = inMonth ? eventsOnDay(day) : [];
+          {/* Shared month/week grid (extracted to components/calendar/MonthGrid) */}
+          <MonthGrid
+            view={view}
+            year={year}
+            month={month}
+            weekStart={weekStart}
+            selected={selected}
+            loading={loading}
+            onDayClick={(day) => setSelected(selected && isSameDay(day, selected) ? null : day)}
+            cellCount={(day) => eventsOnDay(day).length}
+            renderCell={(day) => {
+              const dayEvents = eventsOnDay(day);
               const taskEvents = dayEvents.filter((e) => e.type === "task");
               const projectEvents = dayEvents.filter((e) => e.type === "project");
               const maxShow = view === "week" ? 8 : 3;
               const overflow = dayEvents.length - maxShow;
-
               return (
-                <div
-                  key={i}
-                  onClick={() => inMonth && setSelected(selected && isSameDay(day, selected) ? null : day)}
-                  className={`bg-white transition-colors ${
-                    view === "week" ? "min-h-[200px]" : "min-h-[80px] sm:min-h-[110px]"
-                  } p-1.5 sm:p-2 ${
-                    inMonth ? "cursor-pointer hover:bg-gray-50" : "opacity-30"
-                  } ${isSelected ? "ring-2 ring-inset ring-indigo-400 bg-indigo-50/30" : ""}`}
-                >
-                  {/* Day number */}
-                  <div className="flex items-center justify-between mb-1">
-                    <span className={`w-7 h-7 flex items-center justify-center text-sm font-medium rounded-full ${
-                      todayCell ? "bg-indigo-600 text-white" : "text-gray-700"
-                    }`}>
-                      {day.getDate()}
-                    </span>
-                    {dayEvents.length > 0 && (
-                      <span className="text-[10px] text-gray-400 font-medium">{dayEvents.length}</span>
-                    )}
-                  </div>
-
-                  {loading && inMonth && <div className="h-4 bg-gray-100 rounded animate-pulse" />}
-
+                <>
                   {/* Project bars — compact colored bars */}
                   {projectEvents.slice(0, view === "week" ? 3 : 1).map((e) => (
                     <div key={`p-${e.id}`} className="flex items-center gap-1 mb-0.5" title={`${e.title} (${e.clientName})`}>
@@ -351,7 +287,6 @@ export default function CalendarPage() {
 
                   {/* Task dots / items */}
                   {view === "week" ? (
-                    // Week view: show task items
                     taskEvents.slice(0, maxShow - projectEvents.length).map((e) => (
                       <div key={`t-${e.id}`} className="flex items-center gap-1 mb-0.5" title={`${e.title} — ${e.projectName}`}>
                         <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${PRIORITY_DOT[e.priority ?? "MEDIUM"]}`} />
@@ -361,7 +296,6 @@ export default function CalendarPage() {
                       </div>
                     ))
                   ) : (
-                    // Month view: compact dot row for tasks
                     taskEvents.length > 0 && (
                       <div className="flex items-center gap-0.5 mt-0.5">
                         {taskEvents.slice(0, 5).map((e) => (
@@ -378,14 +312,13 @@ export default function CalendarPage() {
                     )
                   )}
 
-                  {/* Overflow */}
                   {overflow > 0 && view === "week" && (
                     <div className="text-[10px] text-gray-400 mt-0.5">+{overflow} more</div>
                   )}
-                </div>
+                </>
               );
-            })}
-          </div>
+            }}
+          />
 
           {/* Legend */}
           <div className="flex flex-wrap items-center gap-4 mt-4 text-xs text-gray-500">

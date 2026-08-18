@@ -14,7 +14,7 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 /* ─────────────────────────────────────────────────────────────
    Helpers
    ───────────────────────────────────────────────────────────── */
-type Tab = "company" | "letterhead" | "users" | "roles" | "account";
+type Tab = "company" | "letterhead" | "users" | "roles" | "creative-types" | "account";
 
 // v2: job labels (designation) — display/routing only, not permissions
 const DESIGNATION_OPTIONS: { value: string; label: string }[] = [
@@ -1508,12 +1508,138 @@ function AccountTab() {
   );
 }
 
+/* ─────────────────────────────────────────────────────────────
+   Tab: Creative Types (v2 — content calendar catalog)
+   ───────────────────────────────────────────────────────────── */
+interface CreativeTypeRow {
+  id: string; name: string; slug: string; icon: string | null;
+  color: string | null; countsAsShoot: boolean; isActive: boolean;
+}
+
+function CreativeTypesTab() {
+  const toast = useToast();
+  const [types, setTypes] = useState<CreativeTypeRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [newName, setNewName] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+
+  const fetchTypes = useCallback(async () => {
+    const res = await fetch("/api/creative-types?all=1");
+    if (res.ok) setTypes(await res.json());
+    setLoading(false);
+  }, []);
+  useEffect(() => { fetchTypes(); }, [fetchTypes]);
+
+  const patch = async (id: string, body: Record<string, unknown>) => {
+    const res = await fetch(`/api/creative-types/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (res.ok) {
+      const updated = await res.json();
+      setTypes((p) => p.map((t) => (t.id === id ? updated : t)));
+    } else {
+      toast.error("Update failed");
+    }
+  };
+
+  const add = async () => {
+    if (!newName.trim()) return;
+    setAdding(true);
+    try {
+      const res = await fetch("/api/creative-types", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newName }),
+      });
+      const d = await res.json();
+      if (!res.ok) { toast.error(d.error?.message ?? "Failed"); return; }
+      setTypes((p) => [...p, d]);
+      setNewName("");
+      toast.success(`"${d.name}" added`);
+    } finally { setAdding(false); }
+  };
+
+  return (
+    <SectionCard
+      title="Creative Types"
+      desc="The catalog used by every client's content calendar — rename, recolor, or add your own"
+    >
+      <div className="flex items-center gap-2 mb-4">
+        <input
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") add(); }}
+          placeholder="Add a creative type (e.g. Meme)"
+          className="flex-1 max-w-xs px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        />
+        <button onClick={add} disabled={adding || !newName.trim()}
+          className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-500 disabled:opacity-50">
+          <Plus className="w-3.5 h-3.5" /> Add
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="space-y-2">{[1, 2, 3].map((i) => <div key={i} className="h-11 bg-gray-100 rounded-xl animate-pulse" />)}</div>
+      ) : (
+        <div className="space-y-1.5">
+          {types.map((t) => (
+            <div key={t.id} className={`flex items-center gap-3 px-3 py-2.5 border rounded-xl ${t.isActive ? "border-gray-100" : "border-gray-100 bg-gray-50 opacity-60"}`}>
+              <span className="text-base w-6 text-center">{t.icon ?? "✨"}</span>
+              <input
+                type="color"
+                value={t.color ?? "#64748b"}
+                onChange={(e) => patch(t.id, { color: e.target.value })}
+                className="w-6 h-6 rounded cursor-pointer border-0 bg-transparent p-0"
+                title="Chip color"
+              />
+              {editId === t.id ? (
+                <input
+                  autoFocus value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && editName.trim()) { patch(t.id, { name: editName }); setEditId(null); }
+                    if (e.key === "Escape") setEditId(null);
+                  }}
+                  onBlur={() => { if (editName.trim() && editName !== t.name) patch(t.id, { name: editName }); setEditId(null); }}
+                  className="flex-1 px-2 py-1 text-sm border border-indigo-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              ) : (
+                <button onClick={() => { setEditId(t.id); setEditName(t.name); }}
+                  className="flex-1 text-left text-sm font-medium text-gray-800 hover:text-indigo-600">
+                  {t.name}
+                </button>
+              )}
+              <label className="flex items-center gap-1.5 text-[11px] text-gray-500 cursor-pointer" title="Counts toward the monthly shoot quota">
+                <input type="checkbox" checked={t.countsAsShoot}
+                  onChange={(e) => patch(t.id, { countsAsShoot: e.target.checked })}
+                  className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+                counts as shoot
+              </label>
+              <button
+                onClick={() => patch(t.id, { isActive: !t.isActive })}
+                className="text-xs px-2.5 py-1 rounded-lg border text-gray-500 border-gray-200 hover:border-gray-300 hover:bg-gray-100"
+              >
+                {t.isActive ? "Active" : "Inactive"}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </SectionCard>
+  );
+}
+
 const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
-  { id: "company",     label: "Organization", icon: Building2 },
-  { id: "letterhead",  label: "Letterhead",   icon: FileText  },
-  { id: "users",       label: "Users",        icon: Users     },
-  { id: "roles",       label: "Roles",        icon: Shield    },
-  { id: "account",     label: "Account",      icon: KeyRound  },
+  { id: "company",        label: "Organization",   icon: Building2 },
+  { id: "letterhead",     label: "Letterhead",     icon: FileText  },
+  { id: "users",          label: "Users",          icon: Users     },
+  { id: "roles",          label: "Roles",          icon: Shield    },
+  { id: "creative-types", label: "Creative Types", icon: Palette   },
+  { id: "account",        label: "Account",        icon: KeyRound  },
 ];
 
 const DEFAULT_SETTINGS: CompanySettings = {
@@ -1590,6 +1716,7 @@ export default function SettingsPage() {
             {tab === "letterhead" && <LetterheadTab settings={settings} onSaved={setSettings} />}
             {tab === "users"      && <UsersTab />}
             {tab === "roles"      && <RolesTab />}
+            {tab === "creative-types" && <CreativeTypesTab />}
             {tab === "account"    && <AccountTab />}
           </>
         )}

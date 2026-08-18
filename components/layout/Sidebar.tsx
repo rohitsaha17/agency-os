@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Users, FolderKanban, CheckSquare,
-  Calendar, FileText, Tag, Receipt, Settings,
+  Calendar, CalendarClock, FileText, Tag, Receipt, Settings,
   HardDrive, Users2, TrendingDown, Scroll, Menu, X,
   Sun, MessageSquare, LogOut,
 } from "lucide-react";
@@ -31,6 +31,7 @@ const navItems = [
     group: "Work",
     links: [
       { href: "/tasks",        label: "Tasks",        icon: CheckSquare   },
+      { href: "/my-calendar",  label: "My Calendar",  icon: CalendarClock },
       { href: "/messages",     label: "Messages",     icon: MessageSquare },
       { href: "/calendar",     label: "Calendar",     icon: Calendar      },
       { href: "/files",        label: "Files",        icon: HardDrive     },

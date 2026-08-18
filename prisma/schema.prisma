@@ -256,6 +256,8 @@ model User {
   deliveries         TaskDelivery[]  @relation("Deliveries")
   changeRequests     ChangeRequest[] @relation("ChangeRequests")
   createdContentItems ContentItem[]  @relation("CreatedContentItems")
+  personalItems        PersonalItem[] @relation("PersonalItems")
+  createdPersonalItems PersonalItem[] @relation("CreatedPersonalItems")
 
   @@unique([organizationId, email])
   @@index([organizationId])
@@ -1289,6 +1291,29 @@ model Organization {
   contentItems  ContentItem[]
 
   @@map("organizations")
+}
+
+// ============================================================
+// V2 — MY CALENDAR (personal reminders / to-dos)
+// ============================================================
+
+model PersonalItem {
+  id          String    @id @default(cuid())
+  userId      String // whose calendar it sits on
+  createdById String? // may differ — a senior dropping a to-do on a teammate
+  title       String
+  note        String?
+  date        DateTime
+  time        String? // "17:00" — optional wall-clock time
+  done        Boolean   @default(false)
+  doneAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  user      User  @relation("PersonalItems", fields: [userId], references: [id], onDelete: Cascade)
+  createdBy User? @relation("CreatedPersonalItems", fields: [createdById], references: [id])
+
+  @@index([userId, date])
+  @@map("personal_items")
 }
 
 // ============================================================

@@ -45,7 +45,7 @@ export async function computeMonthSummary(
   const to = new Date(Date.UTC(y, m, 1));
   const monthStart = from;
 
-  const [items, pkg, types] = await Promise.all([
+  const [items, pkg, types, bookingCounts] = await Promise.all([
     prisma.contentItem.findMany({
       where: { organizationId, clientId, date: { gte: from, lt: to } },
       select: {
@@ -67,7 +67,20 @@ export async function computeMonthSummary(
       where: { organizationId, isActive: true },
       orderBy: { sortOrder: "asc" },
     }),
+    // Phase 9: photographer bookings feed the shoot counters
+    prisma.booking.groupBy({
+      by: ["status"],
+      where: { organizationId, clientId, startAt: { gte: from, lt: to } },
+      _count: { _all: true },
+    }),
   ]);
+
+  const bookingsConfirmed = bookingCounts
+    .filter((r) => r.status === "CONFIRMED" || r.status === "REQUESTED")
+    .reduce((s, r) => s + r._count._all, 0);
+  const bookingsCompleted = bookingCounts
+    .filter((r) => r.status === "COMPLETED")
+    .reduce((s, r) => s + r._count._all, 0);
 
   const quotaByType = new Map<string, number>(pkg?.quotas.map((q) => [q.creativeTypeId, q.monthlyQty]) ?? []);
 
@@ -111,8 +124,8 @@ export async function computeMonthSummary(
       : null,
     perType,
     adHocCount: items.filter((i) => i.isAdHoc).length,
-    shootsPlanned: shootRows.reduce((s, r) => s + r.planned, 0),
-    shootsDone: shootRows.reduce((s, r) => s + r.posted, 0),
+    shootsPlanned: shootRows.reduce((s, r) => s + r.planned, 0) + bookingsConfirmed,
+    shootsDone: shootRows.reduce((s, r) => s + r.posted, 0) + bookingsCompleted,
     totals,
   };
 }

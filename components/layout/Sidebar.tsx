@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Users, FolderKanban, CheckSquare,
   Calendar, CalendarClock, FileText, Tag, Receipt, Settings,
   HardDrive, Users2, TrendingDown, Scroll, Menu, X,
-  Sun, MessageSquare, LogOut, BarChart3,
+  Sun, MessageSquare, LogOut, BarChart3, Camera,
 } from "lucide-react";
 import { ThemeToggle, ThemeToggleIcon } from "@/components/ui/ThemeToggle";
 import { BrandLogo } from "@/components/ui/BrandLogo";
@@ -35,6 +35,7 @@ const navItems = [
       { href: "/messages",     label: "Messages",     icon: MessageSquare },
       { href: "/calendar",     label: "Calendar",     icon: Calendar      },
       { href: "/files",        label: "Files",        icon: HardDrive     },
+      { href: "/bookings",     label: "Bookings",     icon: Camera        },
       { href: "/quotations",   label: "Quotations",   icon: FileText      },
       { href: "/rate-cards",   label: "Rate Cards",   icon: Tag           },
       { href: "/stakeholders", label: "Stakeholders", icon: Users2        },

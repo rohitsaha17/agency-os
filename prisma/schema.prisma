@@ -261,6 +261,8 @@ model User {
   createdEvents        CalendarEvent[] @relation("CreatedEvents")
   assignedFollowUps    FollowUp[]      @relation("AssignedFollowUps")
   createdFollowUps     FollowUp[]      @relation("CreatedFollowUps")
+  photographerBookings Booking[]       @relation("PhotographerBookings")
+  createdBookings      Booking[]       @relation("CreatedBookings")
 
   @@unique([organizationId, email])
   @@index([organizationId])
@@ -343,6 +345,7 @@ model Client {
   events          CalendarEvent[] @relation("ClientEvents")
   packages        ClientPackage[] @relation("ClientPackages")
   followUps       FollowUp[]      @relation("ClientFollowUps")
+  bookings        Booking[]       @relation("ClientBookings")
 
   @@index([organizationId])
   @@map("clients")
@@ -400,6 +403,7 @@ model Project {
   channels     Channel[]
   members      ProjectMember[]
   contentItems ContentItem[]   @relation("ProjectContentItems")
+  bookings     Booking[]       @relation("ProjectBookings")
 
   @@index([status, clientId])
   @@index([clientId])
@@ -559,6 +563,7 @@ model ContentItem {
   createdBy     User?         @relation("CreatedContentItems", fields: [createdById], references: [id])
   tasks         Task[]        @relation("ContentItemTasks")
   billedLines   InvoiceLineItem[] @relation("BilledContentItems")
+  bookings      Booking[]     @relation("ContentItemBookings")
 
   @@index([organizationId, clientId, date])
   @@index([clientId, status])
@@ -1312,8 +1317,49 @@ model Organization {
   events        CalendarEvent[]
   clientPackages ClientPackage[]
   followUps     FollowUp[]
+  bookings      Booking[]
 
   @@map("organizations")
+}
+
+// ============================================================
+// V2 — PHOTOGRAPHER BOOKINGS
+// ============================================================
+
+enum BookingStatus {
+  REQUESTED
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
+model Booking {
+  id             String        @id @default(cuid())
+  organizationId String
+  photographerId String
+  clientId       String?
+  projectId      String?
+  contentItemId  String?
+  startAt        DateTime
+  endAt          DateTime
+  location       String?
+  notes          String?
+  status         BookingStatus @default(REQUESTED)
+  isAdHoc        Boolean       @default(false)
+  createdById    String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  photographer User         @relation("PhotographerBookings", fields: [photographerId], references: [id], onDelete: Cascade)
+  client       Client?      @relation("ClientBookings", fields: [clientId], references: [id], onDelete: SetNull)
+  project      Project?     @relation("ProjectBookings", fields: [projectId], references: [id], onDelete: SetNull)
+  contentItem  ContentItem? @relation("ContentItemBookings", fields: [contentItemId], references: [id], onDelete: SetNull)
+  createdBy    User?        @relation("CreatedBookings", fields: [createdById], references: [id])
+
+  @@index([organizationId, startAt])
+  @@index([photographerId, startAt])
+  @@map("bookings")
 }
 
 // ============================================================

@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
     if (!from || !to) throw new ApiError("from and to are required", 400);
     const range = { gte: new Date(from), lt: new Date(to) };
 
-    const [tasks, contentItems, personal, events] = await Promise.all([
+    const [tasks, contentItems, personal, events, bookings] = await Promise.all([
       // (a) tasks assigned to me, by due date
       prisma.task.findMany({
         where: {
@@ -58,6 +58,16 @@ export async function GET(req: NextRequest) {
           organizationId: user.organizationId,
           date: range,
           ...(user.role === "MEMBER" ? { clientId: null } : {}),
+        },
+        include: { client: { select: { id: true, name: true } } },
+      }),
+      // (e) my photographer bookings — timed chips
+      prisma.booking.findMany({
+        where: {
+          organizationId: user.organizationId,
+          photographerId: user.id,
+          status: { not: "CANCELLED" },
+          startAt: range,
         },
         include: { client: { select: { id: true, name: true } } },
       }),
@@ -105,6 +115,15 @@ export async function GET(req: NextRequest) {
         title: e.title,
         eventKind: e.kind,
         clientName: e.client?.name ?? null,
+      })),
+      ...bookings.map((b) => ({
+        kind: "booking" as const,
+        id: b.id,
+        date: b.startAt.toISOString(),
+        time: b.startAt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
+        title: `Shoot${b.client ? ` — ${b.client.name}` : ""}${b.location ? ` @ ${b.location}` : ""}`,
+        status: b.status,
+        link: "/bookings",
       })),
     ].sort((a, b) => a.date.localeCompare(b.date));
 

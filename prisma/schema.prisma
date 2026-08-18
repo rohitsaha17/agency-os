@@ -339,6 +339,7 @@ model Client {
   tasks           Task[]          @relation("ClientTasks")
   contentItems    ContentItem[]   @relation("ClientContentItems")
   events          CalendarEvent[] @relation("ClientEvents")
+  packages        ClientPackage[] @relation("ClientPackages")
 
   @@index([organizationId])
   @@map("clients")
@@ -511,6 +512,7 @@ model CreativeType {
 
   organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   contentItems ContentItem[]
+  quotas       PackageQuota[]
 
   @@unique([organizationId, slug])
   @@index([organizationId, isActive])
@@ -1292,8 +1294,49 @@ model Organization {
   creativeTypes CreativeType[]
   contentItems  ContentItem[]
   events        CalendarEvent[]
+  clientPackages ClientPackage[]
 
   @@map("organizations")
+}
+
+// ============================================================
+// V2 — CLIENT PACKAGES (monthly creative quotas)
+// ============================================================
+
+model ClientPackage {
+  id             String    @id @default(cuid())
+  organizationId String
+  clientId       String
+  name           String
+  startMonth     DateTime // first day of the starting month
+  endMonth       DateTime? // null = open-ended
+  billingAmount  Decimal?  @db.Decimal(12, 2)
+  currency       String?
+  notes          String?
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  client       Client         @relation("ClientPackages", fields: [clientId], references: [id], onDelete: Cascade)
+  quotas       PackageQuota[]
+
+  @@index([clientId, isActive])
+  @@index([organizationId])
+  @@map("client_packages")
+}
+
+model PackageQuota {
+  id             String @id @default(cuid())
+  packageId      String
+  creativeTypeId String
+  monthlyQty     Int
+
+  package      ClientPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  creativeType CreativeType  @relation(fields: [creativeTypeId], references: [id], onDelete: Cascade)
+
+  @@unique([packageId, creativeTypeId])
+  @@map("package_quotas")
 }
 
 // ============================================================

@@ -19,6 +19,8 @@ import { StatusBadge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
 import { ClientForm } from "@/components/clients/ClientForm";
 import { ContentCalendarTab } from "@/components/content/ContentCalendarTab";
+import { PackageTab } from "@/components/content/PackageTab";
+import { FulfillmentLine } from "@/components/content/FulfillmentLine";
 import { ProjectForm } from "@/components/projects/ProjectForm";
 import { QuotationBuilder } from "@/components/quotations/QuotationBuilder";
 import { useToast } from "@/components/ui/Toast";
@@ -29,7 +31,7 @@ import { calcInvoiceTotal } from "@/lib/format";
 import { formatMoney, resolveClientCurrency } from "@/lib/money";
 
 // ── helpers ──────────────────────────────────────────────────
-type Tab = "content" | "overview" | "contacts" | "brand" | "tax" | "projects" | "quotations" | "files" | "contracts" | "chat" | "invoices" | "expenses" | "receipts";
+type Tab = "content" | "package" | "overview" | "contacts" | "brand" | "tax" | "projects" | "quotations" | "files" | "contracts" | "chat" | "invoices" | "expenses" | "receipts";
 
 const EXPENSE_CATEGORY_LABELS: Record<ExpenseCategory, string> = {
   SOFTWARE_TOOLS: "Software & Tools",
@@ -812,6 +814,7 @@ export default function ClientDetailPage() {
   const tabs: { id: Tab; label: string }[] = [
     // v2: the client's ONE content calendar — first tab, the source of all work
     { id: "content",     label: "Content Calendar" },
+    { id: "package",     label: "Package" },
     { id: "overview",    label: "Overview" },
     // v2: MEMBERs never see client contacts (API strips them too)
     ...(isMember ? [] : [{ id: "contacts" as Tab, label: `Contacts (${client.contacts.length})` }]),
@@ -907,6 +910,9 @@ export default function ClientDetailPage() {
         {/* ── CONTENT CALENDAR (v2 — the client's ONE calendar) ── */}
         {tab === "content" && <ContentCalendarTab clientId={id} />}
 
+        {/* ── PACKAGE (v2 — monthly creative quotas) ── */}
+        {tab === "package" && <PackageTab clientId={id} clientCurrency={client.currency} />}
+
         {/* ── OVERVIEW ── */}
         {tab === "overview" && (() => {
           // ── Financial Summary calculations ──
@@ -943,6 +949,9 @@ export default function ClientDetailPage() {
           ];
           return (
           <div className="max-w-2xl space-y-6">
+            {/* v2 Phase 6: current-month package fulfillment */}
+            <FulfillmentLine clientId={id} />
+
             {/* Financial Summary — hidden from MEMBERs (v2; API strips values too) */}
             {!isMember && (
             <div className="bg-white border border-gray-200 rounded-xl p-5">

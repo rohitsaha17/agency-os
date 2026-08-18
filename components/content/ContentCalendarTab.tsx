@@ -38,12 +38,14 @@ function fmtDay(d: string | Date) {
 // ── Add/Edit item dialog ─────────────────────────────────────
 
 function ItemDialog({
-  clientId, types, editItem, defaultDate, onClose, onSaved,
+  clientId, types, editItem, defaultDate, quotaCheck, onClose, onSaved,
 }: {
   clientId: string;
   types: CreativeType[];
   editItem?: ContentItem | null;
   defaultDate?: Date | null;
+  /** Phase 6: (creativeTypeId) => { full: boolean, used: number, quota: number } */
+  quotaCheck?: (creativeTypeId: string) => { full: boolean; used: number; quota: number };
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -58,10 +60,22 @@ function ItemDialog({
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [quotaPrompt, setQuotaPrompt] = useState<{ used: number; quota: number; typeName: string } | null>(null);
 
-  const submit = async () => {
+  const submit = async (skipQuotaPrompt = false) => {
     if (!form.topic.trim()) { setError("Topic is required"); return; }
     if (!form.creativeTypeId) { setError("Pick a creative type"); return; }
+    // Phase 6: quota-full confirm — offer to flag the item EXTRA
+    if (!editItem && !skipQuotaPrompt && !form.isExtra && quotaCheck) {
+      const q = quotaCheck(form.creativeTypeId);
+      if (q.full) {
+        setQuotaPrompt({
+          used: q.used, quota: q.quota,
+          typeName: types.find((t) => t.id === form.creativeTypeId)?.name ?? "this type",
+        });
+        return;
+      }
+    }
     setSaving(true);
     setError(null);
     try {
@@ -88,6 +102,29 @@ function ItemDialog({
         </div>
         <div className="p-5 space-y-4 overflow-y-auto">
           {error && <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-sm text-red-700">{error}</div>}
+
+          {/* Phase 6: quota-full confirm */}
+          {quotaPrompt && (
+            <div className="bg-fuchsia-50 border border-fuchsia-200 rounded-lg px-3 py-2.5">
+              <p className="text-xs font-semibold text-fuchsia-800">
+                Quota for {quotaPrompt.typeName} is full ({quotaPrompt.used}/{quotaPrompt.quota}).
+              </p>
+              <p className="text-xs text-fuchsia-600 mt-0.5">Mark this as EXTRA? Extras can be billed on the next invoice.</p>
+              <div className="flex gap-2 mt-2">
+                <button
+                  onClick={() => { setForm((f) => ({ ...f, isExtra: true })); setQuotaPrompt(null); setTimeout(() => submit(true), 0); }}
+                  className="px-2.5 py-1 text-xs font-medium bg-fuchsia-600 text-white rounded-lg hover:bg-fuchsia-700">
+                  Yes, mark EXTRA
+                </button>
+                <button
+                  onClick={() => { setQuotaPrompt(null); submit(true); }}
+                  className="px-2.5 py-1 text-xs font-medium border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50">
+                  Add without EXTRA
+                </button>
+                <button onClick={() => setQuotaPrompt(null)} className="text-xs text-gray-400 hover:text-gray-600">Cancel</button>
+              </div>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1.5">Date</label>
@@ -142,7 +179,7 @@ function ItemDialog({
         </div>
         <div className="flex items-center justify-end gap-3 px-5 py-4 border-t border-gray-200">
           <Button variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button loading={saving} onClick={submit}>{editItem ? "Save" : "Add content"}</Button>
+          <Button loading={saving} onClick={() => submit()}>{editItem ? "Save" : "Add content"}</Button>
         </div>
       </div>
     </div>
@@ -358,6 +395,26 @@ function ItemPanel({
             </div>
           </div>
 
+          {/* Phase 6: carried-in accounting toggle */}
+          {item.carriedFromId && (
+            <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer border border-orange-100 bg-orange-50/50 rounded-lg px-3 py-2">
+              <input
+                type="checkbox"
+                checked={item.countAgainstPrevMonth}
+                onChange={async (e) => {
+                  await fetch(`/api/content-items/${item.id}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ countAgainstPrevMonth: e.target.checked }),
+                  });
+                  onChanged();
+                }}
+                className="rounded border-gray-300 text-orange-600 focus:ring-orange-500"
+              />
+              Count against previous month&apos;s quota
+            </label>
+          )}
+
           {/* Carry-forward date picker */}
           {carryOpen && (
             <div className="p-3 bg-orange-50 border border-orange-200 rounded-xl">
@@ -456,13 +513,21 @@ export function ContentCalendarTab({ clientId }: { clientId: string }) {
   const [panelItemId, setPanelItemId] = useState<string | null>(null);
 
   const monthKey = `${year}-${String(month + 1).padStart(2, "0")}`;
+  const [summary, setSummary] = useState<{
+    perType: { creativeType: { id: string; name: string; icon: string | null }; quota: number; planned: number; posted: number; extra: number; carriedIn: number; carriedOut: number }[];
+    totals: { extra: number; carriedIn: number; carriedOut: number };
+  } | null>(null);
 
   const fetchItems = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/content-items?clientId=${clientId}&month=${monthKey}`);
+      const [res, sumRes] = await Promise.all([
+        fetch(`/api/content-items?clientId=${clientId}&month=${monthKey}`),
+        fetch(`/api/clients/${clientId}/month-summary?month=${monthKey}`),
+      ]);
       const data = await res.json();
       setItems(Array.isArray(data) ? data : []);
+      if (sumRes.ok) setSummary(await sumRes.json());
     } finally {
       setLoading(false);
     }
@@ -535,6 +600,37 @@ export function ContentCalendarTab({ clientId }: { clientId: string }) {
           </Button>
         </div>
       </div>
+
+      {/* Phase 6: per-type usage meters */}
+      {summary && summary.perType.some((r) => r.quota > 0) && (
+        <div className="mb-4 flex flex-wrap items-center gap-3 px-4 py-2.5 bg-white border border-gray-200 rounded-xl">
+          {summary.perType.filter((r) => r.quota > 0).map((r) => {
+            const used = r.planned + r.posted;
+            const pct = Math.min((used / r.quota) * 100, 100);
+            const over = used > r.quota;
+            return (
+              <div key={r.creativeType.id} className="flex items-center gap-1.5" title={`${r.creativeType.name}: ${used}/${r.quota} used this month`}>
+                <span className="text-xs">{r.creativeType.icon ?? "✨"}</span>
+                <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                  <div className={`h-full rounded-full ${over ? "bg-fuchsia-500" : pct >= 100 ? "bg-emerald-500" : "bg-indigo-500"}`}
+                    style={{ width: `${pct}%` }} />
+                </div>
+                <span className={`text-[10px] font-semibold ${over ? "text-fuchsia-600" : "text-gray-600"}`}>{used}/{r.quota}</span>
+              </div>
+            );
+          })}
+          {summary.totals.extra > 0 && (
+            <span className="text-[10px] font-semibold px-1.5 py-0.5 bg-fuchsia-50 text-fuchsia-600 rounded-full border border-fuchsia-200">
+              {summary.totals.extra} EXTRA
+            </span>
+          )}
+          {(summary.totals.carriedIn > 0 || summary.totals.carriedOut > 0) && (
+            <span className="text-[10px] font-semibold px-1.5 py-0.5 bg-orange-50 text-orange-600 rounded-full border border-orange-200">
+              {summary.totals.carriedIn} in / {summary.totals.carriedOut} out carried
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Month-end carry banner */}
       {carryCandidates.length > 0 && (
@@ -659,6 +755,12 @@ export function ContentCalendarTab({ clientId }: { clientId: string }) {
           types={types}
           editItem={dialog.edit}
           defaultDate={dialog.date}
+          quotaCheck={(creativeTypeId) => {
+            const row = summary?.perType.find((r) => r.creativeType.id === creativeTypeId);
+            const used = row ? row.planned + row.posted : 0;
+            const quota = row?.quota ?? 0;
+            return { full: quota > 0 && used >= quota, used, quota };
+          }}
           onClose={() => setDialog({ open: false })}
           onSaved={() => { setDialog({ open: false }); fetchItems(); }}
         />

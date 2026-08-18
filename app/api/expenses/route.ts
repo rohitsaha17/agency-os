@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { handleApiError, ApiError } from "@/lib/api-errors";
+import { canViewFinancials } from "@/lib/permissions";
 
 const expenseInclude = {
   project:     { select: { id: true, name: true, clientId: true } },
@@ -50,6 +51,12 @@ export async function GET(req: NextRequest) {
       orderBy: { date: "desc" },
       include: expenseInclude,
     });
+
+    // v2: amounts never reach MEMBER clients (server-side strip)
+    if (!canViewFinancials(user)) {
+      return NextResponse.json(expenses.map((e) => ({ ...e, amount: null })));
+    }
+
     return NextResponse.json(expenses);
   } catch (error) {
     return handleApiError(error, "GET /api/expenses");

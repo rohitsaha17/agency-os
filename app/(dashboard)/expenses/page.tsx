@@ -9,6 +9,8 @@ import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useDebounce } from "@/lib/hooks";
+import { formatMoney } from "@/lib/money";
+import { useCurrentUser } from "@/lib/useCurrentUser";
 import type { Expense, ExpenseCategory, ExpenseStatus, Project, Stakeholder, ClientSummary } from "@/types";
 
 const CATEGORY_LABELS: Record<ExpenseCategory, string> = {
@@ -42,7 +44,7 @@ const STATUS_ICONS: Record<ExpenseStatus, React.ReactNode> = {
 const CURRENCIES = ["USD", "EUR", "GBP", "INR", "AUD", "CAD", "SGD", "AED"];
 
 function formatCurrency(amount: number, currency: string) {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency, maximumFractionDigits: 0 }).format(amount);
+  return formatMoney(amount, currency, { precision: 0 });
 }
 
 function formatDate(d: string) {
@@ -60,6 +62,10 @@ function ExpensesPageInner() {
   const toast   = useToast();
   const confirm = useConfirm();
   const searchParams = useSearchParams();
+  const { user: currentUser } = useCurrentUser();
+  // Stat cards aggregate across records → use the organization currency
+  // (fixes the old hardcoded "$" while table rows showed "₹").
+  const orgCurrency = currentUser?.organization?.currency ?? "USD";
 
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(true);
@@ -71,6 +77,14 @@ function ExpensesPageInner() {
   const [filterStakeholderId, setFilterStakeholderId] = useState(() => searchParams.get("stakeholderId") ?? "");
   const [addOpen, setAddOpen] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
+
+  // New expenses default to the organization currency instead of USD.
+  useEffect(() => {
+    if (currentUser?.organization?.currency) {
+      setForm((f) => (f === EMPTY_FORM ? { ...f, currency: orgCurrency } : f));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orgCurrency]);
   const [saving, setSaving] = useState(false);
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [projects, setProjects] = useState<Pick<Project, "id" | "name">[]>([]);
@@ -149,7 +163,7 @@ function ExpensesPageInner() {
     setSaving(false);
     if (res.ok) {
       toast.success("Expense added");
-      setAddOpen(false); setForm(EMPTY_FORM); setReceiptFile(null); fetchExpenses();
+      setAddOpen(false); setForm({ ...EMPTY_FORM, currency: orgCurrency }); setReceiptFile(null); fetchExpenses();
     } else {
       toast.error("Failed to add expense");
     }
@@ -212,9 +226,9 @@ function ExpensesPageInner() {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-5">
           {[
             { label: "Total Expenses", value: filteredExpenses.length, sub: "records", icon: <TrendingDown className="w-4 h-4 text-gray-400" /> },
-            { label: "Paid", value: formatCurrency(totalPaid, "USD"), sub: "settled", icon: <CheckCircle2 className="w-4 h-4 text-emerald-400" /> },
-            { label: "Pending", value: formatCurrency(totalPending, "USD"), sub: "awaiting approval", icon: <Clock className="w-4 h-4 text-amber-400" /> },
-            { label: "Reimbursable", value: formatCurrency(reimbursable, "USD"), sub: "to bill to client", icon: <RefreshCw className="w-4 h-4 text-indigo-400" /> },
+            { label: "Paid", value: formatCurrency(totalPaid, orgCurrency), sub: "settled", icon: <CheckCircle2 className="w-4 h-4 text-emerald-400" /> },
+            { label: "Pending", value: formatCurrency(totalPending, orgCurrency), sub: "awaiting approval", icon: <Clock className="w-4 h-4 text-amber-400" /> },
+            { label: "Reimbursable", value: formatCurrency(reimbursable, orgCurrency), sub: "to bill to client", icon: <RefreshCw className="w-4 h-4 text-indigo-400" /> },
           ].map((s) => (
             <div key={s.label} className="bg-gray-50 rounded-xl px-4 py-3">
               <div className="flex items-center gap-2 mb-1">{s.icon}<span className="text-xs text-gray-500">{s.label}</span></div>

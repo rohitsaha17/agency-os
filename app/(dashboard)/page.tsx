@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useCurrentUser } from "@/lib/useCurrentUser";
+import { formatMoney } from "@/lib/money";
 import {
   AlertCircle, Clock, CheckCircle2, Ban, FolderKanban,
   TrendingUp, Users, FileText, HardDrive, ArrowRight,
@@ -18,12 +19,12 @@ interface DashboardStats {
   blockedTasksCount: number;
   filesInReview: number;
   activeClients: number;
-  pipelineValue: number;
+  pipelineValue: number | null; // null when the caller is a MEMBER (v2 strip)
   openQuotations: number;
   completionRate: number;
   monthCompletionRate: number;
   completedThisMonth: number;
-  expensesThisMonth: number;
+  expensesThisMonth: number | null; // null when the caller is a MEMBER (v2 strip)
   expenseCount: number;
   pendingExpenses: number;
 }
@@ -80,11 +81,10 @@ interface DashboardData {
 
 function fmt(n: number, currency = "USD") {
   // Compact notation keeps the correct currency symbol (₹1.2L stays ₹, not $)
-  return new Intl.NumberFormat("en-US", {
-    style: "currency", currency,
-    notation: n >= 1_000 ? "compact" : "standard",
-    maximumFractionDigits: n >= 1_000 ? 1 : 0,
-  }).format(n);
+  return formatMoney(n, currency, {
+    compact: n >= 1_000,
+    precision: n >= 1_000 ? 1 : 0,
+  });
 }
 
 function timeAgo(d: string) {
@@ -512,6 +512,8 @@ function MetricRing({ value, label, color }: { value: number; label: string; col
 
 export default function DashboardPage() {
   const { user: currentUser } = useCurrentUser();
+  // v2: MEMBERs never see money — cards hidden here, values stripped server-side
+  const canSeeMoney = !!currentUser && currentUser.role !== "MEMBER";
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -762,22 +764,27 @@ export default function DashboardPage() {
             color={stats.filesInReview > 0 ? "bg-sky-50" : "bg-gray-50"}
             href="/files"
           />
-          <StatCard
-            icon={<FileText className="w-5 h-5 text-purple-600" />}
-            label="Pipeline Value"
-            value={fmt(stats.pipelineValue, data.currency)}
-            sub={`${stats.openQuotations} open quotation${stats.openQuotations !== 1 ? "s" : ""}`}
-            color="bg-purple-50"
-            href="/quotations"
-          />
-          <StatCard
-            icon={<Receipt className="w-5 h-5 text-amber-600" />}
-            label="Expenses (Month)"
-            value={fmt(stats.expensesThisMonth, data.currency)}
-            sub={stats.pendingExpenses > 0 ? `${stats.pendingExpenses} pending` : `${stats.expenseCount} this month`}
-            color={stats.pendingExpenses > 0 ? "bg-amber-50" : "bg-gray-50"}
-            href="/expenses"
-          />
+          {/* v2: money cards are hidden from MEMBERs (API also strips values) */}
+          {canSeeMoney && (
+            <StatCard
+              icon={<FileText className="w-5 h-5 text-purple-600" />}
+              label="Pipeline Value"
+              value={fmt(stats.pipelineValue ?? 0, data.currency)}
+              sub={`${stats.openQuotations} open quotation${stats.openQuotations !== 1 ? "s" : ""}`}
+              color="bg-purple-50"
+              href="/quotations"
+            />
+          )}
+          {canSeeMoney && (
+            <StatCard
+              icon={<Receipt className="w-5 h-5 text-amber-600" />}
+              label="Expenses (Month)"
+              value={fmt(stats.expensesThisMonth ?? 0, data.currency)}
+              sub={stats.pendingExpenses > 0 ? `${stats.pendingExpenses} pending` : `${stats.expenseCount} this month`}
+              color={stats.pendingExpenses > 0 ? "bg-amber-50" : "bg-gray-50"}
+              href="/expenses"
+            />
+          )}
           <StatCard
             icon={<Users className="w-5 h-5 text-emerald-600" />}
             label="Active Clients"
@@ -843,10 +850,12 @@ export default function DashboardPage() {
                   <span className="text-gray-600">Tasks completed</span>
                   <span className="font-semibold text-gray-900">{stats.completedThisMonth} this month</span>
                 </div>
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-gray-600">Pipeline value</span>
-                  <span className="font-semibold text-indigo-700">{fmt(stats.pipelineValue, data.currency)}</span>
-                </div>
+                {canSeeMoney && (
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-gray-600">Pipeline value</span>
+                    <span className="font-semibold text-indigo-700">{fmt(stats.pipelineValue ?? 0, data.currency)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-gray-600">Active clients</span>
                   <span className="font-semibold text-gray-900">{stats.activeClients}</span>

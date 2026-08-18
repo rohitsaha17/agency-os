@@ -12,7 +12,9 @@ import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useDebounce } from "@/lib/hooks";
-import { formatMoney, calcInvoiceTotal } from "@/lib/format";
+import { calcInvoiceTotal } from "@/lib/format";
+import { formatMoney } from "@/lib/money";
+import { useCurrentUser } from "@/lib/useCurrentUser";
 import type { Invoice, InvoiceStatus, ClientSummary, Project } from "@/types";
 
 // ── Constants ─────────────────────────────────────────────────
@@ -300,6 +302,7 @@ function InvoiceFormModal({
 export default function InvoicesPage() {
   const toast   = useToast();
   const confirm = useConfirm();
+  const { user: currentUser } = useCurrentUser();
 
   const [invoices,      setInvoices]      = useState<Invoice[]>([]);
   const [loading,       setLoading]       = useState(true);
@@ -411,7 +414,8 @@ export default function InvoicesPage() {
   const isInvOverdue = (i: Invoice) =>
     i.status === "OVERDUE" ||
     (i.status === "SENT" && !!i.dueDate && new Date(i.dueDate) < new Date());
-  const displayCurrency = invoices[0]?.currency ?? "USD";
+  // Org-wide aggregates use the organization currency (not first-row guess).
+  const displayCurrency = currentUser?.organization?.currency ?? invoices[0]?.currency ?? "USD";
   const totalRevenue = invoices.filter((i) => i.status === "PAID").reduce((s, i) => s + calcTotal(i), 0);
   const outstanding  = invoices.filter((i) => ["DRAFT", "SENT", "OVERDUE"].includes(i.status)).reduce((s, i) => s + calcTotal(i), 0);
   const overdue      = invoices.filter(isInvOverdue).length;

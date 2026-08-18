@@ -130,6 +130,10 @@ export interface Client {
   taxRegistrations: TaxRegistration[] | null;
   notes: string | null;
   status: ClientStatus;
+  /** v2: overrides the org currency for everything client-scoped (null = inherit) */
+  currency?: string | null;
+  /** v2: attention level */
+  importance?: "NORMAL" | "IMPORTANT" | "VIP";
   createdAt: string;
   updatedAt: string;
   contacts: ClientContact[];
@@ -165,6 +169,8 @@ export interface ClientFormData {
   taxRegistrations: TaxRegistration[];
   notes: string;
   status: ClientStatus;
+  /** v2: "" = inherit organization currency */
+  currency?: string;
 }
 
 export interface ContactFormData {
@@ -872,12 +878,18 @@ export interface Organization {
 /** @deprecated Kept only for backwards compat during migration. Use Organization. */
 export type CompanySettings = Organization;
 
+export type Designation =
+  | "SMM" | "DESIGNER" | "EDITOR" | "HEAD_OF_DESIGN"
+  | "PHOTOGRAPHER" | "SME" | "POC" | "OTHER";
+
 export interface TeamUser {
   id: string;
   name: string;
   email: string;
   avatarUrl: string | null;
   role: UserRole;
+  /** v2: job label — routing & reports only, not a permission */
+  designation?: Designation | null;
   isActive: boolean;
   createdAt: string;
 }

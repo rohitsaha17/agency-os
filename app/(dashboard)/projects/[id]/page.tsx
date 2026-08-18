@@ -27,6 +27,7 @@ import type {
 } from "@/types";
 import { SERVICE_TYPES, RECURRING_FREQUENCIES } from "@/components/projects/ProjectForm";
 import { useCurrentUser } from "@/lib/useCurrentUser";
+import { formatMoney } from "@/lib/money";
 import { useToast } from "@/components/ui/Toast";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 
@@ -91,7 +92,7 @@ const EXPENSE_STATUS_COLORS: Record<ExpenseStatus, string> = {
 };
 
 function formatCurrency(amount: number, currency: string) {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency, maximumFractionDigits: 0 }).format(amount);
+  return formatMoney(amount, currency, { precision: 0 });
 }
 
 function flattenTasks(tasks: Task[]): Task[] {
@@ -105,7 +106,7 @@ function formatDate(d: string | null) {
 
 function formatBudget(budget: number | null, currency: string) {
   if (!budget) return null;
-  return new Intl.NumberFormat("en-US", { style: "currency", currency, maximumFractionDigits: 0 }).format(budget);
+  return formatMoney(budget, currency, { precision: 0 });
 }
 
 function ProgressRing({ progress }: { progress: number }) {

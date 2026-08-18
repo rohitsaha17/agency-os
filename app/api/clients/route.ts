@@ -4,6 +4,7 @@ import { requireAuth } from "@/lib/auth";
 import { apiError, handleApiError, ApiError } from "@/lib/api-errors";
 import { parsePagination, paginationMeta } from "@/lib/pagination";
 import { checkRateLimit, WRITE_RATE_LIMITS } from "@/lib/rate-limit";
+import { canViewContacts } from "@/lib/permissions";
 
 // GET /api/clients — list all clients with optional search + status filter
 export async function GET(req: NextRequest) {
@@ -43,13 +44,18 @@ export async function GET(req: NextRequest) {
       pagination.paginated ? prisma.client.count({ where }) : Promise.resolve(0),
     ]);
 
+    // v2: MEMBERs never receive contact people or client contact fields.
+    const visible = canViewContacts(user)
+      ? clients
+      : clients.map((c) => ({ ...c, contacts: [], email: null, phone: null }));
+
     if (pagination.paginated) {
       return NextResponse.json({
-        data: clients,
+        data: visible,
         pagination: paginationMeta(pagination, total),
       });
     }
-    return NextResponse.json(clients);
+    return NextResponse.json(visible);
   } catch (error) {
     return handleApiError(error, "GET /api/clients");
   }
@@ -67,7 +73,7 @@ export async function POST(req: NextRequest) {
     const {
       name, companyName, email, phone, jobTitle, website,
       industry, address, links, brandColors, brandAssets,
-      taxRegistrations, notes, status,
+      taxRegistrations, notes, status, currency, importance,
     } = body;
 
     // Company name is the entity identifier going forward.
@@ -107,6 +113,9 @@ export async function POST(req: NextRequest) {
           taxRegistrations: taxRegistrations?.length ? taxRegistrations : undefined,
           notes: notes?.trim() || null,
           status: status || "ACTIVE",
+          // v2: empty/absent = inherit organization currency
+          currency: typeof currency === "string" && currency.trim() ? currency.trim() : null,
+          ...(importance !== undefined && { importance }),
         },
       });
 

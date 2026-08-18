@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { handleApiError, ApiError } from "@/lib/api-errors";
+import { notifyMany } from "@/lib/notify";
 import type { Task } from "@/types";
 
 type Params = { params: Promise<{ id: string }> };
@@ -166,6 +167,20 @@ export async function POST(req: NextRequest, { params }: Params) {
         },
       },
     });
+
+    // v2: notify anyone assigned at creation (except the creator themselves)
+    if (assigneeIds?.length) {
+      await notifyMany(
+        (assigneeIds as string[]).filter((uid) => uid !== user.id),
+        {
+          organizationId: user.organizationId,
+          type: "TASK_ASSIGNED",
+          title: `You were assigned: "${task.title}"`,
+          body: `Assigned by ${user.name}.`,
+          link: `/projects/${projectId}?task=${task.id}`,
+        },
+      );
+    }
 
     return NextResponse.json(
       {

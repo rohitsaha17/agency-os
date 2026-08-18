@@ -4,6 +4,7 @@ import { requireAuth } from "@/lib/auth";
 import { apiError, handleApiError, ApiError } from "@/lib/api-errors";
 import { parsePagination, paginationMeta } from "@/lib/pagination";
 import { checkRateLimit, WRITE_RATE_LIMITS } from "@/lib/rate-limit";
+import { canViewFinancials } from "@/lib/permissions";
 
 const INCLUDE = {
   lineItems: { orderBy: { order: "asc" as const } },
@@ -43,14 +44,24 @@ export async function GET(req: NextRequest) {
       pagination.paginated ? prisma.invoice.count({ where }) : Promise.resolve(0),
     ]);
 
+    // v2: amounts never reach MEMBER clients (server-side strip)
+    const visible = canViewFinancials(user)
+      ? invoices
+      : invoices.map((inv) => ({
+          ...inv,
+          lineItems: (inv as { lineItems?: { unitPrice: unknown }[] }).lineItems?.map(
+            (li) => ({ ...li, unitPrice: null }),
+          ),
+        }));
+
     if (pagination.paginated) {
       return NextResponse.json({
-        data: invoices,
+        data: visible,
         pagination: paginationMeta(pagination, total),
       });
     }
     // Legacy contract: array shape
-    return NextResponse.json(invoices);
+    return NextResponse.json(visible);
   } catch (error) {
     return handleApiError(error, "GET /api/invoices");
   }

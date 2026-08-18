@@ -4,6 +4,7 @@ import { requireAuth } from "@/lib/auth";
 import { apiError, handleApiError, ApiError } from "@/lib/api-errors";
 import { parsePagination, paginationMeta } from "@/lib/pagination";
 import { checkRateLimit, WRITE_RATE_LIMITS } from "@/lib/rate-limit";
+import { canViewFinancials } from "@/lib/permissions";
 
 // GET /api/projects — list all projects with optional filters
 export async function GET(req: NextRequest) {
@@ -67,10 +68,16 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // v2: budgets never reach MEMBER clients (server-side strip)
+    const showFinancials = canViewFinancials(user);
     const result = projects.map((p) => {
       const t = totals.get(p.id) ?? 0;
       const d = dones.get(p.id) ?? 0;
-      return { ...p, progress: t > 0 ? Math.round((d / t) * 100) : 0 };
+      return {
+        ...p,
+        budget: showFinancials ? p.budget : null,
+        progress: t > 0 ? Math.round((d / t) * 100) : 0,
+      };
     });
 
     if (pagination.paginated) {

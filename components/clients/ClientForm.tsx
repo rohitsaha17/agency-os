@@ -6,6 +6,7 @@ import { ChevronDown, Plus, Trash2, Link2 } from "lucide-react";
 import { PhoneInput } from "@/components/ui/PhoneInput";
 import { Button } from "@/components/ui/Button";
 import { BrandAssetsEditor } from "./BrandAssetsEditor";
+import { useCurrentUser } from "@/lib/useCurrentUser";
 import type { ClientFormData, ClientStatus, BrandColor, BrandAsset, TaxRegistration, ClientLink, ClientLinkType } from "@/types";
 
 // ── Static data ──────────────────────────────────────────────
@@ -38,11 +39,17 @@ const LINK_TYPES: { value: ClientLinkType; label: string }[] = [
   { value: "other",    label: "Other" },
 ];
 
+const CURRENCIES = ["USD", "EUR", "GBP", "INR", "AUD", "CAD", "SGD", "AED"];
+
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  USD: "$", EUR: "€", GBP: "£", INR: "₹", AUD: "A$", CAD: "C$", SGD: "S$", AED: "د.إ",
+};
+
 const EMPTY_FORM: ClientFormData = {
   name: "", companyName: "", email: "", phone: "", jobTitle: "",
   website: "", industry: "", address: "", logoUrl: "",
   links: [], brandColors: [], brandAssets: [], taxRegistrations: [],
-  notes: "", status: "ACTIVE",
+  notes: "", status: "ACTIVE", currency: "",
 };
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -248,6 +255,8 @@ interface ClientFormProps {
 
 export function ClientForm({ initialData, clientId, onSuccess }: ClientFormProps) {
   const router = useRouter();
+  const { user: currentUser } = useCurrentUser();
+  const orgCurrency = currentUser?.organization?.currency;
   const [form, setForm] = useState<ClientFormData>({ ...EMPTY_FORM, ...initialData });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -315,6 +324,24 @@ export function ClientForm({ initialData, clientId, onSuccess }: ClientFormProps
               value={form.status}
               onChange={(v) => set("status", v as ClientStatus)}
               options={STATUS_OPTIONS}
+            />
+          </FormField>
+          <FormField label="Currency">
+            <SelectInput
+              value={form.currency ?? ""}
+              onChange={(v) => set("currency", v)}
+              options={[
+                {
+                  value: "",
+                  label: `Inherit organization currency (${
+                    orgCurrency ? `${CURRENCY_SYMBOLS[orgCurrency] ?? ""} ${orgCurrency}`.trim() : "default"
+                  })`,
+                },
+                ...CURRENCIES.map((c) => ({
+                  value: c,
+                  label: `${CURRENCY_SYMBOLS[c] ?? ""} ${c}`.trim(),
+                })),
+              ]}
             />
           </FormField>
         </div>

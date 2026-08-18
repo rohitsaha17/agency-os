@@ -5,6 +5,7 @@
  */
 
 import type { CompanySettings } from "@/types";
+import { formatMoney } from "@/lib/money";
 
 /* ── LetterheadConfig ────────────────────────────────────────── */
 export interface LetterheadConfig {
@@ -192,7 +193,7 @@ function baseStyles(accent: string, font: "sans" | "serif"): string {
 
 /* ── Helpers ────────────────────────────────────────────────── */
 function fmt(n: number, currency: string) {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency, maximumFractionDigits: 2 }).format(n);
+  return formatMoney(n, currency, { precision: 2 });
 }
 function fmtDate(d: string | null | undefined) {
   if (!d) return "—";

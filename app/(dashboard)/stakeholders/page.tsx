@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Plus, Search, Users2, Globe, Mail, Phone, Star, TrendingDown, UserCog } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { formatMoney } from "@/lib/money";
 import type { Stakeholder, StakeholderType } from "@/types";
 
 const TYPE_TABS: { label: string; value: StakeholderType | "ALL" }[] = [
@@ -39,7 +40,7 @@ function initials(name: string) {
 
 function formatRate(rate: number | null, currency: string) {
   if (!rate) return null;
-  return new Intl.NumberFormat("en-US", { style: "currency", currency, maximumFractionDigits: 0 }).format(rate);
+  return formatMoney(rate, currency, { precision: 0 });
 }
 
 export default function StakeholdersPage() {

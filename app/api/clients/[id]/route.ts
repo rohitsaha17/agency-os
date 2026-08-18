@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { apiError, handleApiError, ApiError } from "@/lib/api-errors";
+import { canViewContacts } from "@/lib/permissions";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -31,6 +32,16 @@ export async function GET(req: NextRequest, { params }: Params) {
       throw new ApiError("Client not found", 404);
     }
 
+    // v2: MEMBERs never receive client contact people or contact fields.
+    if (!canViewContacts(user)) {
+      return NextResponse.json({
+        ...client,
+        contacts: [],
+        email: null,
+        phone: null,
+      });
+    }
+
     return NextResponse.json(client);
   } catch (error) {
     return handleApiError(error, "GET /api/clients/[id]");
@@ -47,8 +58,12 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const {
       name, companyName, email, phone, jobTitle, website,
       industry, address, logoUrl, links, brandColors, brandAssets,
-      taxRegistrations, notes, status,
+      taxRegistrations, notes, status, currency, importance,
     } = body;
+
+    if (currency !== undefined && currency !== null && currency !== "" && typeof currency !== "string") {
+      throw new ApiError("Currency must be a string", 400);
+    }
 
     // Verify the client belongs to the caller's org before mutating.
     const existing = await prisma.client.findFirst({
@@ -89,6 +104,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           ...(taxRegistrations !== undefined && { taxRegistrations }),
           ...(notes !== undefined && { notes: notes?.trim() || null }),
           ...(status !== undefined && { status }),
+          // v2: empty string = inherit organization currency (stored as null)
+          ...(currency !== undefined && { currency: currency?.trim() || null }),
+          ...(importance !== undefined && { importance }),
         },
       });
 

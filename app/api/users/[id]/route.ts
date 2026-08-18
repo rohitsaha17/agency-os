@@ -5,6 +5,12 @@ import { handleApiError, ApiError } from "@/lib/api-errors";
 
 const ASSIGNABLE_ROLES = ["ADMIN", "MANAGER", "MEMBER"] as const;
 
+// v2 job labels — routing & report targeting, not permissions.
+const DESIGNATIONS = [
+  "SMM", "DESIGNER", "EDITOR", "HEAD_OF_DESIGN",
+  "PHOTOGRAPHER", "SME", "POC", "OTHER",
+] as const;
+
 // PATCH /api/users/[id] — update name, role, isActive
 export async function PATCH(
   req: NextRequest,
@@ -21,13 +27,16 @@ export async function PATCH(
     });
     if (!existing) throw new ApiError("User not found", 404);
 
-    const { name, email, role, isActive, avatarUrl } = await req.json();
+    const { name, email, role, isActive, avatarUrl, designation } = await req.json();
 
     // Profile fields (name/avatar/email) can be edited by the user themself
-    // or an admin; role and active status are admin-only.
+    // or an admin; role, designation, and active status are admin-only.
     const isSelf = caller.id === id;
-    if (!isSelf || role !== undefined || isActive !== undefined) {
+    if (!isSelf || role !== undefined || isActive !== undefined || designation !== undefined) {
       requireRole(caller, ["ADMIN"]);
+    }
+    if (designation !== undefined && designation !== null && !DESIGNATIONS.includes(designation)) {
+      throw new ApiError("Invalid designation", 400);
     }
     if (role !== undefined) {
       if (existing.role === "OWNER") {
@@ -60,10 +69,11 @@ export async function PATCH(
         ...(role      !== undefined && { role }),
         ...(isActive  !== undefined && { isActive }),
         ...(avatarUrl !== undefined && { avatarUrl }),
+        ...(designation !== undefined && { designation }),
       },
       select: {
         id: true, name: true, email: true, avatarUrl: true,
-        role: true, isActive: true, createdAt: true,
+        role: true, designation: true, isActive: true, createdAt: true,
       },
     });
 

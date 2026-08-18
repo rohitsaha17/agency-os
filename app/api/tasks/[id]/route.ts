@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, requireRole } from "@/lib/auth";
 import { apiError, handleApiError, ApiError } from "@/lib/api-errors";
+import { logStatus } from "@/lib/audit";
+import { notify, notifyMany } from "@/lib/notify";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -44,7 +46,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     // Verify the task belongs to the caller's org before mutating.
     const existing = await prisma.task.findFirst({
       where: { id, deletedAt: null, organizationId: user.organizationId },
-      select: { id: true, projectId: true },
+      select: {
+        id: true, projectId: true, status: true, title: true,
+        assignees: { select: { userId: true } },
+      },
     });
     if (!existing) throw new ApiError("Task not found", 404);
 
@@ -126,6 +131,43 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     // If status changed, recompute parent's progress and potentially auto-complete parent
     if (status !== undefined && task.parentId) {
       await recomputeAncestorProgress(task.parentId, 0);
+    }
+
+    // ── v2: audit + notifications ──────────────────────────────
+    if (status !== undefined && status !== existing.status) {
+      await logStatus({
+        organizationId: user.organizationId,
+        entityType: "TASK",
+        entityId: id,
+        from: existing.status,
+        to: status,
+        userId: user.id,
+      });
+      // Task sent for review → tell the manager/reviewer.
+      if (status === "IN_REVIEW" && task.managerId && task.managerId !== user.id) {
+        await notify({
+          organizationId: user.organizationId,
+          userId: task.managerId,
+          type: "TASK_IN_REVIEW",
+          title: `"${task.title}" is ready for review`,
+          body: `${user.name} moved the task to In Review.`,
+          link: `/projects/${task.projectId}?task=${id}`,
+        });
+      }
+    }
+    // Newly added assignees → "task assigned" notification.
+    if (assigneeIds !== undefined && Array.isArray(assigneeIds)) {
+      const before = new Set(existing.assignees.map((a) => a.userId));
+      const added = (assigneeIds as string[]).filter(
+        (uid) => !before.has(uid) && uid !== user.id,
+      );
+      await notifyMany(added, {
+        organizationId: user.organizationId,
+        type: "TASK_ASSIGNED",
+        title: `You were assigned: "${task.title}"`,
+        body: `Assigned by ${user.name}.`,
+        link: `/projects/${task.projectId}?task=${id}`,
+      });
     }
 
     return NextResponse.json(serializeTask(task));

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { apiError, handleApiError, ApiError } from "@/lib/api-errors";
 import { checkRateLimit, WRITE_RATE_LIMITS } from "@/lib/rate-limit";
+import { canViewFinancials } from "@/lib/permissions";
 
 const receiptInclude = {
   client: { select: { id: true, name: true, companyName: true } },
@@ -26,6 +27,11 @@ export async function GET(req: NextRequest) {
       include: receiptInclude,
       orderBy: { receivedAt: "desc" },
     });
+
+    // v2: amounts never reach MEMBER clients (server-side strip)
+    if (!canViewFinancials(user)) {
+      return NextResponse.json(receipts.map((r) => ({ ...r, amount: null })));
+    }
 
     return NextResponse.json(receipts);
   } catch (err) {

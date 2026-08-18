@@ -9,10 +9,12 @@ export interface CurrentUser {
   email: string;
   role: "OWNER" | "ADMIN" | "MANAGER" | "MEMBER";
   avatarUrl: string | null;
+  designation?: string | null;
   organization?: {
     id: string;
     name: string;
     logoUrl: string | null;
+    currency?: string;
   } | null;
 }
 

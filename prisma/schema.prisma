@@ -29,6 +29,26 @@ enum ClientStatus {
   ARCHIVED // Soft-deleted
 }
 
+// v2: how much attention a client warrants (drives reminder targeting)
+enum ClientImportance {
+  NORMAL
+  IMPORTANT
+  VIP
+}
+
+// v2: job label for team members — routing & report targeting only,
+// NOT a permission level (that stays UserRole).
+enum Designation {
+  SMM
+  DESIGNER
+  EDITOR
+  HEAD_OF_DESIGN
+  PHOTOGRAPHER
+  SME
+  POC
+  OTHER
+}
+
 enum ProjectType {
   ONE_TIME // Fixed scope project
   RETAINER // Ongoing recurring engagement
@@ -168,6 +188,8 @@ model User {
   name           String
   avatarUrl      String?
   role           UserRole  @default(MEMBER)
+  // v2: job label (SMM, designer, …) — display/routing only, not a permission
+  designation    Designation?
   isActive       Boolean   @default(true)
   // Login password. Nullable so users created before passwords existed (and
   // freshly-invited teammates) are prompted to set one on first sign-in.
@@ -192,6 +214,8 @@ model User {
   channelMemberships ChannelMember[]
   sentMessages       ChatMessage[]   @relation("SentMessages")
   projectMemberships ProjectMember[]
+  statusChanges      StatusHistory[] @relation("StatusChanges")
+  notifications      Notification[]
 
   @@unique([organizationId, email])
   @@index([organizationId])
@@ -249,6 +273,10 @@ model Client {
   taxRegistrations Json? // [{ id, type, number, country }]
   notes            String?
   status           ClientStatus @default(ACTIVE)
+  // v2: overrides the organization currency for everything client-scoped
+  currency         String?
+  // v2: attention level — drives reminder targeting later
+  importance       ClientImportance @default(NORMAL)
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
 
@@ -1082,6 +1110,54 @@ model Organization {
   folders       Folder[]
   channels      Channel[]
   taskTemplates TaskTemplate[]
+  statusHistory StatusHistory[]
+  notifications Notification[]
 
   @@map("organizations")
+}
+
+// ============================================================
+// V2 — STATUS HISTORY (universal audit trail)
+// ============================================================
+
+model StatusHistory {
+  id             String   @id @default(cuid())
+  organizationId String
+  entityType     String // "TASK" | "PROJECT" | later: "CONTENT_ITEM", "BOOKING", "INVOICE", …
+  entityId       String
+  fromStatus     String?
+  toStatus       String
+  changedById    String?
+  changedAt      DateTime @default(now())
+  note           String?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  changedBy    User?        @relation("StatusChanges", fields: [changedById], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([organizationId])
+  @@map("status_history")
+}
+
+// ============================================================
+// V2 — NOTIFICATIONS (in-app notification center)
+// ============================================================
+
+model Notification {
+  id             String    @id @default(cuid())
+  organizationId String
+  userId         String
+  type           String // e.g. "TASK_ASSIGNED", "TASK_IN_REVIEW"
+  title          String
+  body           String?
+  link           String?
+  readAt         DateTime?
+  createdAt      DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+  @@index([userId, createdAt])
+  @@map("notifications")
 }

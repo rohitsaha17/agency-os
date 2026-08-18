@@ -16,6 +16,19 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
    ───────────────────────────────────────────────────────────── */
 type Tab = "company" | "letterhead" | "users" | "roles" | "account";
 
+// v2: job labels (designation) — display/routing only, not permissions
+const DESIGNATION_OPTIONS: { value: string; label: string }[] = [
+  { value: "",               label: "No designation" },
+  { value: "SMM",            label: "Social Media Manager" },
+  { value: "DESIGNER",       label: "Designer" },
+  { value: "EDITOR",         label: "Editor" },
+  { value: "HEAD_OF_DESIGN", label: "Head of Design" },
+  { value: "PHOTOGRAPHER",   label: "Photographer" },
+  { value: "SME",            label: "SME" },
+  { value: "POC",            label: "POC" },
+  { value: "OTHER",          label: "Other" },
+];
+
 function initials(name: string) {
   return name.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase();
 }
@@ -1052,7 +1065,7 @@ function UsersTab() {
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [editId, setEditId]   = useState<string | null>(null);
-  const [newForm, setNewForm] = useState({ name: "", email: "", role: "MEMBER" });
+  const [newForm, setNewForm] = useState({ name: "", email: "", role: "MEMBER", designation: "" });
   const [saving, setSaving]   = useState(false);
   const [error, setError]     = useState("");
 
@@ -1071,12 +1084,12 @@ function UsersTab() {
       const res = await fetch("/api/users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newForm),
+        body: JSON.stringify({ ...newForm, designation: newForm.designation || null }),
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error?.message ?? "Failed"); return; }
       setUsers((p) => [...p, data]);
-      setNewForm({ name: "", email: "", role: "MEMBER" });
+      setNewForm({ name: "", email: "", role: "MEMBER", designation: "" });
       setShowAdd(false);
       toast.success(`${data.name} added to team`);
     } finally { setSaving(false); }
@@ -1094,6 +1107,21 @@ function UsersTab() {
       toast.success("Role updated");
     } else {
       toast.error("Failed to update role");
+    }
+  };
+
+  const handleDesignationChange = async (userId: string, designation: string) => {
+    const res = await fetch(`/api/users/${userId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ designation: designation || null }),
+    });
+    if (res.ok) {
+      const updated = await res.json();
+      setUsers((p) => p.map((u) => u.id === userId ? updated : u));
+      toast.success("Designation updated");
+    } else {
+      toast.error("Failed to update designation");
     }
   };
 
@@ -1169,6 +1197,18 @@ function UsersTab() {
                 </select>
                 <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
               </div>
+              <div className="relative">
+                <select
+                  value={newForm.designation}
+                  onChange={(e) => setNewForm((p) => ({ ...p, designation: e.target.value }))}
+                  className="w-full appearance-none px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                >
+                  {DESIGNATION_OPTIONS.map((d) => (
+                    <option key={d.value} value={d.value}>{d.label}</option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+              </div>
             </div>
             {error && <p className="text-xs text-red-600">{error}</p>}
             <div className="flex gap-2">
@@ -1200,6 +1240,7 @@ function UsersTab() {
                 key={user.id}
                 user={user}
                 onRoleChange={handleRoleChange}
+                onDesignationChange={handleDesignationChange}
                 onToggleActive={handleToggleActive}
               />
             ))}
@@ -1215,6 +1256,7 @@ function UsersTab() {
                 key={user.id}
                 user={user}
                 onRoleChange={handleRoleChange}
+                onDesignationChange={handleDesignationChange}
                 onToggleActive={handleToggleActive}
               />
             ))}
@@ -1226,10 +1268,11 @@ function UsersTab() {
 }
 
 function UserRow({
-  user, onRoleChange, onToggleActive,
+  user, onRoleChange, onDesignationChange, onToggleActive,
 }: {
   user: TeamUser;
   onRoleChange: (id: string, role: string) => void;
+  onDesignationChange: (id: string, designation: string) => void;
   onToggleActive: (id: string, isActive: boolean) => void;
 }) {
   const badge = ROLE_LABELS[user.role] ?? ROLE_LABELS.MEMBER;
@@ -1247,6 +1290,24 @@ function UserRow({
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-gray-800 truncate">{user.name}</p>
         <p className="text-xs text-gray-400 truncate">{user.email}</p>
+      </div>
+
+      {/* Designation select (v2 — job label, not permission) */}
+      <div className="flex-shrink-0 hidden sm:block">
+        <div className="relative">
+          <select
+            value={user.designation ?? ""}
+            onChange={(e) => onDesignationChange(user.id, e.target.value)}
+            disabled={!user.isActive}
+            className="appearance-none text-xs font-medium px-2.5 py-1 rounded-full border cursor-pointer focus:outline-none focus:ring-1 focus:ring-indigo-500 pr-6 bg-gray-50 text-gray-600 border-gray-200"
+            title="Designation"
+          >
+            {DESIGNATION_OPTIONS.map((d) => (
+              <option key={d.value} value={d.value}>{d.label}</option>
+            ))}
+          </select>
+          <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 pointer-events-none opacity-60" />
+        </div>
       </div>
 
       {/* Role badge / select */}

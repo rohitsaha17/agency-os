@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { handleApiError, ApiError } from "@/lib/api-errors";
+import { canViewFinancials } from "@/lib/permissions";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -34,6 +35,20 @@ export async function GET(req: NextRequest, { params }: Params) {
     const reimbursableTotal = expenses
       .filter((e) => e.isReimbursable && e.status !== "REJECTED")
       .reduce((sum, e) => sum + Number(e.amount), 0);
+
+    // v2: amounts never reach MEMBER clients (server-side strip)
+    if (!canViewFinancials(user)) {
+      return NextResponse.json({
+        expenses: expenses.map((e) => ({ ...e, amount: null })),
+        summary: {
+          total: null,
+          budget: null,
+          remaining: null,
+          reimbursable: null,
+          currency: project.currency || "USD",
+        },
+      });
+    }
 
     return NextResponse.json({
       expenses,

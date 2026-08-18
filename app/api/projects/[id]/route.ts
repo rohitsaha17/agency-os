@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth, requireRole } from "@/lib/auth";
 import { apiError, handleApiError, ApiError } from "@/lib/api-errors";
 import { checkRateLimit, WRITE_RATE_LIMITS } from "@/lib/rate-limit";
+import { logStatus } from "@/lib/audit";
+import { canViewFinancials } from "@/lib/permissions";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -28,8 +30,14 @@ export async function GET(req: NextRequest, { params }: Params) {
       prisma.task.count({ where: { projectId: id, status: "DONE", deletedAt: null } }),
     ]);
 
+    // v2: money never reaches MEMBER clients (budget + quotation total)
+    const showFinancials = canViewFinancials(user);
     return NextResponse.json({
       ...project,
+      budget: showFinancials ? project.budget : null,
+      quotation: project.quotation && !showFinancials
+        ? { ...project.quotation, total: null }
+        : project.quotation,
       progress: total > 0 ? Math.round((done / total) * 100) : 0,
     });
   } catch (error) {
@@ -47,7 +55,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     // Verify the project belongs to the caller's org before mutating.
     const existing = await prisma.project.findFirst({
       where: { id, organizationId: user.organizationId },
-      select: { id: true },
+      select: { id: true, status: true },
     });
     if (!existing) throw new ApiError("Project not found", 404);
 
@@ -95,6 +103,18 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         _count: { select: { tasks: true } },
       },
     });
+
+    // v2 audit: record the status transition
+    if (status !== undefined && status !== existing.status) {
+      await logStatus({
+        organizationId: user.organizationId,
+        entityType: "PROJECT",
+        entityId: id,
+        from: existing.status,
+        to: status,
+        userId: user.id,
+      });
+    }
 
     const [total, done] = await Promise.all([
       prisma.task.count({ where: { projectId: id, deletedAt: null } }),

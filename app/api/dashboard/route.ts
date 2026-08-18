@@ -2,11 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { handleApiError } from "@/lib/api-errors";
+import { canViewFinancials } from "@/lib/permissions";
 
 export async function GET(req: NextRequest) {
   try {
     const user = await requireAuth(req);
     const orgId = user.organizationId;
+    const showFinancials = canViewFinancials(user);
 
     const now      = new Date();
     const today    = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -409,12 +411,13 @@ export async function GET(req: NextRequest) {
         blockedTasksCount: taskMap["BLOCKED"] ?? 0,
         filesInReview,
         activeClients,
-        pipelineValue:     Number(quotationPipeline._sum.total ?? 0),
+        // v2: money never reaches MEMBER clients (server-side strip)
+        pipelineValue:     showFinancials ? Number(quotationPipeline._sum.total ?? 0) : null,
         openQuotations:    quotationPipeline._count.id,
         completionRate,
         monthCompletionRate,
         completedThisMonth,
-        expensesThisMonth:  Number(expenseThisMonth._sum.amount ?? 0),
+        expensesThisMonth:  showFinancials ? Number(expenseThisMonth._sum.amount ?? 0) : null,
         expenseCount:       expenseThisMonth._count.id,
         pendingExpenses,
       },

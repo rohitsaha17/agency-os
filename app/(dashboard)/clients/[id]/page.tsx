@@ -24,7 +24,8 @@ import { useToast } from "@/components/ui/Toast";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useCurrentUser } from "@/lib/useCurrentUser";
 import { Client, ContactFormData, ClientContact, ProjectStatus, ProjectType, Quotation, AssetFile, ContractType, ContractPartyType, Stakeholder, User, Invoice, InvoiceStatus, Channel, ChatMessage, Expense, ExpenseCategory, ExpenseStatus, Receipt, ReceiptMethod } from "@/types";
-import { formatMoney, calcInvoiceTotal } from "@/lib/format";
+import { calcInvoiceTotal } from "@/lib/format";
+import { formatMoney, resolveClientCurrency } from "@/lib/money";
 
 // ── helpers ──────────────────────────────────────────────────
 type Tab = "overview" | "contacts" | "brand" | "tax" | "projects" | "quotations" | "files" | "contracts" | "chat" | "invoices" | "expenses" | "receipts";
@@ -218,6 +219,7 @@ export default function ClientDetailPage() {
   const confirm = useConfirm();
   const { user: currentUser } = useCurrentUser();
   const canManageChannels = currentUser?.role === "ADMIN" || currentUser?.role === "MANAGER";
+  const isMember = currentUser?.role === "MEMBER";
   const [client, setClient] = useState<Client | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -802,7 +804,8 @@ export default function ClientDetailPage() {
   const initials = displayName.split(" ").map((w) => w[0]).filter(Boolean).join("").slice(0, 2).toUpperCase();
   const tabs: { id: Tab; label: string }[] = [
     { id: "overview",    label: "Overview" },
-    { id: "contacts",    label: `Contacts (${client.contacts.length})` },
+    // v2: MEMBERs never see client contacts (API strips them too)
+    ...(isMember ? [] : [{ id: "contacts" as Tab, label: `Contacts (${client.contacts.length})` }]),
     { id: "brand",       label: `Brand (${brandColors.length + brandAssets.length})` },
     { id: "tax",         label: "Tax & Billing" },
     { id: "projects",    label: `Projects (${client.projects.length})` },
@@ -913,13 +916,11 @@ export default function ClientDetailPage() {
             .filter((ex) => ex.status === "PAID" || ex.status === "APPROVED")
             .reduce((s, ex) => s + Number(ex.amount ?? 0), 0);
           const netMargin = paidTotal - expensesTotal;
-          // Most-common currency among invoices / receipts / expenses; fallback USD
-          const currencyCounts: Record<string, number> = {};
-          [...invoices, ...receipts, ...expenses, ...quotations].forEach((item) => {
-            const c = (item as { currency?: string }).currency;
-            if (c) currencyCounts[c] = (currencyCounts[c] ?? 0) + 1;
-          });
-          const dominantCurrency = Object.entries(currencyCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "USD";
+          // v2: client currency override → org currency → USD
+          const dominantCurrency = resolveClientCurrency(
+            client,
+            currentUser?.organization,
+          );
           const finStats: { label: string; value: number; color: string; icon: typeof DollarSign }[] = [
             { label: "Pipeline (Quotations)", value: pipelineTotal, color: "text-indigo-600", icon: FileText },
             { label: "Invoiced", value: invoicedTotal, color: "text-gray-700", icon: DollarSign },
@@ -930,7 +931,8 @@ export default function ClientDetailPage() {
           ];
           return (
           <div className="max-w-2xl space-y-6">
-            {/* Financial Summary */}
+            {/* Financial Summary — hidden from MEMBERs (v2; API strips values too) */}
+            {!isMember && (
             <div className="bg-white border border-gray-200 rounded-xl p-5">
               <div className="flex items-center gap-2 mb-4">
                 <DollarSign className="w-4 h-4 text-gray-400" />
@@ -950,6 +952,7 @@ export default function ClientDetailPage() {
                 ))}
               </div>
             </div>
+            )}
 
             <div className="bg-white border border-gray-200 rounded-xl divide-y divide-gray-100">
               {[
@@ -1267,7 +1270,7 @@ export default function ClientDetailPage() {
                       </div>
                       <div className="flex items-center gap-3 flex-shrink-0">
                         <span className="text-sm font-semibold text-gray-700">
-                          {new Intl.NumberFormat("en-US", { style: "currency", currency: q.currency, maximumFractionDigits: 0 }).format(Number(q.total))}
+                          {formatMoney(Number(q.total), resolveClientCurrency(client, currentUser?.organization), { precision: 0 })}
                         </span>
                         <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${statusColor}`}>
                           {q.status.charAt(0) + q.status.slice(1).toLowerCase()}
@@ -1318,7 +1321,7 @@ export default function ClientDetailPage() {
                       <span className="text-xs text-gray-500">{label}</span>
                     </div>
                     <p className={`text-lg font-semibold ${color}`}>
-                      {new Intl.NumberFormat("en-US", { style: "currency", currency: invoices[0]?.currency ?? "USD", maximumFractionDigits: 0 }).format(value)}
+                      {formatMoney(value, resolveClientCurrency(client, currentUser?.organization), { precision: 0 })}
                     </p>
                   </div>
                 ))}
@@ -1386,7 +1389,7 @@ export default function ClientDetailPage() {
                               {inv.dueDate ? new Date(inv.dueDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "--"}
                             </td>
                             <td className="px-4 py-3 text-right font-semibold text-gray-700 text-sm">
-                              {new Intl.NumberFormat("en-US", { style: "currency", currency: inv.currency, maximumFractionDigits: 0 }).format(amount)}
+                              {formatMoney(amount, resolveClientCurrency(client, currentUser?.organization), { precision: 0 })}
                             </td>
                             <td className="px-4 py-3 text-right">
                               {inv.status !== "PAID" && (
@@ -1747,7 +1750,7 @@ export default function ClientDetailPage() {
         {/* ── EXPENSES ── */}
         {tab === "expenses" && (() => {
           const totalAmount = expenses.reduce((s, e) => s + Number(e.amount ?? 0), 0);
-          const currency = expenses[0]?.currency ?? "USD";
+          const currency = resolveClientCurrency(client, currentUser?.organization);
 
           // Group: each project (this client's) + a "Direct (no project)" bucket
           const groups: { key: string; label: string; projectId: string | null; items: Expense[] }[] = [];
@@ -1888,7 +1891,7 @@ export default function ClientDetailPage() {
         {/* ── RECEIPTS ── */}
         {tab === "receipts" && (() => {
           const totalReceived = receipts.reduce((s, r) => s + Number(r.amount ?? 0), 0);
-          const currency = receipts[0]?.currency ?? "USD";
+          const currency = resolveClientCurrency(client, currentUser?.organization);
           const METHOD_LABELS: Record<ReceiptMethod, string> = {
             BANK_TRANSFER: "Bank Transfer",
             CASH: "Cash",
@@ -2217,6 +2220,7 @@ export default function ClientDetailPage() {
               taxRegistrations: client.taxRegistrations ?? [],
               notes: client.notes ?? "",
               status: client.status,
+              currency: client.currency ?? "",
             };
           })()}
           onSuccess={() => {

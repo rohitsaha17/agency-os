@@ -16,6 +16,7 @@ export async function GET(req: NextRequest) {
         email: true,
         avatarUrl: true,
         role: true,
+        designation: true,
         isActive: true,
         createdAt: true,
         organizationId: true,

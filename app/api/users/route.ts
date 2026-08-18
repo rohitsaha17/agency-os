@@ -7,6 +7,12 @@ import { handleApiError, ApiError } from "@/lib/api-errors";
 // assignable — it belongs to the account created at tenant setup.
 const ASSIGNABLE_ROLES = ["ADMIN", "MANAGER", "MEMBER"] as const;
 
+// v2 job labels — routing & report targeting, not permissions.
+const DESIGNATIONS = [
+  "SMM", "DESIGNER", "EDITOR", "HEAD_OF_DESIGN",
+  "PHOTOGRAPHER", "SME", "POC", "OTHER",
+] as const;
+
 // GET /api/users
 export async function GET(req: NextRequest) {
   try {
@@ -21,7 +27,7 @@ export async function GET(req: NextRequest) {
       },
       select: {
         id: true, name: true, email: true, avatarUrl: true,
-        role: true, isActive: true, createdAt: true,
+        role: true, designation: true, isActive: true, createdAt: true,
       },
       orderBy: { name: "asc" },
     });
@@ -36,11 +42,14 @@ export async function POST(req: NextRequest) {
   try {
     const user = await requireAuth(req);
     requireRole(user, ["ADMIN"]);
-    const { name, email, role } = await req.json();
+    const { name, email, role, designation } = await req.json();
     if (!name?.trim()) throw new ApiError("Name is required", 400);
     if (!email?.trim()) throw new ApiError("Email is required", 400);
     if (role !== undefined && !ASSIGNABLE_ROLES.includes(role)) {
       throw new ApiError("Invalid role", 400);
+    }
+    if (designation != null && !DESIGNATIONS.includes(designation)) {
+      throw new ApiError("Invalid designation", 400);
     }
 
     const normalizedEmail = email.trim().toLowerCase();
@@ -58,10 +67,11 @@ export async function POST(req: NextRequest) {
         name:  name.trim(),
         email: normalizedEmail,
         role:  role ?? "MEMBER",
+        designation: designation ?? null,
       },
       select: {
         id: true, name: true, email: true, avatarUrl: true,
-        role: true, isActive: true, createdAt: true,
+        role: true, designation: true, isActive: true, createdAt: true,
       },
     });
 

@@ -13,6 +13,7 @@ import { ThemeToggle, ThemeToggleIcon } from "@/components/ui/ThemeToggle";
 import { BrandLogo } from "@/components/ui/BrandLogo";
 import { useTheme } from "@/components/providers/ThemeProvider";
 import { GlobalSearch } from "@/components/ui/GlobalSearch";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 
 /* ─────────────────────────────────────────────────────────────
    Nav structure
@@ -129,11 +130,18 @@ function NavContent({
 }: {
   pathname: string;
   onClose?: () => void;
-  appUser?: { name: string; email: string } | null;
+  appUser?: { name: string; email: string; role?: string } | null;
   unreadCount: number;
 }) {
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
+
+  // v2 visibility rule: MEMBERs never see the Finance section.
+  // (Server-side stripping is the real enforcement — this is the UI layer.)
+  const visibleNavItems =
+    appUser?.role === "MEMBER"
+      ? navItems.filter((section) => section.group !== "Finance")
+      : navItems;
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
@@ -144,7 +152,7 @@ function NavContent({
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto py-2 px-2.5 space-y-5">
-        {navItems.map((section) => (
+        {visibleNavItems.map((section) => (
           <div key={section.group}>
             <p className="px-3 mb-1 text-[10px] font-semibold text-slate-600 uppercase tracking-widest select-none">
               {section.group}
@@ -309,9 +317,10 @@ export function Sidebar() {
         {/* Subtle top border accent */}
         <div className="absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-indigo-500/40 to-transparent" />
 
-        {/* Logo / Brand */}
-        <div className="h-16 flex items-center px-5 border-b border-white/[0.06] flex-shrink-0">
+        {/* Logo / Brand + notification bell */}
+        <div className="h-16 flex items-center justify-between px-5 border-b border-white/[0.06] flex-shrink-0">
           <Logo />
+          <NotificationBell />
         </div>
 
         <NavContent pathname={pathname} appUser={appUser} unreadCount={unreadCount} />
@@ -321,6 +330,7 @@ export function Sidebar() {
       <div className="lg:hidden fixed top-0 inset-x-0 h-14 bg-slate-900 flex items-center justify-between px-4 z-40 border-b border-white/[0.06]">
         <Logo />
         <div className="flex items-center gap-1">
+          <NotificationBell align="right" />
           <ThemeToggleIcon />
           <button
             onClick={() => setOpen(true)}

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { handleApiError, ApiError } from "@/lib/api-errors";
+import { canViewFinancials } from "@/lib/permissions";
 
 // ── Helpers ──────────────────────────────────────────────────
 
@@ -62,6 +63,13 @@ export async function GET(req: Request) {
       },
       orderBy: { createdAt: "desc" },
     });
+
+    // v2: amounts never reach MEMBER clients (server-side strip)
+    if (!canViewFinancials(user)) {
+      return NextResponse.json(
+        quotations.map((q) => ({ ...q, subtotal: null, total: null, discountValue: null })),
+      );
+    }
 
     return NextResponse.json(quotations);
   } catch (error) {

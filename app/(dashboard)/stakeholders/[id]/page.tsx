@@ -7,6 +7,7 @@ import { ChevronRight, Mail, Phone, Globe, MapPin, Edit3, FileText, TrendingDown
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { PhoneInput } from "@/components/ui/PhoneInput";
+import { formatMoney } from "@/lib/money";
 import type { Stakeholder, StakeholderType, StakeholderRole } from "@/types";
 
 const TYPE_COLORS: Record<StakeholderType, string> = {
@@ -39,7 +40,7 @@ type StakeholderDetail = Stakeholder & {
 };
 
 function formatCurrency(amount: number, currency: string) {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency, maximumFractionDigits: 0 }).format(amount);
+  return formatMoney(amount, currency, { precision: 0 });
 }
 
 function formatDate(d: string) {

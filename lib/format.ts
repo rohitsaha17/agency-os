@@ -70,6 +70,8 @@ export function formatNumber(n: number, precision = 0): string {
 export interface InvoiceLineItemLike {
   quantity: number | string;
   unitPrice: number | string;
+  /** v2: complimentary lines are excluded from totals */
+  isFree?: boolean;
 }
 
 export interface InvoiceRates {
@@ -109,7 +111,7 @@ export function calcInvoiceTotal(
   rates: InvoiceRates = {},
 ): InvoiceTotalBreakdown {
   const subtotal = lineItems.reduce(
-    (s, li) => s + toFloat(li.quantity) * toFloat(li.unitPrice),
+    (s, li) => (li.isFree ? s : s + toFloat(li.quantity) * toFloat(li.unitPrice)),
     0,
   );
   const discountPct = toFloat(rates.discountRate);

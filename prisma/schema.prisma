@@ -555,6 +555,7 @@ model ContentItem {
   carriedTo     ContentItem[] @relation("CarryForward")
   createdBy     User?         @relation("CreatedContentItems", fields: [createdById], references: [id])
   tasks         Task[]        @relation("ContentItemTasks")
+  billedLines   InvoiceLineItem[] @relation("BilledContentItems")
 
   @@index([organizationId, clientId, date])
   @@index([clientId, status])
@@ -791,6 +792,13 @@ model Invoice {
   @@map("invoices")
 }
 
+// v2: what a line bills — the monthly package, an extra deliverable, or custom
+enum LineItemKind {
+  PACKAGE
+  EXTRA
+  CUSTOM
+}
+
 model InvoiceLineItem {
   id          String  @id @default(cuid())
   invoiceId   String
@@ -799,8 +807,13 @@ model InvoiceLineItem {
   unitPrice   Decimal @db.Decimal(10, 2)
   unit        String?
   order       Int     @default(0)
+  // ── v2 fields ──
+  kind          LineItemKind @default(CUSTOM)
+  isFree        Boolean      @default(false) // complimentary — excluded from totals
+  contentItemId String?
 
-  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoice     Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  contentItem ContentItem? @relation("BilledContentItems", fields: [contentItemId], references: [id])
 
   @@map("invoice_line_items")
 }

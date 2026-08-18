@@ -150,6 +150,7 @@ export async function POST(req: NextRequest) {
 
       let resolvedLineItems = lineItems as {
         description: string; quantity: number; unitPrice: number; unit?: string; order?: number;
+        kind?: "PACKAGE" | "EXTRA" | "CUSTOM"; isFree?: boolean; contentItemId?: string | null;
       }[] | undefined;
       let resolvedDiscountPct = discountPct != null ? parseFloat(discountPct) : null;
       let resolvedTaxPct = taxPct != null ? parseFloat(taxPct) : null;
@@ -184,7 +185,7 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      return tx.invoice.create({
+      const created = await tx.invoice.create({
         data: {
           organizationId: user.organizationId,
           invoiceNumber,
@@ -201,14 +202,30 @@ export async function POST(req: NextRequest) {
             create: (resolvedLineItems ?? []).map((li, i) => ({
               description: li.description,
               quantity:    li.quantity ?? 1,
-              unitPrice:   li.unitPrice ?? 0,
+              unitPrice:   li.isFree ? 0 : (li.unitPrice ?? 0),
               unit:        li.unit ?? null,
               order:       li.order ?? i,
+              kind:        li.kind ?? "CUSTOM",
+              isFree:      !!li.isFree,
+              contentItemId: li.contentItemId ?? null,
             })),
           },
         },
         include: INCLUDE,
       });
+
+      // v2: stamp billed content items (included AND free — excluded ones
+      // stay claimable next time)
+      const billedIds = (resolvedLineItems ?? [])
+        .filter((li) => li.kind === "EXTRA" && li.contentItemId)
+        .map((li) => li.contentItemId!) as string[];
+      if (billedIds.length) {
+        await tx.contentItem.updateMany({
+          where: { id: { in: billedIds }, organizationId: user.organizationId },
+          data: { invoicedInId: created.id },
+        });
+      }
+      return created;
       });
     }
 

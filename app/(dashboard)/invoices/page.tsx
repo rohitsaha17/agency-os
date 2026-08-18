@@ -65,9 +65,14 @@ function EmptyState({ onNew }: { onNew: () => void }) {
 
 interface LineItemDraft {
   description: string; quantity: string; unitPrice: string; unit: string;
+  // v2 (Phase 7): package/extra billing
+  kind?: "PACKAGE" | "EXTRA" | "CUSTOM";
+  contentItemId?: string | null;
+  /** EXTRA lines: include (bill), exclude (drop, claimable later), free (0, complimentary) */
+  mode?: "include" | "exclude" | "free";
 }
 
-const EMPTY_LINE: LineItemDraft = { description: "", quantity: "1", unitPrice: "0", unit: "" };
+const EMPTY_LINE: LineItemDraft = { description: "", quantity: "1", unitPrice: "0", unit: "", kind: "CUSTOM", mode: "include" };
 
 function InvoiceFormModal({
   open, onClose, onCreated, clients, projects,
@@ -86,6 +91,40 @@ function InvoiceFormModal({
   const [lineItems, setLineItems] = useState<LineItemDraft[]>([{ ...EMPTY_LINE }]);
   const [quotations, setQuotations] = useState<{ id: string; number: string; title: string; clientId: string }[]>([]);
   const [fromQuotation, setFromQuotation] = useState(false);
+  // v2 Phase 7: generate from a client's package month
+  const [fromMonth, setFromMonth] = useState(false);
+  const [genMonth, setGenMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [genLoading, setGenLoading] = useState(false);
+  const [genInfo, setGenInfo] = useState<string | null>(null);
+
+  const generateFromMonth = async (clientId: string, month: string) => {
+    if (!clientId || !month) return;
+    setGenLoading(true);
+    setGenInfo(null);
+    try {
+      const res = await fetch(`/api/invoices/generate-from-month?clientId=${clientId}&month=${month}`);
+      const d = await res.json();
+      if (!res.ok) { setGenInfo(d.error?.message ?? "Failed to generate"); return; }
+      if (d.lines.length === 0) {
+        setGenInfo("No package or unbilled extras found for that month.");
+        setLineItems([{ ...EMPTY_LINE }]);
+        return;
+      }
+      setLineItems(d.lines.map((l: { kind: "PACKAGE" | "EXTRA"; description: string; quantity: number; unitPrice: number; contentItemId: string | null }) => ({
+        description: l.description,
+        quantity: String(l.quantity),
+        unitPrice: String(l.unitPrice),
+        unit: "",
+        kind: l.kind,
+        contentItemId: l.contentItemId,
+        mode: "include" as const,
+      })));
+      setField("currency", d.currency);
+      setGenInfo(d.packageFound ? null : "No active package for that month — extras only.");
+    } finally {
+      setGenLoading(false);
+    }
+  };
 
   // Load approved quotations when client changes
   useEffect(() => {
@@ -114,10 +153,16 @@ function InvoiceFormModal({
     try {
       const payload = fromQuotation
         ? { ...form, fromQuotationId: form.quotationId }
-        : { ...form, lineItems: lineItems.map((li, i) => ({
-            description: li.description, quantity: parseFloat(li.quantity) || 1,
-            unitPrice: parseFloat(li.unitPrice) || 0, unit: li.unit || null, order: i,
-          }))
+        : { ...form, lineItems: lineItems
+            .filter((li) => li.mode !== "exclude")
+            .map((li, i) => ({
+              description: li.description, quantity: parseFloat(li.quantity) || 1,
+              unitPrice: li.mode === "free" ? 0 : parseFloat(li.unitPrice) || 0,
+              unit: li.unit || null, order: i,
+              kind: li.kind ?? "CUSTOM",
+              isFree: li.mode === "free",
+              contentItemId: li.contentItemId ?? null,
+            }))
         };
       const res = await fetch("/api/invoices", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -141,7 +186,9 @@ function InvoiceFormModal({
     tax,
     total,
   } = calcInvoiceTotal(
-    lineItems.map((li) => ({ quantity: li.quantity, unitPrice: li.unitPrice })),
+    lineItems
+      .filter((li) => li.mode !== "exclude")
+      .map((li) => ({ quantity: li.quantity, unitPrice: li.unitPrice, isFree: li.mode === "free" })),
     { discountRate: form.discountPct, taxRate: form.taxPct },
   );
 
@@ -173,8 +220,38 @@ function InvoiceFormModal({
           </div>
         </div>
 
+        {/* v2 Phase 7: generate from package month */}
+        {form.clientId && (
+          <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-100 space-y-2">
+            <div className="flex items-center gap-3">
+              <input type="checkbox" id="fromMonth" checked={fromMonth}
+                onChange={(e) => {
+                  setFromMonth(e.target.checked);
+                  if (e.target.checked) {
+                    setFromQuotation(false);
+                    generateFromMonth(form.clientId, genMonth);
+                  } else {
+                    setLineItems([{ ...EMPTY_LINE }]);
+                    setGenInfo(null);
+                  }
+                }}
+                className="w-4 h-4 text-emerald-600 rounded" />
+              <label htmlFor="fromMonth" className="text-sm text-emerald-800 font-medium">
+                Generate from month (package + extras)
+              </label>
+              {fromMonth && (
+                <input type="month" value={genMonth}
+                  onChange={(e) => { setGenMonth(e.target.value); generateFromMonth(form.clientId, e.target.value); }}
+                  className="ml-auto px-2 py-1 text-xs border border-emerald-200 rounded-lg bg-white" />
+              )}
+            </div>
+            {genLoading && <p className="text-xs text-emerald-600">Loading month…</p>}
+            {genInfo && <p className="text-xs text-amber-600">{genInfo}</p>}
+          </div>
+        )}
+
         {/* Quotation toggle */}
-        {form.clientId && quotations.length > 0 && (
+        {form.clientId && !fromMonth && quotations.length > 0 && (
           <div className="flex items-center gap-3 p-3 bg-indigo-50 rounded-xl border border-indigo-100">
             <input type="checkbox" id="fromQuote" checked={fromQuotation} onChange={(e) => setFromQuotation(e.target.checked)}
               className="w-4 h-4 text-indigo-600 rounded"
@@ -210,25 +287,61 @@ function InvoiceFormModal({
             </div>
             <div className="space-y-2">
               {lineItems.map((li, i) => (
-                <div key={i} className="flex gap-2 items-start">
-                  <input value={li.description} onChange={(e) => updateLine(i, "description", e.target.value)}
-                    placeholder="Description"
-                    className="flex-1 px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                  <input value={li.quantity} onChange={(e) => updateLine(i, "quantity", e.target.value)}
-                    type="number" step="0.01" min="0" placeholder="Qty"
-                    className="w-16 px-2 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-center"
-                  />
-                  <input value={li.unitPrice} onChange={(e) => updateLine(i, "unitPrice", e.target.value)}
-                    type="number" step="0.01" min="0" placeholder="Price"
-                    className="w-24 px-2 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                  {lineItems.length > 1 && (
-                    <button type="button" onClick={() => removeLine(i)}
-                      className="mt-1 text-gray-400 hover:text-red-500 transition-colors"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                <div key={i} className={`space-y-1 ${li.mode === "exclude" ? "opacity-40" : ""}`}>
+                  <div className="flex gap-2 items-start">
+                    {li.kind === "PACKAGE" && (
+                      <span className="mt-1.5 text-[9px] font-bold px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded-full flex-shrink-0">PKG</span>
+                    )}
+                    {li.kind === "EXTRA" && (
+                      <span className="mt-1.5 text-[9px] font-bold px-1.5 py-0.5 bg-fuchsia-100 text-fuchsia-700 rounded-full flex-shrink-0">EXTRA</span>
+                    )}
+                    <input value={li.description} onChange={(e) => updateLine(i, "description", e.target.value)}
+                      placeholder="Description"
+                      className="flex-1 px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                    <input value={li.quantity} onChange={(e) => updateLine(i, "quantity", e.target.value)}
+                      type="number" step="0.01" min="0" placeholder="Qty"
+                      className="w-16 px-2 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-center"
+                    />
+                    <input value={li.mode === "free" ? "0" : li.unitPrice}
+                      onChange={(e) => updateLine(i, "unitPrice", e.target.value)}
+                      disabled={li.mode === "free"}
+                      type="number" step="0.01" min="0" placeholder="Price"
+                      className="w-24 px-2 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50"
+                    />
+                    {lineItems.length > 1 && (
+                      <button type="button" onClick={() => removeLine(i)}
+                        className="mt-1 text-gray-400 hover:text-red-500 transition-colors"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                  {/* v2: Include | Exclude | Free for extras */}
+                  {li.kind === "EXTRA" && (
+                    <div className="flex items-center gap-2 pl-10">
+                      <div className="flex rounded-lg border border-gray-200 overflow-hidden text-[10px]">
+                        {(["include", "exclude", "free"] as const).map((m) => (
+                          <button key={m} type="button"
+                            onClick={() => setLineItems((l) => l.map((x, idx) => idx === i ? { ...x, mode: m } : x))}
+                            className={`px-2 py-0.5 font-medium capitalize ${
+                              (li.mode ?? "include") === m
+                                ? m === "free" ? "bg-emerald-50 text-emerald-700"
+                                : m === "exclude" ? "bg-gray-100 text-gray-500"
+                                : "bg-indigo-50 text-indigo-700"
+                                : "text-gray-400 hover:text-gray-600"
+                            }`}>
+                            {m}
+                          </button>
+                        ))}
+                      </div>
+                      {li.mode === "free" && (
+                        <span className="text-[10px] font-medium text-emerald-600">Complimentary — excluded from totals</span>
+                      )}
+                      {li.mode === "exclude" && (
+                        <span className="text-[10px] text-gray-400">Dropped — stays claimable next time</span>
+                      )}
+                    </div>
                   )}
                 </div>
               ))}

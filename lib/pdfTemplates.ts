@@ -705,14 +705,18 @@ export interface InvoicePdfData {
   client:        { id: string; name: string; companyName: string | null } | null;
   project:       { id: string; name: string } | null;
   quotation:     { id: string; number: string; title: string } | null;
-  lineItems:     { description: string; quantity: number; unitPrice: number; unit: string | null }[];
+  lineItems:     { description: string; quantity: number; unitPrice: number; unit: string | null; isFree?: boolean; kind?: string }[];
 }
 
 export function buildInvoiceHtml(inv: InvoicePdfData, s: CompanySettings): string {
   const cfg    = parseCfg(s);
   const accent = s.letterheadColor || "#6366f1";
 
-  const subtotal = inv.lineItems.reduce((sum, li) => sum + li.quantity * li.unitPrice, 0);
+  // v2: complimentary (free) lines are listed separately and never totalled
+  const billed = inv.lineItems.filter((li) => !li.isFree);
+  const freeLines = inv.lineItems.filter((li) => li.isFree);
+
+  const subtotal = billed.reduce((sum, li) => sum + li.quantity * li.unitPrice, 0);
   const disc     = subtotal * ((inv.discountPct ?? 0) / 100);
   const tax      = (subtotal - disc) * ((inv.taxPct ?? 0) / 100);
   const total    = subtotal - disc + tax;
@@ -725,12 +729,21 @@ export function buildInvoiceHtml(inv: InvoicePdfData, s: CompanySettings): strin
     DRAFT: "Draft", SENT: "Sent", PAID: "Paid", OVERDUE: "Overdue", CANCELLED: "Cancelled",
   };
 
-  const rows = inv.lineItems.map((li, i) => `
+  const rows = billed.map((li, i) => `
     <tr class="${i % 2 !== 0 ? "row-even" : ""}">
       <td class="desc">${esc(li.description)}</td>
       <td class="qty">${li.quantity}${li.unit ? `<br/><span style="font-size:7.5pt;color:#9ca3af;">${esc(li.unit)}</span>` : ""}</td>
       <td class="price">${fmt(li.unitPrice, inv.currency)}</td>
       <td class="total">${fmt(li.quantity * li.unitPrice, inv.currency)}</td>
+    </tr>
+  `).join("");
+
+  const complimentaryRows = freeLines.map((li) => `
+    <tr>
+      <td class="desc">${esc(li.description)}</td>
+      <td class="qty">${li.quantity}</td>
+      <td class="price" style="color:#15803d;font-weight:600;">Complimentary</td>
+      <td class="total" style="color:#15803d;">${fmt(0, inv.currency)}</td>
     </tr>
   `).join("");
 
@@ -786,6 +799,12 @@ export function buildInvoiceHtml(inv: InvoicePdfData, s: CompanySettings): strin
       </thead>
       <tbody>${rows || `<tr><td colspan="4" style="text-align:center;color:#9ca3af;padding:16px;">No line items</td></tr>`}</tbody>
     </table>
+
+    ${freeLines.length ? `
+    <p class="section-head" style="color:#15803d;">Complimentary</p>
+    <table class="line-table" style="margin-bottom:6px;">
+      <tbody>${complimentaryRows}</tbody>
+    </table>` : ""}
 
     <div class="totals-block">
       <div class="totals-row"><span>Subtotal</span><span>${fmt(subtotal, inv.currency)}</span></div>

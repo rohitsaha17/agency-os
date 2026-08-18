@@ -1,3 +1,7 @@
+## V2 work
+
+Before making any changes, read docs/V2_CONTEXT.md and follow its Prime Directive (additive-only, never break v1).
+
 ## Project Overview
 
 This is a full-scale SaaS platform for creative agencies to manage end-to-end workflows including CRM, project management, quotations, asset management, collaboration, and finance.

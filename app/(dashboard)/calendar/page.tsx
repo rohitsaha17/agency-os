@@ -191,17 +191,45 @@ export default function CalendarPage() {
     setFilterTypeId(""); setFilterStatus(""); setExtraOnly(false); setAdHocOnly(false);
   };
 
-  const clientColor = useMemo(() => {
-    const map = new Map<string, string>();
-    clients.forEach((c, i) => map.set(c.id, CLIENT_COLORS[i % CLIENT_COLORS.length]));
-    return map;
-  }, [clients]);
+  // Palette slots are assigned by RANK among the ids actually on screen, so
+  // two clients (or two creative types) can never share a colour while the
+  // palette has room — and the mapping is stable for a given month.
+  const colorMaps = useMemo(() => {
+    const rank = (ids: string[]) => {
+      const map = new Map<string, string>();
+      [...new Set(ids)].sort().forEach((id, i) => map.set(id, CLIENT_COLORS[i % CLIENT_COLORS.length]));
+      return map;
+    };
+    return {
+      client: rank(items.map((i) => i.clientId)),
+      type: rank(items.map((i) => i.creativeType.id)),
+    };
+  }, [items]);
 
   const chipClass = (i: MasterItem): string => {
-    if (colorBy === "client") return clientColor.get(i.clientId) ?? CLIENT_COLORS[0];
-    if (colorBy === "type") return "border text-gray-700";
+    if (colorBy === "client") return colorMaps.client.get(i.clientId) ?? CLIENT_COLORS[0];
+    if (colorBy === "type") return colorMaps.type.get(i.creativeType.id) ?? CLIENT_COLORS[0];
     return CONTENT_STATUS_META[i.status].chip;
   };
+
+  /* Legend entries follow whatever the chips are coloured by. */
+  const legend = useMemo(() => {
+    if (colorBy === "client") {
+      const seen = new Map<string, string>();
+      items.forEach((i) => seen.set(i.client.name, colorMaps.client.get(i.clientId) ?? CLIENT_COLORS[0]));
+      return [...seen.entries()].map(([label, cls]) => ({ label, cls }));
+    }
+    if (colorBy === "type") {
+      const seen = new Map<string, string>();
+      items.forEach((i) => seen.set(
+        `${i.creativeType.icon ?? "✨"} ${i.creativeType.name}`,
+        colorMaps.type.get(i.creativeType.id) ?? CLIENT_COLORS[0],
+      ));
+      return [...seen.entries()].map(([label, cls]) => ({ label, cls }));
+    }
+    return (["PLANNED", "IN_REVIEW", "CLIENT_APPROVED", "POSTED", "MISSED"] as ContentStatus[])
+      .map((s) => ({ label: CONTENT_STATUS_META[s].label, cls: CONTENT_STATUS_META[s].chip }));
+  }, [colorBy, items, colorMaps]);
 
   const itemsOn = useCallback((day: Date) => items.filter((i) => isSameDay(new Date(i.date), day)), [items]);
   const eventsOn = useCallback((day: Date) => orgEvents.filter((e) => {
@@ -256,14 +284,18 @@ export default function CalendarPage() {
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
-            {/* Color by */}
-            <div className="flex border border-gray-200 rounded-lg overflow-hidden text-xs">
-              {(["status", "client", "type"] as ColorBy[]).map((c) => (
-                <button key={c} onClick={() => setColorBy(c)}
-                  className={`px-2.5 py-1.5 font-medium capitalize transition-colors ${colorBy === c ? "bg-indigo-50 text-indigo-700" : "text-gray-600 hover:bg-gray-50"}`}>
-                  {c}
-                </button>
-              ))}
+            {/* Color by — recolours every content chip on the grid */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] font-medium text-gray-400 hidden sm:inline">Color by</span>
+              <div className="flex border border-gray-200 rounded-lg overflow-hidden text-xs">
+                {(["status", "client", "type"] as ColorBy[]).map((c) => (
+                  <button key={c} onClick={() => setColorBy(c)}
+                    title={`Colour chips by ${c}`}
+                    className={`px-2.5 py-1.5 font-medium capitalize transition-colors ${colorBy === c ? "bg-indigo-50 text-indigo-700" : "text-gray-600 hover:bg-gray-50"}`}>
+                    {c}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* View toggle */}
@@ -436,7 +468,6 @@ export default function CalendarPage() {
                         onClick={(e) => e.stopPropagation()}
                         title={`${i.client.name} — ${i.creativeType.name}: ${i.topic} (${meta.label})`}
                         className={`flex items-center gap-1 mb-0.5 px-1 py-0.5 rounded border ${chipClass(i)} ${i.isAdHoc ? "border-dashed" : ""}`}
-                        style={colorBy === "type" && i.creativeType.color ? { backgroundColor: `${i.creativeType.color}18`, borderColor: `${i.creativeType.color}55` } : undefined}
                       >
                         <span className="w-3.5 h-3.5 rounded-full bg-white/70 text-[7px] font-bold flex items-center justify-center flex-shrink-0">
                           {initials(i.client.name)}
@@ -468,15 +499,20 @@ export default function CalendarPage() {
             }}
           />
 
-          {/* Legend */}
+          {/* Legend — follows the Color by selection */}
           <div className="flex flex-wrap items-center gap-3 mt-4 text-xs text-gray-500">
-            <span className="font-medium text-gray-700">Status:</span>
-            {(["PLANNED", "IN_REVIEW", "CLIENT_APPROVED", "POSTED", "MISSED"] as ContentStatus[]).map((s) => (
-              <span key={s} className="flex items-center gap-1">
-                <span className={`w-2 h-2 rounded-full ${CONTENT_STATUS_META[s].dot}`} /> {CONTENT_STATUS_META[s].label}
+            <span className="font-medium text-gray-700 capitalize">{colorBy}:</span>
+            {legend.length === 0 ? (
+              <span className="text-gray-400">nothing planned this month</span>
+            ) : legend.map((l) => (
+              <span key={l.label} className={`flex items-center gap-1 px-1.5 py-0.5 rounded border ${l.cls}`}>
+                {l.label}
               </span>
             ))}
             <span className="mx-1 text-gray-300">|</span>
+            <span className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-indigo-600" /> status dot on every chip
+            </span>
             <span className="flex items-center gap-1"><PartyPopper className="w-3 h-3 text-amber-500" /> Event strip</span>
             <span className="flex items-center gap-1"><Zap className="w-3 h-3 text-amber-500" /> Ad-hoc (dashed)</span>
           </div>

@@ -81,17 +81,19 @@ export function MonthGrid({
   const rows = days.length / 7;
 
   return (
-    <div className={fill ? "flex flex-col h-full min-h-0" : undefined}>
+    <div className={`bg-white ${fill ? "flex flex-col h-full min-h-0" : ""}`}>
       {/* Weekday headers */}
-      <div className="grid grid-cols-7 mb-2 flex-shrink-0">
+      <div className="grid grid-cols-7 flex-shrink-0 border-b border-gray-100">
         {WEEKDAYS.map((d) => (
-          <div key={d} className="text-center text-xs font-medium text-gray-400 py-1.5">{d}</div>
+          <div key={d} className="text-center text-[11px] font-semibold text-gray-500 uppercase tracking-wide py-2">
+            {d}
+          </div>
         ))}
       </div>
 
       {/* Day grid */}
       <div
-        className={`grid grid-cols-7 gap-px bg-gray-200 rounded-xl overflow-hidden ${fill ? "flex-1 min-h-0" : ""}`}
+        className={`grid grid-cols-7 gap-px bg-gray-100 ${fill ? "flex-1 min-h-0" : ""}`}
         style={fill ? { gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))` } : undefined}
       >
         {days.map((day, i) => {
@@ -99,30 +101,37 @@ export function MonthGrid({
           const todayCell = isToday(day);
           const isSelected = !!selected && isSameDay(day, selected);
           const count = inMonth ? cellCount?.(day) ?? 0 : 0;
+          // Google-style: the 1st shows its month name for orientation
+          const label = day.getDate() === 1
+            ? `1 ${MONTH_NAMES[day.getMonth()].slice(0, 3)}`
+            : String(day.getDate());
 
           return (
             <div
               key={i}
               onClick={() => inMonth && onDayClick?.(day)}
-              className={`bg-white transition-colors flex flex-col ${
+              className={`transition-colors flex flex-col ${
+                inMonth ? "bg-white cursor-pointer hover:bg-indigo-50/30" : "bg-gray-50/70"
+              } ${
                 fill
                   ? "min-h-0 overflow-hidden"
                   : view === "week" ? "min-h-[200px]" : "min-h-[80px] sm:min-h-[110px]"
-              } p-1 sm:p-1.5 ${
-                inMonth ? "cursor-pointer hover:bg-gray-50" : "opacity-30"
-              } ${isSelected ? "ring-2 ring-inset ring-indigo-400 bg-indigo-50/30" : ""}`}
+              } px-1.5 pb-1 pt-1 ${
+                isSelected ? "ring-2 ring-inset ring-indigo-400 bg-indigo-50/40" : ""
+              }`}
             >
               <div className="flex-shrink-0">{renderStrip?.(day, { inMonth })}</div>
 
-              {/* Day number */}
-              <div className="flex items-center justify-between mb-0.5 flex-shrink-0">
-                <span className={`w-6 h-6 flex items-center justify-center text-xs font-medium rounded-full ${
-                  todayCell ? "bg-indigo-600 text-white" : "text-gray-700"
+              {/* Day number — centred, today gets the filled pill */}
+              <div className="flex items-center justify-center relative mb-0.5 flex-shrink-0">
+                <span className={`h-6 min-w-6 px-1.5 flex items-center justify-center text-xs font-medium rounded-full ${
+                  todayCell ? "bg-indigo-600 text-white" :
+                  inMonth ? "text-gray-700" : "text-gray-400"
                 }`}>
-                  {day.getDate()}
+                  {label}
                 </span>
                 {count > 0 && (
-                  <span className="text-[10px] text-gray-400 font-medium">{count}</span>
+                  <span className="absolute right-0 text-[10px] text-gray-300 font-medium">{count}</span>
                 )}
               </div>
 
@@ -130,7 +139,7 @@ export function MonthGrid({
 
               {/* Cell body scrolls inside its own cell so the grid never
                   pushes the page taller than the viewport. */}
-              <div className={fill ? "flex-1 min-h-0 overflow-y-auto" : ""}>
+              <div data-scrollable className={fill ? "flex-1 min-h-0 overflow-y-auto" : ""}>
                 {inMonth && renderCell(day, { inMonth, today: todayCell, selected: isSelected })}
               </div>
             </div>

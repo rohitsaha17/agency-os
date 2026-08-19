@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 import {
   ChevronLeft, ChevronRight, Calendar as CalIcon,
@@ -11,6 +11,7 @@ import { useCurrentUser } from "@/lib/useCurrentUser";
 import { Button } from "@/components/ui/Button";
 import { TaskModal } from "@/components/tasks/TaskModal";
 import { MonthGrid, MONTH_NAMES, isSameDay } from "@/components/calendar/MonthGrid";
+import { useWheelPeriod } from "@/components/calendar/useWheelPeriod";
 import { CONTENT_STATUS_META } from "@/components/content/ContentCalendarTab";
 
 // ── Constants (legacy task/project layers) ───────────────────
@@ -191,6 +192,13 @@ export default function CalendarPage() {
     setFilterTypeId(""); setFilterStatus(""); setExtraOnly(false); setAdHocOnly(false);
   };
 
+  // Scroll inside the grid to move between months/weeks (Google-style)
+  const gridWrapRef = useRef<HTMLDivElement>(null);
+  useWheelPeriod(gridWrapRef, {
+    onPrev: () => (view === "month" ? prevMonth() : prevWeek()),
+    onNext: () => (view === "month" ? nextMonth() : nextWeek()),
+  });
+
   // Palette slots are assigned by RANK among the ids actually on screen, so
   // two clients (or two creative types) can never share a colour while the
   // palette has room — and the mapping is stable for a given month.
@@ -275,24 +283,45 @@ export default function CalendarPage() {
   return (
     // Viewport-locked so a whole month fits without scrolling the page.
     <div className="flex flex-col h-[calc(100dvh-3.5rem)] lg:h-dvh min-h-0">
-      {/* ── Header ──────────────────────────────────────────── */}
-      <div className="bg-white border-b border-gray-200 px-4 sm:px-6 lg:px-8 py-3 flex-shrink-0">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div>
-            <h1 className="text-lg font-semibold text-gray-900">Master Calendar</h1>
-            <p className="text-xs text-gray-500 mt-0.5">
-              {items.length} content item{items.length !== 1 ? "s" : ""}
-              {activeClientName ? ` · ${activeClientName}` : " across all clients"}
-              {activeFilterCount > 0 && ` · ${activeFilterCount} filter${activeFilterCount !== 1 ? "s" : ""} on`}
-              {currentUser?.role === "MEMBER" && " (your linked work)"}
+      {/* ── Toolbar (single row, Google-style) ──────────────── */}
+      <div className="bg-white border-b border-gray-200 px-4 sm:px-6 py-2.5 flex-shrink-0">
+        <div className="flex items-center gap-3 flex-wrap">
+          <button onClick={goToday}
+            className="px-4 py-1.5 text-sm font-medium border border-gray-300 rounded-full hover:bg-gray-50 text-gray-700">
+            Today
+          </button>
+          <div className="flex items-center">
+            <button onClick={view === "month" ? prevMonth : prevWeek}
+              title="Previous (or scroll up)"
+              className="p-1.5 hover:bg-gray-100 rounded-full text-gray-600">
+              <ChevronLeft className="w-5 h-5" />
+            </button>
+            <button onClick={view === "month" ? nextMonth : nextWeek}
+              title="Next (or scroll down)"
+              className="p-1.5 hover:bg-gray-100 rounded-full text-gray-600">
+              <ChevronRight className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div className="min-w-0">
+            <h1 className="text-lg font-semibold text-gray-900 truncate">
+              {view === "month"
+                ? `${MONTH_NAMES[month]} ${year}`
+                : `Week of ${weekStart.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`}
+            </h1>
+            <p className="text-[11px] text-gray-400 truncate">
+              {items.length} item{items.length !== 1 ? "s" : ""}
+              {activeClientName ? ` · ${activeClientName}` : " · all clients"}
+              {activeFilterCount > 0 && ` · ${activeFilterCount} filter${activeFilterCount !== 1 ? "s" : ""}`}
+              {currentUser?.role === "MEMBER" && " · your linked work"}
             </p>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2 ml-auto flex-wrap">
             {/* Color by — recolours every content chip on the grid */}
-            <div className="flex items-center gap-1.5">
-              <span className="text-[11px] font-medium text-gray-400 hidden sm:inline">Color by</span>
-              <div className="flex border border-gray-200 rounded-lg overflow-hidden text-xs">
+            <div className="hidden md:flex items-center gap-1.5">
+              <span className="text-[11px] font-medium text-gray-400">Color by</span>
+              <div className="flex border border-gray-200 rounded-full overflow-hidden text-xs">
                 {(["status", "client", "type"] as ColorBy[]).map((c) => (
                   <button key={c} onClick={() => setColorBy(c)}
                     title={`Colour chips by ${c}`}
@@ -304,42 +333,26 @@ export default function CalendarPage() {
             </div>
 
             {/* View toggle */}
-            <div className="flex border border-gray-200 rounded-lg overflow-hidden text-xs">
-              <button onClick={() => setView("month")} className={`px-3 py-1.5 font-medium transition-colors ${view === "month" ? "bg-indigo-50 text-indigo-700" : "text-gray-600 hover:bg-gray-50"}`}>
+            <div className="flex border border-gray-200 rounded-full overflow-hidden text-xs">
+              <button onClick={() => setView("month")}
+                className={`px-3 py-1.5 font-medium transition-colors ${view === "month" ? "bg-indigo-50 text-indigo-700" : "text-gray-600 hover:bg-gray-50"}`}>
                 Month
               </button>
-              <button onClick={() => { setView("week"); setWeekStart(now); }} className={`px-3 py-1.5 font-medium transition-colors ${view === "week" ? "bg-indigo-50 text-indigo-700" : "text-gray-600 hover:bg-gray-50"}`}>
+              <button onClick={() => { setView("week"); setWeekStart(now); }}
+                className={`px-3 py-1.5 font-medium transition-colors ${view === "week" ? "bg-indigo-50 text-indigo-700" : "text-gray-600 hover:bg-gray-50"}`}>
                 Week
               </button>
             </div>
 
             <button
               onClick={() => setShowFilters(!showFilters)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border rounded-lg transition-colors ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border rounded-full transition-colors ${
                 activeFilterCount > 0 ? "border-indigo-300 bg-indigo-50 text-indigo-700" : "border-gray-300 text-gray-700 hover:bg-gray-50"
               }`}
             >
               <Filter className="w-3.5 h-3.5" />
               Filters{activeFilterCount > 0 && ` (${activeFilterCount})`}
             </button>
-
-            <button onClick={goToday} className="px-3 py-1.5 text-xs font-medium border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-700">
-              Today
-            </button>
-            <div className="flex items-center gap-1 border border-gray-200 rounded-lg overflow-hidden">
-              <button onClick={view === "month" ? prevMonth : prevWeek} className="p-2 hover:bg-gray-50 text-gray-600">
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <span className="px-3 py-1.5 text-sm font-semibold text-gray-900 min-w-[140px] text-center">
-                {view === "month"
-                  ? `${MONTH_NAMES[month]} ${year}`
-                  : `Week of ${weekStart.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
-                }
-              </span>
-              <button onClick={view === "month" ? nextMonth : nextWeek} className="p-2 hover:bg-gray-50 text-gray-600">
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
             <Button size="sm" icon={<Plus className="w-3.5 h-3.5" />} onClick={() => setAddEventOpen(true)}>
               Add Event
             </Button>
@@ -422,7 +435,8 @@ export default function CalendarPage() {
 
       {/* ── Body ────────────────────────────────────────────── */}
       <div className="flex flex-col lg:flex-row flex-1 min-h-0">
-        <div className="flex-1 min-w-0 min-h-0 flex flex-col px-3 sm:px-5 py-3">
+        <div ref={gridWrapRef} className="flex-1 min-w-0 min-h-0 flex flex-col px-3 sm:px-5 py-3">
+          <div className="flex-1 min-h-0 border border-gray-200 rounded-xl overflow-hidden">
           <MonthGrid
             fill
             view={view}
@@ -504,6 +518,8 @@ export default function CalendarPage() {
               );
             }}
           />
+
+          </div>
 
           {/* Legend — one compact line so the grid keeps the height */}
           <div className="flex items-center gap-2 mt-2 pt-2 border-t border-gray-100 text-[11px] text-gray-500 overflow-x-auto flex-shrink-0">

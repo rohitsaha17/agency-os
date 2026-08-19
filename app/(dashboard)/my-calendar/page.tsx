@@ -11,6 +11,7 @@ import { CalendarTasksSwitch } from "@/components/calendar/CalendarTasksSwitch";
 import {
   MonthGrid, MONTH_NAMES, isSameDay, getWeekDays, isToday, getDaysInGrid,
 } from "@/components/calendar/MonthGrid";
+import { useWheelPeriod } from "@/components/calendar/useWheelPeriod";
 import { useCurrentUser } from "@/lib/useCurrentUser";
 import { broadcastChange, useLiveRefresh } from "@/lib/live";
 import { toast } from "@/lib/toast";
@@ -188,6 +189,15 @@ export default function MyCalendarPage() {
     setAnchor(n);
     setMiniMonth(n);
   };
+
+  // Scroll on month/year views to move between periods (the day/week time
+  // grids keep their own vertical scrolling).
+  const mainRef = useRef<HTMLDivElement>(null);
+  useWheelPeriod(mainRef, {
+    onPrev: () => shift(-1),
+    onNext: () => shift(1),
+    enabled: view === "month" || view === "year",
+  });
 
   const title = useMemo(() => {
     if (view === "year") return String(anchor.getFullYear());
@@ -545,7 +555,7 @@ export default function MyCalendarPage() {
         </div>
 
         {/* ── Main view ── */}
-        <div className="flex-1 min-w-0 bg-gray-50 p-3 sm:p-4 overflow-hidden">
+        <div ref={mainRef} className="flex-1 min-w-0 bg-gray-50 p-3 sm:p-4 overflow-hidden">
           {loading ? (
             <div className="h-full bg-white border border-gray-200 rounded-2xl p-4">
               <div className="grid grid-cols-7 gap-2">
@@ -557,8 +567,9 @@ export default function MyCalendarPage() {
           ) : view === "week" ? (
             <TimeGrid days={weekDays} />
           ) : view === "month" ? (
-            <div className="h-full bg-white border border-gray-200 rounded-2xl p-3 overflow-y-auto">
+            <div className="h-full bg-white border border-gray-200 rounded-2xl overflow-hidden">
               <MonthGrid
+                fill
                 view="month"
                 year={anchor.getFullYear()}
                 month={anchor.getMonth()}

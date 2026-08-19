@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   ChevronLeft, ChevronRight, Plus, X, Calendar as CalIcon, List as ListIcon,
-  LayoutGrid, Link2, Zap, ArrowRightCircle, CheckCircle2, UserPlus, Share2,
+  LayoutGrid, Link2, Upload, Zap, ArrowRightCircle, CheckCircle2, UserPlus, Share2,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { TaskModal } from "@/components/tasks/TaskModal";
@@ -55,12 +55,41 @@ function ItemDialog({
     topic: editItem?.topic ?? "",
     description: editItem?.description ?? "",
     referenceUrl: editItem?.referenceUrl ?? "",
+    referenceFileId: editItem?.referenceFileId ?? null as string | null,
     isExtra: editItem?.isExtra ?? false,
     isAdHoc: editItem?.isAdHoc ?? false,
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [quotaPrompt, setQuotaPrompt] = useState<{ used: number; quota: number; typeName: string } | null>(null);
+  // v3 Phase 0 (defect 5): Reference takes a URL *or* an upload, matching
+  // the task modal. Same two-button toggle, same upload endpoint.
+  const [refMode, setRefMode] = useState<"url" | "file">(
+    editItem?.referenceFileId && !editItem?.referenceUrl ? "file" : "url",
+  );
+  const [refFileName, setRefFileName] = useState<string | null>(null);
+  const [uploadingRef, setUploadingRef] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleRefFile = async (file: File) => {
+    setUploadingRef(true);
+    setError(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("clientId", clientId);
+      const res = await fetch("/api/files", { method: "POST", body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error?.message || "Upload failed");
+      const uploaded = Array.isArray(data) ? data[0] : data.files?.[0] ?? data;
+      setForm((f) => ({ ...f, referenceFileId: uploaded.id ?? null }));
+      setRefFileName(file.name);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Reference upload failed");
+    } finally {
+      setUploadingRef(false);
+    }
+  };
 
   const submit = async (skipQuotaPrompt = false) => {
     if (!form.topic.trim()) { setError("Topic is required"); return; }
@@ -155,12 +184,36 @@ function ItemDialog({
               placeholder="Brief / caption / notes for this deliverable…"
               className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none" />
           </div>
+          {/* Reference: URL or file — same control as the task modal */}
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1.5">Reference URL</label>
-            <input type="url" value={form.referenceUrl}
-              onChange={(e) => setForm((f) => ({ ...f, referenceUrl: e.target.value }))}
-              placeholder="https://…"
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-medium text-gray-700">Reference</label>
+              <div className="flex rounded-lg border border-gray-200 overflow-hidden text-[11px]">
+                <button type="button" onClick={() => setRefMode("url")}
+                  className={`px-2 py-0.5 flex items-center gap-1 ${refMode === "url" ? "bg-indigo-50 text-indigo-700 font-medium" : "text-gray-500"}`}>
+                  <Link2 className="w-3 h-3" /> URL
+                </button>
+                <button type="button" onClick={() => setRefMode("file")}
+                  className={`px-2 py-0.5 flex items-center gap-1 ${refMode === "file" ? "bg-indigo-50 text-indigo-700 font-medium" : "text-gray-500"}`}>
+                  <Upload className="w-3 h-3" /> Upload
+                </button>
+              </div>
+            </div>
+            {refMode === "url" ? (
+              <input type="url" value={form.referenceUrl}
+                onChange={(e) => setForm((f) => ({ ...f, referenceUrl: e.target.value }))}
+                placeholder="https://…"
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            ) : (
+              <div>
+                <input ref={fileInputRef} type="file" className="hidden"
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) handleRefFile(f); }} />
+                <button type="button" onClick={() => fileInputRef.current?.click()}
+                  className="w-full px-3 py-2 text-sm border border-dashed border-gray-300 rounded-lg text-gray-500 hover:border-indigo-300 hover:text-indigo-600 transition-colors">
+                  {uploadingRef ? "Uploading…" : refFileName ?? (form.referenceFileId ? "Reference file attached" : "Choose a file…")}
+                </button>
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-5">
             <label className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">

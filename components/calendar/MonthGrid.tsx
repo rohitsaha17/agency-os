@@ -120,10 +120,11 @@ export function MonthGrid({
                 isSelected ? "ring-2 ring-inset ring-indigo-400 bg-indigo-50/40" : ""
               }`}
             >
-              <div className="flex-shrink-0">{renderStrip?.(day, { inMonth })}</div>
-
-              {/* Day number — centred, today gets the filled pill */}
-              <div className="flex items-center justify-center relative mb-0.5 flex-shrink-0">
+              {/* Day number — a fixed header row, ALWAYS first. Event strips
+                  render in the lane below it, so every date number in a row
+                  sits at the same height whether or not that day has an
+                  event (v3 Phase 0, defect 1). */}
+              <div className="h-6 flex items-center justify-center relative flex-shrink-0">
                 <span className={`h-6 min-w-6 px-1.5 flex items-center justify-center text-xs font-medium rounded-full ${
                   todayCell ? "bg-indigo-600 text-white" :
                   inMonth ? "text-gray-700" : "text-gray-400"
@@ -134,6 +135,9 @@ export function MonthGrid({
                   <span className="absolute right-0 text-[10px] text-gray-300 font-medium">{count}</span>
                 )}
               </div>
+
+              {/* Reserved strip lane (all-day event banners) */}
+              <div className="flex-shrink-0">{renderStrip?.(day, { inMonth })}</div>
 
               {loading && inMonth && <div className="h-4 bg-gray-100 rounded animate-pulse" />}
 

@@ -100,6 +100,9 @@ export default function CalendarPage() {
   const [events, setEvents] = useState<CalendarEvent[]>([]); // legacy layers
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Date | null>(null);
+  // v3 Phase 0 (defect 4): clicking a content chip opens THAT item in the
+  // side panel instead of navigating away to the client page.
+  const [selectedItem, setSelectedItem] = useState<MasterItem | null>(null);
   const [view, setView] = useState<ViewMode>("month");
   const [weekStart, setWeekStart] = useState<Date>(now);
   const [colorBy, setColorBy] = useState<ColorBy>("status");
@@ -445,17 +448,20 @@ export default function CalendarPage() {
             weekStart={weekStart}
             selected={selected}
             loading={loading}
-            onDayClick={(day) => setSelected(selected && isSameDay(day, selected) ? null : day)}
+            onDayClick={(day) => {
+              setSelectedItem(null);
+              setSelected(selected && isSameDay(day, selected) ? null : day);
+            }}
             cellCount={(day) => itemsOn(day).length + (showTasks || showProjects ? legacyOn(day).length : 0)}
             renderStrip={(day) => {
               const evs = eventsOn(day);
               if (evs.length === 0) return null;
               return (
-                <div className="-mx-1.5 -mt-1.5 sm:-mx-2 sm:-mt-2 mb-1">
+                <div className="-mx-1.5 sm:-mx-2 mb-1">
                   {evs.slice(0, 2).map((e) => (
                     <div key={e.id}
                       title={e.title + (e.client ? ` (${e.client.name})` : "")}
-                      className={`px-1.5 py-0.5 text-[9px] font-semibold truncate border-b ${EVENT_KIND_STYLE[e.kind]} ${e.isAdHoc ? "border-dashed" : ""}`}>
+                      className={`px-1.5 py-0.5 text-[9px] font-semibold truncate border-y ${EVENT_KIND_STYLE[e.kind]} ${e.isAdHoc ? "border-dashed" : ""}`}>
                       {e.kind === "FESTIVAL" && "🎉 "}
                       {e.isAdHoc && "⚡ "}
                       {e.title}
@@ -484,10 +490,10 @@ export default function CalendarPage() {
                   {dayItems.slice(0, maxShow).map((i) => {
                     const meta = CONTENT_STATUS_META[i.status];
                     return (
-                      <Link key={i.id} href={`/clients/${i.clientId}?tab=content`}
-                        onClick={(e) => e.stopPropagation()}
+                      <button key={i.id} type="button"
+                        onClick={(e) => { e.stopPropagation(); setSelected(day); setSelectedItem(i); }}
                         title={`${i.client.name} — ${i.creativeType.name}: ${i.topic} (${meta.label})`}
-                        className={`flex items-center gap-1 mb-0.5 px-1 py-0.5 rounded border ${chipClass(i)} ${i.isAdHoc ? "border-dashed" : ""}`}
+                        className={`w-full text-left flex items-center gap-1 mb-0.5 px-1 py-0.5 rounded border ${chipClass(i)} ${i.isAdHoc ? "border-dashed" : ""}`}
                       >
                         <span className="w-3.5 h-3.5 rounded-full bg-white/70 text-[7px] font-bold flex items-center justify-center flex-shrink-0">
                           {initials(i.client.name)}
@@ -496,7 +502,7 @@ export default function CalendarPage() {
                         <span className="text-[10px] truncate leading-tight flex-1">{i.topic}</span>
                         <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${meta.dot}`} />
                         {i.isAdHoc && <Zap className="w-2 h-2 text-amber-500 flex-shrink-0" />}
-                      </Link>
+                      </button>
                     );
                   })}
                   {dayItems.length > maxShow && (
@@ -538,9 +544,77 @@ export default function CalendarPage() {
           </div>
         </div>
 
-        {/* ── Day detail panel — grouped by client ─────────── */}
+        {/* ── Side panel — one content item, or the whole day ── */}
         {selected && (
           <div className="lg:w-80 flex-shrink-0 border-t lg:border-t-0 lg:border-l border-gray-200 bg-white overflow-y-auto max-h-[50vh] lg:max-h-none">
+            {selectedItem ? (
+              /* v3 Phase 0 (defect 4): a chip opens its own item here */
+              <div className="p-4 sm:p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <button onClick={() => setSelectedItem(null)}
+                    className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-800">
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                    {selected.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                  </button>
+                  <button onClick={() => { setSelectedItem(null); setSelected(null); }}
+                    className="text-gray-400 hover:text-gray-600">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className={`border rounded-xl p-3 mb-4 ${CONTENT_STATUS_META[selectedItem.status].chip} ${selectedItem.isAdHoc ? "border-dashed" : ""}`}>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-xs">
+                      {selectedItem.creativeType.icon ?? "✨"} {selectedItem.creativeType.name}
+                    </span>
+                    <span className="text-[10px] font-semibold uppercase">
+                      {CONTENT_STATUS_META[selectedItem.status].label}
+                    </span>
+                  </div>
+                  <p className="text-sm font-semibold leading-snug">{selectedItem.topic}</p>
+                </div>
+
+                <dl className="space-y-3 text-xs">
+                  <div>
+                    <dt className="text-gray-400 mb-0.5">Client</dt>
+                    <dd className="text-gray-900 font-medium">{selectedItem.client.name}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-gray-400 mb-0.5">Publish date</dt>
+                    <dd className="text-gray-900 font-medium">
+                      {new Date(selectedItem.date).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-gray-400 mb-0.5">Assigned to</dt>
+                    <dd className="text-gray-900 font-medium">
+                      {selectedItem.tasks.flatMap((t) => t.assignees.map((a) => a.user.name)).join(", ") || "Nobody yet"}
+                    </dd>
+                  </div>
+                  {(selectedItem.isExtra || selectedItem.isAdHoc) && (
+                    <div>
+                      <dt className="text-gray-400 mb-0.5">Flags</dt>
+                      <dd className="flex flex-wrap gap-1">
+                        {selectedItem.isExtra && (
+                          <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 font-medium">Extra</span>
+                        )}
+                        {selectedItem.isAdHoc && (
+                          <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 font-medium inline-flex items-center gap-1">
+                            <Zap className="w-2.5 h-2.5" /> Ad-hoc
+                          </span>
+                        )}
+                      </dd>
+                    </div>
+                  )}
+                </dl>
+
+                <Link href={`/clients/${selectedItem.clientId}?tab=content`}
+                  className="mt-5 flex items-center justify-center gap-1.5 w-full px-3 py-2 text-xs font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-xl hover:bg-indigo-100 transition-colors">
+                  Open in {selectedItem.client.name}
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </Link>
+              </div>
+            ) : (
             <div className="p-4 sm:p-5">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-semibold text-gray-900">
@@ -589,7 +663,8 @@ export default function CalendarPage() {
                       {clientItems.map((i) => {
                         const meta = CONTENT_STATUS_META[i.status];
                         return (
-                          <Link key={i.id} href={`/clients/${i.clientId}?tab=content`} className="block mb-2">
+                          <button key={i.id} type="button" onClick={() => setSelectedItem(i)}
+                            className="block w-full text-left mb-2">
                             <div className={`border rounded-xl p-3 hover:shadow-sm transition-all ${meta.chip} ${i.isAdHoc ? "border-dashed" : ""}`}>
                               <div className="flex items-center justify-between mb-1">
                                 <span className="text-xs">{i.creativeType.icon ?? "✨"} {i.creativeType.name}</span>
@@ -603,7 +678,7 @@ export default function CalendarPage() {
                                 </p>
                               )}
                             </div>
-                          </Link>
+                          </button>
                         );
                       })}
                     </div>
@@ -637,6 +712,7 @@ export default function CalendarPage() {
                 </div>
               )}
             </div>
+            )}
           </div>
         )}
       </div>

@@ -258,6 +258,7 @@ model User {
   createdContentItems ContentItem[]  @relation("CreatedContentItems")
   personalItems        PersonalItem[] @relation("PersonalItems")
   createdPersonalItems PersonalItem[] @relation("CreatedPersonalItems")
+  taskLists            TaskList[]     @relation("TaskLists")
   createdEvents        CalendarEvent[] @relation("CreatedEvents")
   assignedFollowUps    FollowUp[]      @relation("AssignedFollowUps")
   createdFollowUps     FollowUp[]      @relation("CreatedFollowUps")
@@ -1509,22 +1510,41 @@ model CalendarEvent {
 // V2 — MY CALENDAR (personal reminders / to-dos)
 // ============================================================
 
+// Google-Tasks-style personal lists on the /tasks board ("smokzy", "home"…)
+model TaskList {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  user  User           @relation("TaskLists", fields: [userId], references: [id], onDelete: Cascade)
+  items PersonalItem[]
+
+  @@index([userId, sortOrder])
+  @@map("task_lists")
+}
+
 model PersonalItem {
   id          String    @id @default(cuid())
   userId      String // whose calendar it sits on
   createdById String? // may differ — a senior dropping a to-do on a teammate
+  listId      String? // board list; null = the default "My Tasks" column
   title       String
   note        String?
   date        DateTime
   time        String? // "17:00" — optional wall-clock time
+  starred     Boolean   @default(false)
   done        Boolean   @default(false)
   doneAt      DateTime?
   createdAt   DateTime  @default(now())
 
-  user      User  @relation("PersonalItems", fields: [userId], references: [id], onDelete: Cascade)
-  createdBy User? @relation("CreatedPersonalItems", fields: [createdById], references: [id])
+  user      User      @relation("PersonalItems", fields: [userId], references: [id], onDelete: Cascade)
+  createdBy User?     @relation("CreatedPersonalItems", fields: [createdById], references: [id])
+  list      TaskList? @relation(fields: [listId], references: [id], onDelete: SetNull)
 
   @@index([userId, date])
+  @@index([userId, listId])
   @@map("personal_items")
 }
 

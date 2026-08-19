@@ -1,705 +1,639 @@
 "use client";
 
-import { useEffect, useState, useCallback, Suspense } from "react";
-import Link from "next/link";
+import { useEffect, useState, useCallback, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import {
-  Search, AlertCircle, Clock, CheckCircle2, Calendar,
-  FolderKanban, Users, Plus, GripVertical, Sparkles, ShieldCheck,
-  ChevronDown, ListTodo,
+  Plus, Star, CheckCircle2, Circle, ChevronDown, ChevronRight, ChevronUp,
+  MoreVertical, ListTodo, Clock, ShieldCheck, X, FolderKanban, Repeat,
 } from "lucide-react";
-import { PriorityBadge } from "@/components/tasks/PriorityBadge";
-import { StatusBadge } from "@/components/ui/Badge";
 import { TaskModal } from "@/components/tasks/TaskModal";
 import { DeliveryDialog } from "@/components/tasks/DeliveryDialog";
 import { useCurrentUser } from "@/lib/useCurrentUser";
 import { toast } from "@/lib/toast";
-import type { Task, TaskStatus, Priority } from "@/types";
+import type { Task } from "@/types";
 
 // ── Types ────────────────────────────────────────────────────
 
-type Group = "overdue" | "today" | "week" | "upcoming" | "none" | "general" | "done";
-type PageTab = "all" | "mine" | "approvals";
-
-const GROUP_CONFIG: Record<Group, { label: string; icon: React.ReactNode; bg: string }> = {
-  overdue:  { label: "Overdue",       icon: <AlertCircle className="w-4 h-4 text-red-500" />,     bg: "border-red-200 bg-red-50" },
-  today:    { label: "Due Today",     icon: <Clock className="w-4 h-4 text-orange-500" />,         bg: "border-orange-200 bg-orange-50" },
-  week:     { label: "Due This Week", icon: <Calendar className="w-4 h-4 text-blue-500" />,        bg: "border-blue-200 bg-blue-50" },
-  upcoming: { label: "Upcoming",      icon: <Calendar className="w-4 h-4 text-indigo-500" />,      bg: "border-indigo-200 bg-indigo-50" },
-  none:     { label: "No Due Date",   icon: <Clock className="w-4 h-4 text-gray-400" />,           bg: "border-gray-200 bg-gray-50" },
-  general:  { label: "General",       icon: <Sparkles className="w-4 h-4 text-purple-500" />,      bg: "border-purple-200 bg-purple-50" },
-  done:     { label: "Completed",     icon: <CheckCircle2 className="w-4 h-4 text-emerald-500" />, bg: "border-emerald-200 bg-emerald-50" },
-};
-
-interface FlatTask extends Task {
-  projectName?: string;
-  clientName?: string;
-  clientRefId?: string;
-}
-
-interface ProjectSummary {
+interface PersonalRow {
   id: string;
-  name: string;
-  clientId?: string;
-  client?: { id: string; name: string };
+  title: string;
+  note: string | null;
+  date: string;
+  time: string | null;
+  listId: string | null;
+  starred: boolean;
+  done: boolean;
+  createdBy?: { id: string; name: string } | null;
 }
 
-interface TeamUser {
-  id: string;
-  name: string;
-  role: string;
-}
+interface ListRow { id: string; name: string }
+
+type SidebarView = "all" | "starred";
 
 // ── Helpers ──────────────────────────────────────────────────
 
-function isGeneral(task: Task): boolean {
-  return !task.projectId && !task.clientId;
+function dueChip(dateIso: string): { label: string; late: boolean } {
+  const d = new Date(dateIso);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const day = new Date(d); day.setHours(0, 0, 0, 0);
+  const diffDays = Math.round((day.getTime() - today.getTime()) / 86400000);
+  if (diffDays === 0) return { label: "Today", late: false };
+  if (diffDays === 1) return { label: "Tomorrow", late: false };
+  if (diffDays === -1) return { label: "Yesterday", late: true };
+  if (diffDays < -1) {
+    const weeks = Math.floor(-diffDays / 7);
+    return { label: weeks >= 1 ? `${weeks} week${weeks !== 1 ? "s" : ""} ago` : `${-diffDays} days ago`, late: true };
+  }
+  return { label: d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }), late: false };
 }
 
-function getGroup(task: Task): Group {
-  if (task.status === "DONE") return "done";
-  if (isGeneral(task)) return "general";
-  if (!task.dueDate) return "none";
-  const due = new Date(task.dueDate);
-  const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const todayEnd = new Date(todayStart.getTime() + 86400000 - 1);
-  const weekEnd = new Date(todayStart.getTime() + 7 * 86400000);
-  if (due < todayStart) return "overdue";
-  if (due <= todayEnd) return "today";
-  if (due <= weekEnd) return "week";
-  return "upcoming";
+function todayStr() { return new Date().toISOString().slice(0, 10); }
+function tomorrowStr() { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10); }
+
+// ── Inline "Add a task" composer (Google-Tasks style) ────────
+
+function AddTaskComposer({ listId, onAdded }: { listId: string | null; onAdded: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [title, setTitle] = useState("");
+  const [details, setDetails] = useState("");
+  const [showDetails, setShowDetails] = useState(false);
+  const [date, setDate] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const reset = () => { setTitle(""); setDetails(""); setShowDetails(false); setDate(null); setOpen(false); };
+
+  const save = async () => {
+    if (!title.trim()) { reset(); return; }
+    setSaving(true);
+    try {
+      const res = await fetch("/api/personal-items", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, note: details || null, date: date ?? todayStr(), listId }),
+      });
+      if (!res.ok) { toast.error("Couldn't add the task"); return; }
+      reset();
+      onAdded();
+    } finally { setSaving(false); }
+  };
+
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)}
+        className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm font-medium text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors">
+        <Plus className="w-4 h-4" /> Add a task
+      </button>
+    );
+  }
+
+  return (
+    <div className="border border-indigo-200 rounded-xl px-3 py-2.5 bg-white shadow-sm">
+      <div className="flex items-start gap-2.5">
+        <Circle className="w-4 h-4 text-gray-300 mt-1 flex-shrink-0" />
+        <div className="flex-1 min-w-0">
+          <input
+            autoFocus value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") save(); if (e.key === "Escape") reset(); }}
+            placeholder="Title"
+            className="w-full text-sm text-gray-900 placeholder:text-gray-400 outline-none bg-transparent"
+          />
+          {showDetails ? (
+            <textarea
+              value={details} rows={2}
+              onChange={(e) => setDetails(e.target.value)}
+              placeholder="Details"
+              className="w-full mt-1.5 text-xs text-gray-600 placeholder:text-gray-400 outline-none bg-transparent resize-none"
+            />
+          ) : (
+            <button onClick={() => setShowDetails(true)}
+              className="flex items-center gap-1.5 mt-1 text-xs text-gray-400 hover:text-gray-600">
+              <ListTodo className="w-3 h-3" /> Details
+            </button>
+          )}
+          <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+            <button onClick={() => setDate(date === todayStr() ? null : todayStr())}
+              className={`px-2.5 py-1 text-[11px] font-medium rounded-full border transition-colors ${
+                date === todayStr() ? "bg-indigo-50 border-indigo-300 text-indigo-700" : "border-gray-200 text-gray-600 hover:bg-gray-50"
+              }`}>
+              Today
+            </button>
+            <button onClick={() => setDate(date === tomorrowStr() ? null : tomorrowStr())}
+              className={`px-2.5 py-1 text-[11px] font-medium rounded-full border transition-colors ${
+                date === tomorrowStr() ? "bg-indigo-50 border-indigo-300 text-indigo-700" : "border-gray-200 text-gray-600 hover:bg-gray-50"
+              }`}>
+              Tomorrow
+            </button>
+            <label className={`px-1.5 py-1 rounded-full border cursor-pointer transition-colors ${
+              date && date !== todayStr() && date !== tomorrowStr() ? "bg-indigo-50 border-indigo-300 text-indigo-700" : "border-gray-200 text-gray-500 hover:bg-gray-50"
+            }`} title="Pick a date">
+              <Clock className="w-3 h-3" />
+              <input type="date" className="sr-only" value={date ?? ""} onChange={(e) => setDate(e.target.value || null)} />
+            </label>
+            <div className="ml-auto flex items-center gap-2">
+              <button onClick={reset} className="text-[11px] text-gray-400 hover:text-gray-600">Cancel</button>
+              <button onClick={save} disabled={saving || !title.trim()}
+                className="px-3 py-1 text-[11px] font-semibold text-white bg-indigo-600 rounded-full hover:bg-indigo-500 disabled:opacity-40">
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
-function formatDate(d: string | null) {
-  if (!d) return null;
-  return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
+// ── Page ─────────────────────────────────────────────────────
 
-// ── Component ────────────────────────────────────────────────
-
-function TasksPageInner() {
+function TasksBoardInner() {
   const { user: currentUser } = useCurrentUser();
   const searchParams = useSearchParams();
 
-  const [tab, setTab] = useState<PageTab>("all");
-  const [allTasks, setAllTasks] = useState<FlatTask[]>([]);
+  const [lists, setLists] = useState<ListRow[]>([]);
+  const [items, setItems] = useState<PersonalRow[]>([]);
+  const [orgTasks, setOrgTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [showNewTask, setShowNewTask] = useState(false);
-  const [deliveryFor, setDeliveryFor] = useState<FlatTask | null>(null);
-
-  // Approvals
-  const [approvals, setApprovals] = useState<FlatTask[] | null>(null);
+  const [view, setView] = useState<SidebarView>("all");
+  const [hiddenLists, setHiddenLists] = useState<Set<string>>(new Set());
+  const [showCompleted, setShowCompleted] = useState<Set<string>>(new Set());
+  const [addingList, setAddingList] = useState(false);
+  const [newListName, setNewListName] = useState("");
+  const [menuFor, setMenuFor] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
+  const [deliveryFor, setDeliveryFor] = useState<{ id: string; title: string } | null>(null);
+  const [showOrgTaskModal, setShowOrgTaskModal] = useState(false);
+  const [approvals, setApprovals] = useState<Task[] | null>(null);
+  const [showApprovals, setShowApprovals] = useState(false);
   const [reassignFor, setReassignFor] = useState<string | null>(null);
   const [reassignTo, setReassignTo] = useState("");
+  const [teamUsers, setTeamUsers] = useState<{ id: string; name: string }[]>([]);
 
-  // My-queue drag state
-  const [dragId, setDragId] = useState<string | null>(null);
-  const [myOrder, setMyOrder] = useState<string[] | null>(null);
-
-  // Filters
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<TaskStatus | "ALL">("ALL");
-  const [priorityFilter, setPriorityFilter] = useState<Priority | "ALL">("ALL");
-  const [filterProjectId, setFilterProjectId] = useState("");
-  const [filterClientId, setFilterClientId] = useState("");
-  const [filterUserId, setFilterUserId] = useState("");
-
-  // Reference data
-  const [projectsList, setProjectsList] = useState<ProjectSummary[]>([]);
-  const [teamUsers, setTeamUsers] = useState<TeamUser[]>([]);
-
-  const canFilterByUser = currentUser?.role === "ADMIN" || currentUser?.role === "MANAGER" || currentUser?.role === "OWNER";
   const isHead =
     currentUser?.designation === "HEAD_OF_DESIGN" ||
     currentUser?.role === "ADMIN" || currentUser?.role === "OWNER";
 
-  // Deep link: /tasks?tab=approvals
-  useEffect(() => {
-    const t = searchParams.get("tab");
-    if (t === "approvals" || t === "mine") setTab(t as PageTab);
-  }, [searchParams]);
-
-  useEffect(() => {
-    fetch("/api/users").then(r => r.json()).then(d => setTeamUsers(Array.isArray(d) ? d : []));
-  }, []);
-
-  const fetchTasks = useCallback(async () => {
+  const fetchAll = useCallback(async () => {
     setLoading(true);
-    setError(null);
     try {
-      const projRes = await fetch("/api/projects");
-      const projects = await projRes.json();
-      if (!projRes.ok) throw new Error(projects.error?.message || "Failed to load");
-      const projectsArray: ProjectSummary[] = Array.isArray(projects) ? projects : [];
-      setProjectsList(projectsArray);
-
-      const projectMap = new Map(projectsArray.map((p) => [p.id, p]));
-      const res = await fetch("/api/tasks?includeCompleted=true&all=1");
-      const raw = await res.json();
-      if (!res.ok) throw new Error(raw?.error?.message || "Failed to load tasks");
-      const list: Task[] = Array.isArray(raw) ? raw : [];
-
-      const seen = new Set<string>();
-      const flat: FlatTask[] = [];
-      for (const t of list) {
-        if (seen.has(t.id)) continue;
-        seen.add(t.id);
-        const proj = t.projectId ? projectMap.get(t.projectId) : undefined;
-        flat.push({
-          ...t,
-          projectName: proj?.name ?? "",
-          clientName: proj?.client?.name ?? t.client?.name ?? "",
-          clientRefId: proj?.clientId ?? proj?.client?.id ?? t.clientId ?? "",
-        });
+      const [listsRes, itemsRes, tasksRes] = await Promise.all([
+        fetch("/api/task-lists"),
+        fetch("/api/personal-items"),
+        fetch("/api/tasks?includeCompleted=true&all=1"),
+      ]);
+      if (listsRes.ok) setLists(await listsRes.json());
+      if (itemsRes.ok) setItems(await itemsRes.json());
+      if (tasksRes.ok) {
+        const all = await tasksRes.json();
+        setOrgTasks(
+          (Array.isArray(all) ? all : []).filter((t: Task) =>
+            t.assignees?.some((a) => a.userId === currentUser?.id || a.user?.id === currentUser?.id)),
+        );
       }
-      setAllTasks(flat);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Unknown error");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [currentUser?.id]);
 
-  useEffect(() => { fetchTasks(); }, [fetchTasks]);
+  useEffect(() => { if (currentUser) fetchAll(); }, [currentUser, fetchAll]);
+
+  useEffect(() => {
+    if (searchParams.get("tab") === "approvals" && isHead) setShowApprovals(true);
+  }, [searchParams, isHead]);
 
   const fetchApprovals = useCallback(async () => {
     if (!isHead) return;
     const res = await fetch("/api/tasks/approvals");
+    setApprovals(res.ok ? await res.json() : []);
+    if (!teamUsers.length) {
+      const u = await fetch("/api/users");
+      if (u.ok) setTeamUsers(await u.json());
+    }
+  }, [isHead, teamUsers.length]);
+
+  useEffect(() => { if (showApprovals) fetchApprovals(); }, [showApprovals, fetchApprovals]);
+
+  // ── Actions ────────────────────────────────────────────────
+
+  const togglePersonal = async (p: PersonalRow) => {
+    setItems((prev) => prev.map((x) => (x.id === p.id ? { ...x, done: !p.done } : x)));
+    await fetch(`/api/personal-items/${p.id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ done: !p.done }),
+    });
+  };
+
+  const toggleStar = async (p: PersonalRow) => {
+    setItems((prev) => prev.map((x) => (x.id === p.id ? { ...x, starred: !p.starred } : x)));
+    await fetch(`/api/personal-items/${p.id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ starred: !p.starred }),
+    });
+  };
+
+  const removePersonal = async (p: PersonalRow) => {
+    setItems((prev) => prev.filter((x) => x.id !== p.id));
+    await fetch(`/api/personal-items/${p.id}`, { method: "DELETE" });
+  };
+
+  const createList = async () => {
+    if (!newListName.trim()) { setAddingList(false); return; }
+    const res = await fetch("/api/task-lists", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: newListName }),
+    });
     if (res.ok) {
-      const d = await res.json();
-      setApprovals(Array.isArray(d) ? d : []);
-    } else {
-      setApprovals([]);
+      setNewListName("");
+      setAddingList(false);
+      fetchAll();
     }
-  }, [isHead]);
+  };
 
-  useEffect(() => { if (tab === "approvals") fetchApprovals(); }, [tab, fetchApprovals]);
+  const renameList = async () => {
+    if (!renaming || !renaming.name.trim()) { setRenaming(null); return; }
+    await fetch(`/api/task-lists/${renaming.id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: renaming.name }),
+    });
+    setRenaming(null);
+    fetchAll();
+  };
 
-  const handleStatusChange = async (task: FlatTask, status: TaskStatus) => {
-    // v2: completing goes through the delivery-proof dialog
-    if (status === "DONE" && task.status !== "DONE") {
-      setDeliveryFor(task);
-      return;
-    }
-    const previous = allTasks;
-    setAllTasks((prev) => prev.map((t) => t.id === task.id ? { ...t, status } : t));
-    try {
-      const res = await fetch(`/api/tasks/${task.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
-      });
-      if (!res.ok) throw new Error("Request failed");
-    } catch {
-      setAllTasks(previous);
-      toast.error("Failed to update task status");
-    }
+  const deleteList = async (id: string) => {
+    if (!confirm("Delete this list? Its tasks move to My Tasks.")) return;
+    await fetch(`/api/task-lists/${id}`, { method: "DELETE" });
+    setMenuFor(null);
+    fetchAll();
   };
 
   const approve = async (taskId: string, assigneeId?: string) => {
     const res = await fetch(`/api/tasks/${taskId}/approve`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+      method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify(assigneeId ? { assigneeId } : {}),
     });
-    if (res.ok) {
-      toast.success(assigneeId ? "Reassigned" : "Approved");
-      setReassignFor(null);
-      setReassignTo("");
-      fetchApprovals();
-      fetchTasks();
-    } else {
-      toast.error("Approval failed");
-    }
+    if (res.ok) { toast.success(assigneeId ? "Reassigned" : "Approved"); setReassignFor(null); setReassignTo(""); fetchApprovals(); fetchAll(); }
+    else toast.error("Approval failed");
   };
 
-  // Role-scoped + filtered tasks
-  const filtered = allTasks.filter((t) => {
-    if (currentUser?.role === "MEMBER") {
-      const isAssigned = t.assignees?.some(a => a.userId === currentUser.id || a.user?.id === currentUser.id);
-      if (!isAssigned) return false;
-    }
-    if (filterUserId) {
-      const isAssigned = t.assignees?.some(a => a.userId === filterUserId || a.user?.id === filterUserId);
-      if (!isAssigned) return false;
-    }
-    if (statusFilter !== "ALL" && t.status !== statusFilter) return false;
-    if (priorityFilter !== "ALL" && t.priority !== priorityFilter) return false;
-    if (search && !(t.title ?? "").toLowerCase().includes(search.toLowerCase())) return false;
-    if (filterProjectId && t.projectId !== filterProjectId) return false;
-    if (filterClientId && t.clientRefId !== filterClientId) return false;
-    return true;
-  });
+  // ── Row renderers ──────────────────────────────────────────
 
-  // My-queue list (drag-drop by sortOrder)
-  const myTasks = allTasks
-    .filter((t) =>
-      t.status !== "DONE" &&
-      t.assignees?.some(a => a.userId === currentUser?.id || a.user?.id === currentUser?.id))
-    .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
-  const orderedMyTasks = myOrder
-    ? [...myTasks].sort((a, b) => myOrder.indexOf(a.id) - myOrder.indexOf(b.id))
-    : myTasks;
-
-  const persistOrder = async (ids: string[]) => {
-    setMyOrder(ids);
-    const res = await fetch("/api/tasks/my-order", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ids }),
-    });
-    if (!res.ok) toast.error("Failed to save order");
-  };
-
-  const onDropOn = (targetId: string) => {
-    if (!dragId || dragId === targetId) return;
-    const ids = orderedMyTasks.map((t) => t.id);
-    const from = ids.indexOf(dragId);
-    const to = ids.indexOf(targetId);
-    ids.splice(from, 1);
-    ids.splice(to, 0, dragId);
-    persistOrder(ids);
-    setDragId(null);
-  };
-
-  const clientsFromProjects = Array.from(
-    new Map(
-      projectsList.filter((p) => p.client?.id).map((p) => [p.client!.id, p.client!])
-    ).values()
-  );
-
-  const groups: Group[] = ["overdue", "today", "week", "upcoming", "none", "general", "done"];
-  const byGroup = (group: Group) => filtered.filter((t) => getGroup(t) === group);
-
-  const counts = {
-    total: filtered.filter((t) => t.status !== "DONE").length,
-    overdue: filtered.filter((t) => getGroup(t) === "overdue").length,
-    today: filtered.filter((t) => getGroup(t) === "today").length,
-  };
-
-  const STATUS_FILTERS: { label: string; value: TaskStatus | "ALL" }[] = [
-    { label: "All", value: "ALL" },
-    { label: "To Do", value: "TODO" },
-    { label: "In Progress", value: "IN_PROGRESS" },
-    { label: "In Review", value: "IN_REVIEW" },
-    { label: "Blocked", value: "BLOCKED" },
-    { label: "Done", value: "DONE" },
-  ];
-
-  const PRIORITY_FILTERS: { label: string; value: Priority | "ALL" }[] = [
-    { label: "All", value: "ALL" },
-    { label: "Urgent", value: "URGENT" },
-    { label: "High", value: "HIGH" },
-    { label: "Medium", value: "MEDIUM" },
-    { label: "Low", value: "LOW" },
-  ];
-
-  const getAssigneeNames = (task: FlatTask): string[] => {
-    if (!task.assignees || task.assignees.length === 0) return [];
-    return task.assignees.map(a => a.user?.name ?? "").filter(Boolean);
-  };
-
-  const renderTaskRow = (task: FlatTask, idx: number, group?: Group) => {
-    const assignees = getAssigneeNames(task);
+  const renderOrgTaskRow = (t: Task) => {
+    const chip = t.dueDate ? dueChip(t.dueDate) : null;
+    const done = t.status === "DONE";
     return (
-      <div
-        key={`${task.parentId ?? "root"}-${task.id}`}
-        className={`flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors ${
-          idx > 0 ? "border-t border-gray-100" : ""
-        } ${task.status === "DONE" ? "opacity-60" : ""}`}
-      >
-        <button
-          onClick={() => handleStatusChange(task, task.status === "DONE" ? "TODO" : "DONE")}
-          className="flex-shrink-0"
-        >
-          {task.status === "DONE"
-            ? <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-            : <div className={`w-4 h-4 rounded-full border-2 ${group === "overdue" ? "border-red-400" : "border-gray-300"}`} />
-          }
+      <div key={`org-${t.id}`} className="group flex items-start gap-2.5 px-3 py-2 hover:bg-gray-50 rounded-xl transition-colors">
+        <button className="mt-0.5 flex-shrink-0"
+          onClick={() => { if (!done) setDeliveryFor({ id: t.id, title: t.title }); }}>
+          {done ? <CheckCircle2 className="w-4.5 h-4.5 text-indigo-500" /> : <Circle className="w-4.5 h-4.5 text-gray-300 hover:text-indigo-400" />}
         </button>
-
         <div className="flex-1 min-w-0">
-          <p className={`text-sm ${task.status === "DONE" ? "line-through text-gray-400" : "text-gray-900 font-medium"}`}>
-            {task.title}
-            {task.topic && task.topic !== task.title && (
-              <span className="text-xs text-gray-400 font-normal ml-2">— {task.topic}</span>
-            )}
-          </p>
-          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-            {task.projectId && task.projectName ? (
-              <Link
-                href={`/projects/${task.projectId}`}
-                className="text-xs text-gray-400 hover:text-indigo-600 transition-colors flex items-center gap-1"
-              >
-                <FolderKanban className="w-3 h-3" />
-                {task.projectName}
-              </Link>
-            ) : isGeneral(task) ? (
-              <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 bg-purple-50 text-purple-600 rounded-full">
-                <Sparkles className="w-2.5 h-2.5" /> General
-              </span>
-            ) : null}
-            {task.clientName && (
-              <>
-                <span className="text-xs text-gray-300">·</span>
-                <span className="text-xs text-gray-400">{task.clientName}</span>
-              </>
-            )}
-            {assignees.length > 0 && (
-              <>
-                <span className="text-xs text-gray-300">·</span>
-                <span className="flex items-center gap-1 text-xs text-gray-400">
-                  <Users className="w-3 h-3" />
-                  {assignees.length <= 2 ? assignees.join(", ") : `${assignees[0]} +${assignees.length - 1}`}
-                </span>
-              </>
-            )}
-            {task.assignmentStatus === "PENDING_HEAD_APPROVAL" && (
-              <span className="text-[10px] font-medium px-1.5 py-0.5 bg-amber-50 text-amber-600 rounded-full">
-                Awaiting head approval
+          <a href={t.projectId ? `/projects/${t.projectId}?task=${t.id}` : "#"}
+            className={`block text-sm leading-snug ${done ? "line-through text-gray-400" : "text-gray-800 hover:text-indigo-700"}`}>
+            {t.title}
+          </a>
+          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+            <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 bg-indigo-50 text-indigo-600 rounded-full">
+              <FolderKanban className="w-2.5 h-2.5" />
+              {(t as Task & { project?: { name?: string } }).project?.name ?? t.client?.name ?? "Assigned to you"}
+            </span>
+            {chip && !done && (
+              <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border ${
+                chip.late ? "bg-red-50 border-red-200 text-red-600" : "bg-gray-50 border-gray-200 text-gray-600"
+              }`}>
+                <Clock className="w-2.5 h-2.5" /> {chip.label}
               </span>
             )}
           </div>
         </div>
+      </div>
+    );
+  };
 
-        <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
-          <PriorityBadge priority={task.priority} />
-          <StatusBadge status={task.status} />
-          {task.dueDate && (
-            <span className={`text-xs flex items-center gap-1 ${
-              group === "overdue" ? "text-red-500 font-medium" : "text-gray-400"
-            }`}>
-              <Calendar className="w-3 h-3" />
-              {formatDate(task.dueDate)}
-            </span>
+  const renderPersonalRow = (p: PersonalRow) => {
+    const chip = dueChip(p.date);
+    return (
+      <div key={p.id} className="group flex items-start gap-2.5 px-3 py-2 hover:bg-gray-50 rounded-xl transition-colors">
+        <button className="mt-0.5 flex-shrink-0" onClick={() => togglePersonal(p)}>
+          {p.done ? <CheckCircle2 className="w-4.5 h-4.5 text-indigo-500" /> : <Circle className="w-4.5 h-4.5 text-gray-300 hover:text-indigo-400" />}
+        </button>
+        <div className="flex-1 min-w-0">
+          <p className={`text-sm leading-snug ${p.done ? "line-through text-gray-400" : "text-gray-800"}`}>{p.title}</p>
+          {p.note && <p className="text-xs text-gray-400 mt-0.5 line-clamp-2">{p.note}</p>}
+          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+            {!p.done && (
+              <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border ${
+                chip.late ? "bg-red-50 border-red-200 text-red-600" : "bg-gray-50 border-gray-200 text-gray-600"
+              }`}>
+                <Clock className="w-2.5 h-2.5" /> {chip.label}{p.time ? ` · ${p.time}` : ""}
+              </span>
+            )}
+            {p.createdBy && p.createdBy.id !== currentUser?.id && (
+              <span className="text-[10px] text-gray-400">from {p.createdBy.name}</span>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+          <button onClick={() => toggleStar(p)} title={p.starred ? "Unstar" : "Star"}>
+            <Star className={`w-3.5 h-3.5 ${p.starred ? "text-amber-400 fill-amber-400 opacity-100" : "text-gray-300 hover:text-amber-400"}`} />
+          </button>
+          <button onClick={() => removePersonal(p)} title="Delete" className="text-gray-300 hover:text-red-400">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+        {p.starred && <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400 flex-shrink-0 mt-0.5 group-hover:hidden" />}
+      </div>
+    );
+  };
+
+  // ── Column ─────────────────────────────────────────────────
+
+  const Column = ({ id, title, personal, org }: {
+    id: string; title: string; personal: PersonalRow[]; org?: Task[];
+  }) => {
+    const openPersonal = personal.filter((p) => !p.done);
+    const donePersonal = personal.filter((p) => p.done);
+    const openOrg = (org ?? []).filter((t) => t.status !== "DONE");
+    const doneOrg = (org ?? []).filter((t) => t.status === "DONE");
+    const completedCount = donePersonal.length + doneOrg.length;
+    const isCustom = id !== "my-tasks";
+    const expanded = showCompleted.has(id);
+
+    return (
+      <div className="w-[320px] flex-shrink-0 bg-white border border-gray-200 rounded-2xl flex flex-col max-h-full shadow-sm">
+        <div className="flex items-center justify-between px-4 pt-4 pb-2">
+          {renaming?.id === id ? (
+            <input autoFocus value={renaming.name}
+              onChange={(e) => setRenaming({ id, name: e.target.value })}
+              onKeyDown={(e) => { if (e.key === "Enter") renameList(); if (e.key === "Escape") setRenaming(null); }}
+              onBlur={renameList}
+              className="text-base font-semibold text-gray-900 border-b border-indigo-300 outline-none bg-transparent w-40" />
+          ) : (
+            <h2 className="text-base font-semibold text-gray-900">{title}</h2>
+          )}
+          {isCustom && (
+            <div className="relative">
+              <button onClick={() => setMenuFor(menuFor === id ? null : id)}
+                className="p-1.5 text-gray-400 hover:bg-gray-100 rounded-full">
+                <MoreVertical className="w-4 h-4" />
+              </button>
+              {menuFor === id && (
+                <div className="absolute right-0 top-8 z-20 bg-white border border-gray-200 rounded-xl shadow-lg py-1 min-w-[130px]">
+                  <button onClick={() => { setRenaming({ id, name: title }); setMenuFor(null); }}
+                    className="block w-full text-left px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50">Rename list</button>
+                  <button onClick={() => deleteList(id)}
+                    className="block w-full text-left px-3 py-1.5 text-xs text-red-500 hover:bg-red-50">Delete list</button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="px-2 pb-1">
+          <AddTaskComposer listId={isCustom ? id : null} onAdded={fetchAll} />
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-2 pb-2 min-h-[120px]">
+          {loading ? (
+            <div className="space-y-2 px-2 pt-1">{[1, 2, 3].map((i) => <div key={i} className="h-10 bg-gray-100 rounded-xl animate-pulse" />)}</div>
+          ) : openOrg.length + openPersonal.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-10 text-center px-4">
+              <CheckCircle2 className="w-9 h-9 text-emerald-200 mb-2" />
+              <p className="text-sm font-medium text-gray-600">No tasks yet</p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                {isCustom ? "Add your to-dos and keep track of them here." : "Tasks delegated to you land here automatically."}
+              </p>
+            </div>
+          ) : (
+            <>
+              {openOrg.map(renderOrgTaskRow)}
+              {openPersonal.map(renderPersonalRow)}
+            </>
+          )}
+
+          {completedCount > 0 && (
+            <div className="mt-1 border-t border-gray-100 pt-1">
+              <button
+                onClick={() => setShowCompleted((s) => { const x = new Set(s); if (x.has(id)) x.delete(id); else x.add(id); return x; })}
+                className="w-full flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-500 hover:bg-gray-50 rounded-xl">
+                {expanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                Completed ({completedCount})
+              </button>
+              {expanded && (
+                <div className="opacity-70">
+                  {doneOrg.map(renderOrgTaskRow)}
+                  {donePersonal.map(renderPersonalRow)}
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>
     );
   };
 
-  return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-4 sm:px-6 lg:px-8 py-4 sm:py-5">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:justify-between">
-          <div>
-            <h1 className="text-xl font-semibold text-gray-900">Tasks</h1>
-            <p className="text-sm text-gray-500 mt-0.5">
-              {counts.total} open task{counts.total !== 1 ? "s" : ""}
-            </p>
-          </div>
-          <div className="flex items-center gap-3 text-sm text-gray-500">
-            {counts.overdue > 0 && (
-              <span className="flex items-center gap-1.5 text-red-600 font-medium">
-                <AlertCircle className="w-4 h-4" /> {counts.overdue} overdue
-              </span>
-            )}
-            <button
-              onClick={() => setShowNewTask(true)}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-500 transition-colors"
-            >
-              <Plus className="w-4 h-4" /> New Task
-            </button>
-          </div>
-        </div>
+  // ── Data slices ────────────────────────────────────────────
 
-        {/* Page tabs */}
-        <div className="flex items-center gap-1 mt-4 -mb-[21px]">
-          {([
-            { id: "all", label: "All Tasks", icon: <ListTodo className="w-3.5 h-3.5" /> },
-            { id: "mine", label: "My Tasks", icon: <Users className="w-3.5 h-3.5" /> },
-            ...(isHead ? [{ id: "approvals" as PageTab, label: "Approvals", icon: <ShieldCheck className="w-3.5 h-3.5" /> }] : []),
-          ] as { id: PageTab; label: string; icon: React.ReactNode }[]).map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium transition-colors border-b-2 ${
-                tab === t.id ? "border-indigo-600 text-indigo-700" : "border-transparent text-gray-500 hover:text-gray-700"
-              }`}
-            >
-              {t.icon} {t.label}
-              {t.id === "approvals" && approvals && approvals.length > 0 && (
-                <span className="min-w-[16px] h-4 flex items-center justify-center px-1 text-[10px] font-semibold text-white bg-amber-500 rounded-full">
+  const noListItems = useMemo(() => items.filter((p) => !p.listId), [items]);
+  const itemsByList = useMemo(() => {
+    const m = new Map<string, PersonalRow[]>();
+    for (const p of items) if (p.listId) m.set(p.listId, [...(m.get(p.listId) ?? []), p]);
+    return m;
+  }, [items]);
+  const starredItems = useMemo(() => items.filter((p) => p.starred), [items]);
+  const myTasksCount = orgTasks.filter((t) => t.status !== "DONE").length + noListItems.filter((p) => !p.done).length;
+
+  return (
+    <div className="flex h-full min-h-0">
+      {/* ── In-page sidebar ── */}
+      <div className="w-56 flex-shrink-0 border-r border-gray-200 bg-white py-4 px-3 hidden md:flex flex-col gap-1 overflow-y-auto">
+        <button onClick={() => setView("all")}
+          className={`flex items-center gap-2.5 px-3 py-2 rounded-full text-sm font-medium transition-colors ${
+            view === "all" ? "bg-indigo-50 text-indigo-700" : "text-gray-600 hover:bg-gray-50"
+          }`}>
+          <ListTodo className="w-4 h-4" /> All tasks
+        </button>
+        <button onClick={() => setView("starred")}
+          className={`flex items-center gap-2.5 px-3 py-2 rounded-full text-sm font-medium transition-colors ${
+            view === "starred" ? "bg-indigo-50 text-indigo-700" : "text-gray-600 hover:bg-gray-50"
+          }`}>
+          <Star className="w-4 h-4" /> Starred
+        </button>
+
+        <p className="px-3 mt-4 mb-1 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Lists</p>
+
+        <label className="flex items-center gap-2.5 px-3 py-1.5 text-sm text-gray-700 cursor-default">
+          <input type="checkbox" checked readOnly className="rounded border-gray-300 text-indigo-600" />
+          <span className="flex-1 truncate">My Tasks</span>
+          <span className="text-xs text-gray-400">{myTasksCount}</span>
+        </label>
+        {lists.map((l) => {
+          const count = (itemsByList.get(l.id) ?? []).filter((p) => !p.done).length;
+          return (
+            <label key={l.id} className="flex items-center gap-2.5 px-3 py-1.5 text-sm text-gray-700 cursor-pointer hover:bg-gray-50 rounded-lg">
+              <input type="checkbox"
+                checked={!hiddenLists.has(l.id)}
+                onChange={() => setHiddenLists((s) => { const x = new Set(s); if (x.has(l.id)) x.delete(l.id); else x.add(l.id); return x; })}
+                className="rounded border-gray-300 text-indigo-600" />
+              <span className="flex-1 truncate">{l.name}</span>
+              {count > 0 && <span className="text-xs text-gray-400">{count}</span>}
+            </label>
+          );
+        })}
+
+        {addingList ? (
+          <div className="px-3 py-1.5">
+            <input autoFocus value={newListName}
+              onChange={(e) => setNewListName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") createList(); if (e.key === "Escape") { setAddingList(false); setNewListName(""); } }}
+              onBlur={createList}
+              placeholder="List name…"
+              className="w-full text-sm px-2 py-1.5 border border-indigo-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" />
+          </div>
+        ) : (
+          <button onClick={() => setAddingList(true)}
+            className="flex items-center gap-2.5 px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded-full">
+            <Plus className="w-4 h-4" /> Create new list
+          </button>
+        )}
+
+        <div className="mt-auto pt-4 space-y-1">
+          {isHead && (
+            <button onClick={() => setShowApprovals(true)}
+              className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-xl">
+              <ShieldCheck className="w-3.5 h-3.5" /> Approvals
+              {approvals && approvals.length > 0 && (
+                <span className="ml-auto min-w-[18px] h-[18px] flex items-center justify-center text-[10px] font-bold text-white bg-amber-500 rounded-full">
                   {approvals.length}
                 </span>
               )}
             </button>
-          ))}
+          )}
+          <button onClick={() => setShowOrgTaskModal(true)}
+            className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-xl">
+            <Repeat className="w-3.5 h-3.5" /> Delegate a team task
+          </button>
         </div>
       </div>
 
-      <div className="flex-1 px-4 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 overflow-auto">
-        {/* ── ALL tab ── */}
-        {tab === "all" && (
-          <>
-            <div className="space-y-3">
-              <div className="flex items-center gap-3 flex-wrap">
-                <div className="relative flex-1 max-w-sm">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                  <input
-                    type="text" placeholder="Search tasks..." value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    className="w-full pl-9 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-                  />
-                </div>
-                {canFilterByUser && (
-                  <select
-                    value={filterUserId}
-                    onChange={(e) => setFilterUserId(e.target.value)}
-                    className="px-3 py-2 rounded-lg text-sm bg-white border border-gray-200 text-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  >
-                    <option value="">All Members</option>
-                    {teamUsers.map((u) => (
-                      <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
-                    ))}
-                  </select>
-                )}
+      {/* ── Board ── */}
+      <div className="flex-1 min-w-0 bg-gray-50 overflow-x-auto overflow-y-hidden">
+        <div className="h-full flex items-start gap-4 p-4 sm:p-6">
+          {view === "starred" ? (
+            <div className="w-[340px] flex-shrink-0 bg-white border border-gray-200 rounded-2xl flex flex-col max-h-full shadow-sm">
+              <div className="px-4 pt-4 pb-2">
+                <h2 className="text-base font-semibold text-gray-900 flex items-center gap-2">
+                  <Star className="w-4 h-4 text-amber-400 fill-amber-400" /> Starred
+                </h2>
               </div>
-
-              <div className="flex items-center gap-3 flex-wrap">
-                <select
-                  value={filterClientId}
-                  onChange={(e) => { setFilterClientId(e.target.value); setFilterProjectId(""); }}
-                  className="px-3 py-1.5 rounded-lg text-sm bg-white border border-gray-200 text-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                >
-                  <option value="">All Clients</option>
-                  {clientsFromProjects.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-
-                <select
-                  value={filterProjectId}
-                  onChange={(e) => setFilterProjectId(e.target.value)}
-                  className="px-3 py-1.5 rounded-lg text-sm bg-white border border-gray-200 text-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                >
-                  <option value="">All Projects</option>
-                  {projectsList
-                    .filter((p) => !filterClientId || p.client?.id === filterClientId || p.clientId === filterClientId)
-                    .map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
-
-                <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1 overflow-x-auto">
-                  {STATUS_FILTERS.map(({ label, value }) => (
-                    <button
-                      key={value}
-                      onClick={() => setStatusFilter(value)}
-                      className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
-                        statusFilter === value ? "bg-indigo-600 text-white" : "text-gray-600 hover:bg-gray-100"
-                      }`}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1 overflow-x-auto">
-                  {PRIORITY_FILTERS.map(({ label, value }) => (
-                    <button
-                      key={value}
-                      onClick={() => setPriorityFilter(value)}
-                      className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
-                        priorityFilter === value ? "bg-indigo-600 text-white" : "text-gray-600 hover:bg-gray-100"
-                      }`}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
+              <div className="flex-1 overflow-y-auto px-2 pb-2">
+                {starredItems.length === 0 ? (
+                  <p className="text-xs text-gray-400 px-4 py-8 text-center">Star a task to pin it here.</p>
+                ) : starredItems.map(renderPersonalRow)}
               </div>
-            </div>
-
-            {loading ? (
-              <div className="space-y-4">
-                {[1, 2, 3].map((i) => (
-                  <div key={i} className="bg-white border border-gray-200 rounded-xl p-4 animate-pulse">
-                    <div className="h-4 bg-gray-200 rounded w-1/3 mb-2" />
-                    <div className="space-y-2">
-                      {[1, 2, 3].map((j) => <div key={j} className="h-10 bg-gray-100 rounded-lg" />)}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : error ? (
-              <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-center">
-                <p className="text-sm font-medium text-amber-800">Something went wrong</p>
-                <p className="text-xs text-amber-600 mt-1">{error}</p>
-              </div>
-            ) : filtered.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-20 text-center">
-                <CheckCircle2 className="w-12 h-12 text-emerald-400 mb-4" />
-                <p className="text-sm font-medium text-gray-700">
-                  {search || statusFilter !== "ALL" || priorityFilter !== "ALL" || filterProjectId || filterClientId || filterUserId
-                    ? "No tasks match your filters"
-                    : "No open tasks — you're all caught up!"}
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-5">
-                {groups.map((group) => {
-                  const tasks = byGroup(group);
-                  if (tasks.length === 0) return null;
-                  const cfg = GROUP_CONFIG[group];
-                  return (
-                    <div key={group}>
-                      <div className={`flex items-center gap-2 px-3 py-2 border rounded-xl mb-3 ${cfg.bg}`}>
-                        {cfg.icon}
-                        <span className="text-sm font-semibold text-gray-800">{cfg.label}</span>
-                        <span className="text-xs text-gray-500 ml-auto">{tasks.length}</span>
-                      </div>
-                      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-                        {tasks.map((task, idx) => renderTaskRow(task, idx, group))}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </>
-        )}
-
-        {/* ── MY TASKS tab (drag-drop queue) ── */}
-        {tab === "mine" && (
-          loading ? (
-            <div className="space-y-2">
-              {[1, 2, 3, 4].map((i) => <div key={i} className="h-14 bg-gray-100 rounded-xl animate-pulse" />)}
-            </div>
-          ) : orderedMyTasks.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 text-center">
-              <CheckCircle2 className="w-12 h-12 text-emerald-400 mb-4" />
-              <p className="text-sm font-medium text-gray-700">Nothing assigned to you — enjoy the calm!</p>
             </div>
           ) : (
-            <div>
-              <p className="text-xs text-gray-400 mb-3">Drag to reorder your personal queue — the order is saved.</p>
-              <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-                {orderedMyTasks.map((task, idx) => (
-                  <div
-                    key={task.id}
-                    draggable
-                    onDragStart={() => setDragId(task.id)}
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={() => onDropOn(task.id)}
-                    className={`flex items-center gap-2 ${dragId === task.id ? "opacity-40" : ""}`}
-                  >
-                    <div className="pl-3 cursor-grab text-gray-300 hover:text-gray-500">
-                      <GripVertical className="w-4 h-4" />
-                    </div>
-                    <div className="flex-1">{renderTaskRow(task, idx)}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )
-        )}
+            <>
+              <Column id="my-tasks" title="My Tasks" personal={noListItems} org={orgTasks} />
+              {lists.filter((l) => !hiddenLists.has(l.id)).map((l) => (
+                <Column key={l.id} id={l.id} title={l.name} personal={itemsByList.get(l.id) ?? []} />
+              ))}
+              {/* Ghost column: quick create */}
+              <button onClick={() => setAddingList(true)}
+                className="w-[240px] flex-shrink-0 border-2 border-dashed border-gray-200 rounded-2xl py-8 text-sm font-medium text-gray-400 hover:text-indigo-600 hover:border-indigo-200 transition-colors">
+                <Plus className="w-4 h-4 inline mr-1" /> New list
+              </button>
+            </>
+          )}
+        </div>
+      </div>
 
-        {/* ── APPROVALS tab ── */}
-        {tab === "approvals" && isHead && (
-          approvals === null ? (
-            <div className="space-y-2">
-              {[1, 2].map((i) => <div key={i} className="h-16 bg-gray-100 rounded-xl animate-pulse" />)}
+      {/* ── Approvals slide-over (heads only) ── */}
+      {showApprovals && isHead && (
+        <>
+          <div className="fixed inset-0 z-40 bg-black/20" onClick={() => setShowApprovals(false)} />
+          <div className="fixed top-0 right-0 bottom-0 z-50 w-full sm:w-[420px] bg-white shadow-2xl flex flex-col">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
+              <h2 className="text-base font-semibold text-gray-900 flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-amber-500" /> Assignment approvals
+              </h2>
+              <button onClick={() => setShowApprovals(false)} className="p-1.5 hover:bg-gray-100 rounded-lg">
+                <X className="w-4 h-4 text-gray-500" />
+              </button>
             </div>
-          ) : approvals.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 text-center">
-              <ShieldCheck className="w-12 h-12 text-emerald-400 mb-4" />
-              <p className="text-sm font-medium text-gray-700">No tasks waiting for assignment approval.</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {approvals.map((t) => (
-                <div key={t.id} className="bg-white border border-amber-200 rounded-xl p-4">
-                  <div className="flex items-start justify-between gap-3 flex-wrap">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-gray-900">{t.title}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">
-                        {(t as FlatTask & { project?: { name?: string; client?: { name?: string } } }).project?.name ?? t.client?.name ?? "General"}
-                        {t.preferredAssignee && (
-                          <> · Preferred: <span className="font-medium text-gray-600">{t.preferredAssignee.name}</span></>
-                        )}
-                        {t.dueDate && <> · Due {formatDate(t.dueDate)}</>}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {reassignFor === t.id ? (
-                        <>
-                          <div className="relative">
-                            <select
-                              value={reassignTo}
-                              onChange={(e) => setReassignTo(e.target.value)}
-                              className="appearance-none pl-3 pr-7 py-1.5 text-xs border border-gray-300 rounded-lg bg-white"
-                            >
-                              <option value="">Pick person…</option>
-                              {teamUsers.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-                            </select>
-                            <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" />
-                          </div>
-                          <button
-                            onClick={() => reassignTo && approve(t.id, reassignTo)}
-                            disabled={!reassignTo}
-                            className="px-3 py-1.5 text-xs font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 disabled:opacity-50"
-                          >
-                            Assign
-                          </button>
-                          <button onClick={() => { setReassignFor(null); setReassignTo(""); }}
-                            className="text-xs text-gray-400 hover:text-gray-600">Cancel</button>
-                        </>
-                      ) : (
-                        <>
-                          <button
-                            onClick={() => approve(t.id)}
-                            disabled={!t.preferredAssignee}
-                            className="px-3 py-1.5 text-xs font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 disabled:opacity-50"
-                          >
-                            Approve{t.preferredAssignee ? ` → ${t.preferredAssignee.name}` : ""}
-                          </button>
-                          <button
-                            onClick={() => setReassignFor(t.id)}
-                            className="px-3 py-1.5 text-xs font-medium border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50"
-                          >
-                            Assign someone else
-                          </button>
-                        </>
-                      )}
-                    </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {approvals === null ? (
+                <div className="space-y-2">{[1, 2].map((i) => <div key={i} className="h-16 bg-gray-100 rounded-xl animate-pulse" />)}</div>
+              ) : approvals.length === 0 ? (
+                <p className="text-sm text-gray-400 text-center py-10">No tasks waiting for approval.</p>
+              ) : approvals.map((t) => (
+                <div key={t.id} className="border border-amber-200 rounded-xl p-3.5">
+                  <p className="text-sm font-medium text-gray-900">{t.title}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    {t.client?.name ?? "General"}
+                    {t.preferredAssignee && <> · Preferred: <b className="text-gray-600">{t.preferredAssignee.name}</b></>}
+                  </p>
+                  <div className="flex items-center gap-2 mt-2.5 flex-wrap">
+                    {reassignFor === t.id ? (
+                      <>
+                        <select value={reassignTo} onChange={(e) => setReassignTo(e.target.value)}
+                          className="px-2 py-1.5 text-xs border border-gray-300 rounded-lg bg-white">
+                          <option value="">Pick person…</option>
+                          {teamUsers.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+                        </select>
+                        <button onClick={() => reassignTo && approve(t.id, reassignTo)} disabled={!reassignTo}
+                          className="px-3 py-1.5 text-xs font-medium bg-indigo-600 text-white rounded-lg disabled:opacity-50">Assign</button>
+                        <button onClick={() => setReassignFor(null)} className="text-xs text-gray-400">Cancel</button>
+                      </>
+                    ) : (
+                      <>
+                        <button onClick={() => approve(t.id)} disabled={!t.preferredAssignee}
+                          className="px-3 py-1.5 text-xs font-medium bg-emerald-600 text-white rounded-lg disabled:opacity-50">
+                          Approve{t.preferredAssignee ? ` → ${t.preferredAssignee.name}` : ""}
+                        </button>
+                        <button onClick={() => setReassignFor(t.id)}
+                          className="px-3 py-1.5 text-xs font-medium border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50">
+                          Someone else
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               ))}
             </div>
-          )
-        )}
-      </div>
+          </div>
+        </>
+      )}
 
-      {/* Global New Task modal */}
-      {showNewTask && (
+      {/* Delegate an org task (full task modal with routing) */}
+      {showOrgTaskModal && (
         <TaskModal
           global
-          onClose={() => setShowNewTask(false)}
-          onSaved={() => { setShowNewTask(false); fetchTasks(); }}
+          onClose={() => setShowOrgTaskModal(false)}
+          onSaved={() => { setShowOrgTaskModal(false); fetchAll(); toast.success("Task created"); }}
         />
       )}
 
-      {/* Delivery-proof dialog on completion */}
+      {/* Delivery proof when completing a delegated task */}
       {deliveryFor && (
         <DeliveryDialog
           taskId={deliveryFor.id}
           taskTitle={deliveryFor.title}
           onClose={() => setDeliveryFor(null)}
-          onCompleted={() => { setDeliveryFor(null); fetchTasks(); }}
+          onCompleted={() => { setDeliveryFor(null); fetchAll(); }}
         />
       )}
     </div>
   );
 }
 
-export default function MyTasksPage() {
+export default function TasksPage() {
   return (
     <Suspense fallback={
-      <div className="p-8 space-y-4">
-        {[1, 2, 3].map((i) => <div key={i} className="h-16 bg-gray-100 rounded-xl animate-pulse" />)}
+      <div className="p-8 flex gap-4">
+        {[1, 2, 3].map((i) => <div key={i} className="w-[320px] h-72 bg-gray-100 rounded-2xl animate-pulse" />)}
       </div>
     }>
-      <TasksPageInner />
+      <TasksBoardInner />
     </Suspense>
   );
 }

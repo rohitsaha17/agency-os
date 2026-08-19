@@ -10,13 +10,21 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   try {
     const user = await requireAuth(req);
     const { id } = await params;
-    const { done, title, note, date, time } = await req.json();
+    const { done, title, note, date, time, listId, starred } = await req.json();
 
     const existing = await prisma.personalItem.findFirst({
       where: { id, userId: user.id },
       select: { id: true },
     });
     if (!existing) throw new ApiError("Item not found", 404);
+
+    if (listId) {
+      const list = await prisma.taskList.findFirst({
+        where: { id: listId, userId: user.id },
+        select: { id: true },
+      });
+      if (!list) throw new ApiError("List not found", 404);
+    }
 
     const updated = await prisma.personalItem.update({
       where: { id },
@@ -26,6 +34,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         ...(note !== undefined && { note: note?.trim() || null }),
         ...(date !== undefined && { date: new Date(date) }),
         ...(time !== undefined && { time: time?.trim() || null }),
+        ...(listId !== undefined && { listId: listId || null }),
+        ...(starred !== undefined && { starred: !!starred }),
       },
       include: { createdBy: { select: { id: true, name: true } } },
     });

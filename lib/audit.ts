@@ -1,5 +1,5 @@
 // v2 universal status audit (docs/V2_CONTEXT.md Prime Directive):
-// EVERY status change of anything (task, project, content item, booking,
+// EVERY status change of anything (task, project, content item, cycle,
 // invoice, contract, …) must be written to StatusHistory through logStatus.
 
 import { prisma } from "@/lib/prisma";

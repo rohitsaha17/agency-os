@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ChevronRight, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import type { ContractType, ContractPartyType, Client, Project, Stakeholder, User } from "@/types";
+import type { ContractType, ContractPartyType, Client, Project, User } from "@/types";
 
 const TYPE_OPTIONS: { value: ContractType; label: string }[] = [
   { value: "NDA",               label: "NDA" },
@@ -21,14 +21,13 @@ const CURRENCIES = ["USD", "EUR", "GBP", "INR", "AUD", "CAD", "SGD", "AED"];
 interface PartyForm {
   partyType:     ContractPartyType;
   clientId:      string;
-  stakeholderId: string;
   userId:        string;
   name:          string;
   email:         string;
 }
 
 const EMPTY_PARTY: PartyForm = {
-  partyType: "CLIENT", clientId: "", stakeholderId: "", userId: "", name: "", email: "",
+  partyType: "CLIENT", clientId: "", userId: "", name: "", email: "",
 };
 
 export default function NewContractPage() {
@@ -37,7 +36,6 @@ export default function NewContractPage() {
   const [error, setError]             = useState<string | null>(null);
   const [clients, setClients]         = useState<Pick<Client, "id" | "name" | "companyName">[]>([]);
   const [projects, setProjects]       = useState<Pick<Project, "id" | "name">[]>([]);
-  const [stakeholders, setStakeholders] = useState<Pick<Stakeholder, "id" | "name">[]>([]);
   const [users, setUsers]             = useState<Pick<User, "id" | "name" | "email">[]>([]);
 
   const [form, setForm] = useState({
@@ -52,12 +50,10 @@ export default function NewContractPage() {
     Promise.all([
       fetch("/api/clients").then((r) => r.json()),
       fetch("/api/projects").then((r) => r.json()),
-      fetch("/api/stakeholders").then((r) => r.json()),
       fetch("/api/users").then((r) => r.json()),
-    ]).then(([c, p, s, u]) => {
+    ]).then(([c, p, u]) => {
       setClients(Array.isArray(c) ? c : c.clients ?? []);
       setProjects(Array.isArray(p) ? p : p.projects ?? []);
-      setStakeholders(Array.isArray(s) ? s : []);
       setUsers(Array.isArray(u) ? u : []);
     });
   }, []);
@@ -73,16 +69,12 @@ export default function NewContractPage() {
         const c = clients.find((c) => c.id === v);
         if (c) updated.name = c.companyName || c.name;
       }
-      if (k === "stakeholderId" && v) {
-        const s = stakeholders.find((s) => s.id === v);
-        if (s) updated.name = s.name;
-      }
       if (k === "userId" && v) {
         const user = users.find((u) => u.id === v);
         if (user) { updated.name = user.name; updated.email = user.email; }
       }
       if (k === "partyType") {
-        updated.clientId = ""; updated.stakeholderId = ""; updated.userId = "";
+        updated.clientId = ""; updated.userId = "";
         updated.name = ""; updated.email = "";
       }
       return updated;
@@ -262,17 +254,8 @@ export default function NewContractPage() {
                         </select>
                       </div>
                     )}
-                    {party.partyType === "STAKEHOLDER" && (
-                      <div>
-                        <label className="block text-xs text-gray-500 mb-1">Select Stakeholder</label>
-                        <select value={party.stakeholderId} onChange={(e) => updateParty(i, "stakeholderId", e.target.value)}
-                          className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-                        >
-                          <option value="">Pick stakeholder...</option>
-                          {stakeholders.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                        </select>
-                      </div>
-                    )}
+                    {/* v3: external parties are typed in directly — name and
+                        email below are the whole record. */}
                     {party.partyType === "USER" && (
                       <div>
                         <label className="block text-xs text-gray-500 mb-1">Select System User</label>

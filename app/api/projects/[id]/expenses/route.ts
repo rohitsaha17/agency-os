@@ -23,7 +23,6 @@ export async function GET(req: NextRequest, { params }: Params) {
       where: { projectId, organizationId: user.organizationId },
       orderBy: { date: "desc" },
       include: {
-        stakeholder: { select: { id: true, name: true, type: true } },
         user: { select: { id: true, name: true } },
       },
     });

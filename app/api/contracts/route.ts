@@ -13,7 +13,6 @@ export async function GET(req: NextRequest) {
     const status        = searchParams.get("status");
     const clientId      = searchParams.get("clientId");
     const projectId     = searchParams.get("projectId");
-    const stakeholderId = searchParams.get("stakeholderId");
     const search        = searchParams.get("search");
 
     const contracts = await prisma.contract.findMany({
@@ -23,9 +22,6 @@ export async function GET(req: NextRequest) {
         ...(status    ? { status:   status as never } : {}),
         ...(clientId  ? { clientId }  : {}),
         ...(projectId ? { projectId } : {}),
-        ...(stakeholderId ? {
-          parties: { some: { stakeholderId } },
-        } : {}),
         ...(search ? { title: { contains: search, mode: "insensitive" } } : {}),
       },
       orderBy: { createdAt: "desc" },
@@ -34,9 +30,8 @@ export async function GET(req: NextRequest) {
         client:  { select: { id: true, name: true } },
         parties: {
           include: {
-            client:      { select: { id: true, name: true } },
-            stakeholder: { select: { id: true, name: true, type: true } },
-            user:        { select: { id: true, name: true } },
+            client: { select: { id: true, name: true } },
+            user:   { select: { id: true, name: true } },
           },
         },
       },
@@ -69,14 +64,10 @@ export async function POST(req: NextRequest) {
       const ok = await prisma.client.findFirst({ where: { id: clientId, organizationId: orgId }, select: { id: true } });
       if (!ok) throw new ApiError("Client not found", 404);
     }
-    for (const p of (parties || []) as { clientId?: string; stakeholderId?: string; userId?: string }[]) {
+    for (const p of (parties || []) as { clientId?: string; userId?: string }[]) {
       if (p.clientId) {
         const ok = await prisma.client.findFirst({ where: { id: p.clientId, organizationId: orgId }, select: { id: true } });
         if (!ok) throw new ApiError("Party client not found", 404);
-      }
-      if (p.stakeholderId) {
-        const ok = await prisma.stakeholder.findFirst({ where: { id: p.stakeholderId, organizationId: orgId }, select: { id: true } });
-        if (!ok) throw new ApiError("Party stakeholder not found", 404);
       }
       if (p.userId) {
         const ok = await prisma.user.findFirst({ where: { id: p.userId, organizationId: orgId }, select: { id: true } });
@@ -99,15 +90,14 @@ export async function POST(req: NextRequest) {
         notes:     notes?.trim() || null,
         parties: {
           create: (parties || []).map((p: {
-            partyType: string; clientId?: string; stakeholderId?: string;
+            partyType: string; clientId?: string;
             userId?: string; name: string; email?: string;
           }) => ({
-            partyType:    p.partyType,
-            clientId:     p.clientId      || null,
-            stakeholderId: p.stakeholderId || null,
-            userId:       p.userId         || null,
-            name:         p.name,
-            email:        p.email          || null,
+            partyType: p.partyType,
+            clientId:  p.clientId || null,
+            userId:    p.userId   || null,
+            name:      p.name,
+            email:     p.email    || null,
           })),
         },
       },
@@ -116,9 +106,8 @@ export async function POST(req: NextRequest) {
         client:  { select: { id: true, name: true } },
         parties: {
           include: {
-            client:      { select: { id: true, name: true } },
-            stakeholder: { select: { id: true, name: true, type: true } },
-            user:        { select: { id: true, name: true } },
+            client: { select: { id: true, name: true } },
+            user:   { select: { id: true, name: true } },
           },
         },
       },

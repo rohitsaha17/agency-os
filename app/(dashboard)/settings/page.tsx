@@ -35,7 +35,7 @@ function initials(name: string) {
 
 const ROLE_LABELS: Record<string, { label: string; color: string; desc: string }> = {
   ADMIN:   { label: "Admin",   color: "text-red-400 bg-red-400/10 border-red-400/20",     desc: "Full system access — manage everything including users and settings" },
-  MANAGER: { label: "Manager", color: "text-amber-400 bg-amber-400/10 border-amber-400/20", desc: "Manage projects, tasks, quotations and team assignments" },
+  MANAGER: { label: "Manager", color: "text-amber-400 bg-amber-400/10 border-amber-400/20", desc: "Manage clients, projects, tasks and team assignments" },
   MEMBER:  { label: "Member",  color: "text-sky-400 bg-sky-400/10 border-sky-400/20",     desc: "Work on assigned tasks and view relevant projects" },
 };
 
@@ -245,7 +245,7 @@ function CompanyTab({
   return (
     <div className="space-y-6">
       {/* Brand */}
-      <SectionCard title="Organization Identity" desc="Your agency's name and logo — shown across the platform and on every PDF (invoices, quotations, contracts)">
+      <SectionCard title="Organization Identity" desc="Your agency's name and logo — shown across the platform and on every PDF (invoices, contracts)">
         <div className="flex items-start gap-6 mb-4">
           <div className="flex-shrink-0">
             <div
@@ -310,7 +310,7 @@ function CompanyTab({
       </SectionCard>
 
       {/* Contact */}
-      <SectionCard title="Contact Information" desc="Used on invoices, quotations and client-facing documents">
+      <SectionCard title="Contact Information" desc="Used on invoices and client-facing documents">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field label="Email">
             <div className="relative">
@@ -1352,8 +1352,6 @@ const PERMISSIONS: { area: string; admin: boolean; manager: boolean; member: boo
   { area: "Delete Projects",            admin: true,  manager: false, member: false },
   { area: "View & Manage Tasks",        admin: true,  manager: true,  member: true  },
   { area: "Create / Assign Tasks",      admin: true,  manager: true,  member: false },
-  { area: "Create Quotations",          admin: true,  manager: true,  member: false },
-  { area: "Approve Quotations",         admin: true,  manager: false, member: false },
   { area: "View Invoices",              admin: true,  manager: true,  member: false },
   { area: "Manage Expenses",            admin: true,  manager: true,  member: false },
   { area: "Manage Contracts",           admin: true,  manager: true,  member: false },

@@ -41,7 +41,7 @@ const COMMITTED = ["PLANNED", "ASSIGNED", "IN_PROGRESS", "IN_REVIEW", "TEAM_APPR
  *  carriedIn  = items with carriedFromId dated this month; they count against
  *               THIS month unless countAgainstPrevMonth is set
  *  carriedOut = this month's MISSED items that have a clone (carry target)
- *  shoots     = countsAsShoot types (bookings add in Phase 9)
+ *  shoots     = countsAsShoot types
  */
 export async function computeMonthSummary(
   organizationId: string,
@@ -53,7 +53,7 @@ export async function computeMonthSummary(
   const to = new Date(Date.UTC(y, m, 1));
   const monthStart = from;
 
-  const [items, pkg, types, bookingCounts] = await Promise.all([
+  const [items, pkg, types] = await Promise.all([
     prisma.contentItem.findMany({
       where: { organizationId, clientId, date: { gte: from, lt: to } },
       select: {
@@ -75,20 +75,7 @@ export async function computeMonthSummary(
       where: { organizationId, isActive: true },
       orderBy: { sortOrder: "asc" },
     }),
-    // Phase 9: photographer bookings feed the shoot counters
-    prisma.booking.groupBy({
-      by: ["status"],
-      where: { organizationId, clientId, startAt: { gte: from, lt: to } },
-      _count: { _all: true },
-    }),
   ]);
-
-  const bookingsConfirmed = bookingCounts
-    .filter((r) => r.status === "CONFIRMED" || r.status === "REQUESTED")
-    .reduce((s, r) => s + r._count._all, 0);
-  const bookingsCompleted = bookingCounts
-    .filter((r) => r.status === "COMPLETED")
-    .reduce((s, r) => s + r._count._all, 0);
 
   // Concurrent packages: quotas MERGE per creative type (sum).
   const quotaByType = new Map<string, number>();
@@ -139,8 +126,8 @@ export async function computeMonthSummary(
     package: packages[0] ?? null,
     perType,
     adHocCount: items.filter((i) => i.isAdHoc).length,
-    shootsPlanned: shootRows.reduce((s, r) => s + r.planned, 0) + bookingsConfirmed,
-    shootsDone: shootRows.reduce((s, r) => s + r.posted, 0) + bookingsCompleted,
+    shootsPlanned: shootRows.reduce((s, r) => s + r.planned, 0),
+    shootsDone: shootRows.reduce((s, r) => s + r.posted, 0),
     totals,
   };
 }

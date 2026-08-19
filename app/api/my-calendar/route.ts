@@ -7,7 +7,7 @@ import { handleApiError, ApiError } from "@/lib/api-errors";
  * GET /api/my-calendar?from=ISO&to=ISO — the CURRENT user's personal
  * calendar entries, each tagged with `kind` so the UI styles them
  * distinctly. Payload shape is a single `entries` array so later phases
- * (events, follow-ups, bookings) can add kinds without breaking clients.
+ * can add kinds without breaking clients.
  */
 export async function GET(req: NextRequest) {
   try {
@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
     if (!from || !to) throw new ApiError("from and to are required", 400);
     const range = { gte: new Date(from), lt: new Date(to) };
 
-    const [tasks, contentItems, personal, events, bookings] = await Promise.all([
+    const [tasks, contentItems, personal, events] = await Promise.all([
       // (a) tasks assigned to me, by due date
       prisma.task.findMany({
         where: {
@@ -58,16 +58,6 @@ export async function GET(req: NextRequest) {
           organizationId: user.organizationId,
           date: range,
           ...(user.role === "MEMBER" ? { clientId: null } : {}),
-        },
-        include: { client: { select: { id: true, name: true } } },
-      }),
-      // (e) my photographer bookings — timed chips
-      prisma.booking.findMany({
-        where: {
-          organizationId: user.organizationId,
-          photographerId: user.id,
-          status: { not: "CANCELLED" },
-          startAt: range,
         },
         include: { client: { select: { id: true, name: true } } },
       }),
@@ -115,16 +105,6 @@ export async function GET(req: NextRequest) {
         title: e.title,
         eventKind: e.kind,
         clientName: e.client?.name ?? null,
-      })),
-      ...bookings.map((b) => ({
-        kind: "booking" as const,
-        id: b.id,
-        date: b.startAt.toISOString(),
-        endDate: b.endAt.toISOString(),
-        title: `Shoot${b.client ? ` — ${b.client.name}` : ""}${b.location ? ` @ ${b.location}` : ""}`,
-        status: b.status,
-        clientName: b.client?.name ?? null,
-        link: "/bookings",
       })),
     ].sort((a, b) => a.date.localeCompare(b.date));
 

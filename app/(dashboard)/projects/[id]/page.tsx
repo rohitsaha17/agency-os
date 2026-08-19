@@ -21,7 +21,7 @@ import { TaskModal } from "@/components/tasks/TaskModal";
 import { TaskPanel } from "@/components/tasks/TaskPanel";
 import { DeliveryDialog } from "@/components/tasks/DeliveryDialog";
 import type {
-  Project, Task, TaskStatus, ProjectFormData, QuotationStatus,
+  Project, Task, TaskStatus, ProjectFormData,
   Expense, Contract, ExpenseCategory, ExpenseStatus,
   ContractType, ContractPartyType, AssetFile, MimeCategory,
   Channel, ChatMessage, Invoice, InvoiceStatus,
@@ -32,7 +32,6 @@ import { formatMoney } from "@/lib/money";
 import { useToast } from "@/components/ui/Toast";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 
-type QuotationStub = { id: string; number: string; title: string; total: number; status: QuotationStatus };
 type PageTab = "tasks" | "files" | "expenses" | "contracts" | "chat" | "invoices" | "tax";
 type ViewMode = "kanban" | "list";
 
@@ -63,7 +62,7 @@ const CONTRACT_TYPES: { value: ContractType; label: string }[] = [
 const EMPTY_EXPENSE_FORM = {
   title: "", category: "OTHER" as ExpenseCategory,
   amount: "", currency: "USD", date: new Date().toISOString().slice(0, 10),
-  status: "PENDING" as ExpenseStatus, stakeholderId: "", isReimbursable: false, notes: "",
+  status: "PENDING" as ExpenseStatus, isReimbursable: false, notes: "",
 };
 
 const EMPTY_CONTRACT_FORM = {
@@ -72,11 +71,11 @@ const EMPTY_CONTRACT_FORM = {
 };
 
 type PartyDraft = {
-  partyType: ContractPartyType; clientId: string; stakeholderId: string;
+  partyType: ContractPartyType; clientId: string;
   userId: string; name: string; email: string;
 };
 const EMPTY_PARTY: PartyDraft = {
-  partyType: "CLIENT", clientId: "", stakeholderId: "", userId: "", name: "", email: "",
+  partyType: "CLIENT", clientId: "", userId: "", name: "", email: "",
 };
 
 const CATEGORY_LABELS: Record<ExpenseCategory, string> = {
@@ -141,7 +140,7 @@ export default function ProjectDetailPage() {
 
   const [pdfLoading, setPdfLoading] = useState(false);
 
-  const [project, setProject] = useState<(Project & { progress: number; quotation?: QuotationStub | null }) | null>(null);
+  const [project, setProject] = useState<(Project & { progress: number }) | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [tasksLoading, setTasksLoading] = useState(true);
@@ -195,7 +194,6 @@ export default function ProjectDetailPage() {
   const [expenseModalOpen, setExpenseModalOpen] = useState(false);
   const [expenseForm, setExpenseForm] = useState(EMPTY_EXPENSE_FORM);
   const [expenseSaving, setExpenseSaving] = useState(false);
-  const [expenseStakeholders, setExpenseStakeholders] = useState<{ id: string; name: string }[]>([]);
 
   // Inline contract modal
   const [contractModalOpen, setContractModalOpen] = useState(false);
@@ -204,7 +202,6 @@ export default function ProjectDetailPage() {
   const [contractError, setContractError] = useState<string | null>(null);
   const [contractParties, setContractParties] = useState<PartyDraft[]>([{ ...EMPTY_PARTY }]);
   const [contractClients, setContractClients] = useState<{ id: string; name: string; companyName: string | null }[]>([]);
-  const [contractStakeholders, setContractStakeholders] = useState<{ id: string; name: string }[]>([]);
   const [contractUsers, setContractUsers] = useState<{ id: string; name: string; email: string }[]>([]);
 
   const fetchProject = useCallback(async () => {
@@ -493,24 +490,14 @@ export default function ProjectDetailPage() {
     }
   }, [pageTab, taxLoaded, project?.client?.id]);
 
-  // Load stakeholders when expense modal opens
-  useEffect(() => {
-    if (expenseModalOpen && expenseStakeholders.length === 0) {
-      fetch("/api/stakeholders").then((r) => r.json())
-        .then((d) => setExpenseStakeholders(Array.isArray(d) ? d : []));
-    }
-  }, [expenseModalOpen]);
-
   // Load parties data when contract modal opens
   useEffect(() => {
     if (contractModalOpen && contractClients.length === 0) {
       Promise.all([
         fetch("/api/clients").then((r) => r.json()),
-        fetch("/api/stakeholders").then((r) => r.json()),
         fetch("/api/users").then((r) => r.json()),
-      ]).then(([c, s, u]) => {
+      ]).then(([c, u]) => {
         setContractClients(Array.isArray(c) ? c : c.clients ?? []);
-        setContractStakeholders(Array.isArray(s) ? s : []);
         setContractUsers(Array.isArray(u) ? u : []);
       });
     }
@@ -543,16 +530,12 @@ export default function ProjectDetailPage() {
         const c = contractClients.find((c) => c.id === v);
         if (c) updated.name = c.companyName || c.name;
       }
-      if (k === "stakeholderId" && v) {
-        const s = contractStakeholders.find((s) => s.id === v);
-        if (s) updated.name = s.name;
-      }
       if (k === "userId" && v) {
         const u = contractUsers.find((u) => u.id === v);
         if (u) { updated.name = u.name; updated.email = u.email; }
       }
       if (k === "partyType") {
-        updated.clientId = ""; updated.stakeholderId = ""; updated.userId = "";
+        updated.clientId = ""; updated.userId = "";
         updated.name = ""; updated.email = "";
       }
       return updated;
@@ -694,15 +677,6 @@ export default function ProjectDetailPage() {
             {taskCounts.done}/{taskCounts.total} done
             {taskCounts.inProgress > 0 && ` · ${taskCounts.inProgress} in progress`}
           </span>
-          {project.quotation && (
-            <Link
-              href={`/quotations/${project.quotation.id}`}
-              className="flex items-center gap-1.5 text-indigo-600 hover:text-indigo-800 transition-colors"
-            >
-              <FileText className="w-3.5 h-3.5" />
-              {project.quotation.number}
-            </Link>
-          )}
         </div>
       </div>
 
@@ -961,8 +935,7 @@ export default function ProjectDetailPage() {
                     <tr className="bg-gray-50 border-b border-gray-100 text-xs font-medium text-gray-400 uppercase tracking-wide">
                       <th className="text-left px-5 py-3">Title</th>
                       <th className="text-left px-5 py-3">Category</th>
-                      <th className="text-left px-5 py-3">Stakeholder</th>
-                      <th className="text-left px-5 py-3">Date</th>
+                                            <th className="text-left px-5 py-3">Date</th>
                       <th className="text-right px-5 py-3">Amount</th>
                       <th className="text-center px-5 py-3">Status</th>
                     </tr>
@@ -975,7 +948,6 @@ export default function ProjectDetailPage() {
                           {exp.isReimbursable && <span className="text-[10px] text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded font-medium">Reimbursable</span>}
                         </td>
                         <td className="px-5 py-3 text-gray-500">{CATEGORY_LABELS[exp.category]}</td>
-                        <td className="px-5 py-3 text-gray-400 text-xs">{exp.stakeholder?.name ?? "—"}</td>
                         <td className="px-5 py-3 text-gray-400 text-xs whitespace-nowrap">
                           {new Date(exp.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
                         </td>
@@ -1496,9 +1468,6 @@ export default function ProjectDetailPage() {
                         <tr key={inv.id} className="hover:bg-gray-50 transition-colors">
                           <td className="px-5 py-3">
                             <p className="font-medium text-gray-900">{inv.invoiceNumber}</p>
-                            {inv.quotation && (
-                              <p className="text-[10px] text-gray-400 mt-0.5">from {inv.quotation.number}</p>
-                            )}
                           </td>
                           <td className="px-5 py-3">
                             <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${statusColors[inv.status]}`}>
@@ -1721,15 +1690,6 @@ export default function ProjectDetailPage() {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Stakeholder</label>
-              <select value={expenseForm.stakeholderId} onChange={(e) => setExpenseForm((f) => ({ ...f, stakeholderId: e.target.value }))}
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              >
-                <option value="">None</option>
-                {expenseStakeholders.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
-            </div>
-            <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">Status</label>
               <select value={expenseForm.status} onChange={(e) => setExpenseForm((f) => ({ ...f, status: e.target.value as ExpenseStatus }))}
                 className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -1872,17 +1832,8 @@ export default function ProjectDetailPage() {
                         </select>
                       </div>
                     )}
-                    {party.partyType === "STAKEHOLDER" && (
-                      <div>
-                        <label className="block text-xs text-gray-400 mb-1">Stakeholder</label>
-                        <select value={party.stakeholderId} onChange={(e) => updateContractParty(i, "stakeholderId", e.target.value)}
-                          className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-                        >
-                          <option value="">Pick stakeholder…</option>
-                          {contractStakeholders.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                        </select>
-                      </div>
-                    )}
+                    {/* v3: external parties are typed in directly — name and
+                        email below are the whole record. */}
                     {party.partyType === "USER" && (
                       <div>
                         <label className="block text-xs text-gray-400 mb-1">Team Member</label>

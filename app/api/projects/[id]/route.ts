@@ -18,7 +18,6 @@ export async function GET(req: NextRequest, { params }: Params) {
       where: { id, organizationId: user.organizationId },
       include: {
         client: { select: { id: true, name: true, logoUrl: true } },
-        quotation: { select: { id: true, number: true, title: true, total: true, status: true } },
         _count: { select: { tasks: true } },
       },
     });
@@ -30,14 +29,11 @@ export async function GET(req: NextRequest, { params }: Params) {
       prisma.task.count({ where: { projectId: id, status: "DONE", deletedAt: null } }),
     ]);
 
-    // v2: money never reaches MEMBER clients (budget + quotation total)
+    // v2: money never reaches MEMBER clients
     const showFinancials = canViewFinancials(user);
     return NextResponse.json({
       ...project,
       budget: showFinancials ? project.budget : null,
-      quotation: project.quotation && !showFinancials
-        ? { ...project.quotation, total: null }
-        : project.quotation,
       progress: total > 0 ? Math.round((done / total) * 100) : 0,
     });
   } catch (error) {

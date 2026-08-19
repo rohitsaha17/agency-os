@@ -423,116 +423,6 @@ export function footerHtml(s: CompanySettings): string {
   </div>`;
 }
 
-/* ── QUOTATION ────────────────────────────────────────────── */
-export interface QuotationPdfData {
-  number: string;
-  title: string;
-  status: string;
-  pricingType: string;
-  currency: string;
-  createdAt: string;
-  validUntil?: string | null;
-  description?: string | null;
-  notes?: string | null;
-  terms?: string | null;
-  subtotal: number;
-  discountType?: string | null;
-  discountValue?: number;
-  taxRate?: number;
-  total: number;
-  client?: { name: string; companyName?: string | null; email?: string | null; phone?: string | null; address?: string | null } | null;
-  lineItems: { title: string; description?: string | null; pricingType: string; quantity: number; unitPrice: number; subtotal: number; unit?: string | null }[];
-}
-
-export function buildQuotationHtml(q: QuotationPdfData, s: CompanySettings): string {
-  const cfg    = parseCfg(s);
-  const accent = s.letterheadColor ?? "#6366f1";
-
-  const subtotal      = Number(q.subtotal);
-  const discountValue = Number(q.discountValue ?? 0);
-  const taxRate       = Number(q.taxRate ?? 0);
-  const discountAmt   = q.discountType === "PERCENT"
-    ? (subtotal * discountValue) / 100
-    : q.discountType === "AMOUNT" ? discountValue : 0;
-  const afterDiscount = Math.max(0, subtotal - discountAmt);
-  const taxAmt        = (afterDiscount * taxRate) / 100;
-
-  const pricingLabel: Record<string, string> = { FIXED: "Fixed", PER_ITEM: "Per Item", RETAINER: "Retainer/mo" };
-
-  const lineItemsRows = q.lineItems.map((item, i) => `
-    <tr>
-      <td style="width:36px; color:#9ca3af; font-size:8pt;">${i + 1}</td>
-      <td>
-        <div style="font-weight:600; color:#111827;">${esc(item.title)}</div>
-        ${item.description ? `<div style="font-size:8pt; color:#6b7280; margin-top:2px;">${esc(item.description)}</div>` : ""}
-      </td>
-      <td class="r" style="width:70px; color:#6b7280; font-size:8.5pt;">${pricingLabel[item.pricingType] ?? item.pricingType}</td>
-      <td class="r" style="width:50px;">${item.pricingType !== "FIXED" ? Number(item.quantity) + (item.unit ? " " + item.unit : "") : "—"}</td>
-      <td class="r" style="width:90px;">${fmt(Number(item.unitPrice), q.currency)}</td>
-      <td class="r" style="width:90px; font-weight:600;">${fmt(Number(item.subtotal), q.currency)}</td>
-    </tr>`).join("");
-
-  const totalsRows = `
-    <div class="totals-row"><span>Subtotal</span><span>${fmt(subtotal, q.currency)}</span></div>
-    ${discountAmt > 0 ? `<div class="totals-row discount"><span>Discount${q.discountType === "PERCENT" ? ` (${discountValue}%)` : ""}</span><span>− ${fmt(discountAmt, q.currency)}</span></div>` : ""}
-    ${taxRate > 0 ? `<div class="totals-row"><span>Tax (${taxRate}%)</span><span>${fmt(taxAmt, q.currency)}</span></div>` : ""}
-    <div class="totals-row total"><span>Total</span><span class="amount">${fmt(Number(q.total), q.currency)}</span></div>`;
-
-  const clientBlock = q.client ? `
-    <div class="info-block">
-      <label>Bill To</label>
-      <p>${esc(q.client.companyName || q.client.name)}</p>
-      ${q.client.companyName ? `<p class="sub">${esc(q.client.name)}</p>` : ""}
-      ${q.client.email   ? `<p class="sub">${esc(q.client.email)}</p>` : ""}
-      ${q.client.phone   ? `<p class="sub">${esc(q.client.phone)}</p>` : ""}
-      ${q.client.address ? `<p class="sub">${esc(q.client.address)}</p>` : ""}
-    </div>` : "";
-
-  const body = `
-    ${letterheadHtml(s)}
-    <div class="doc-header">
-      <div>
-        <div class="doc-title">QUOTATION</div>
-        <div class="doc-number">${esc(q.number)}</div>
-      </div>
-      ${statusBadge(q.status)}
-    </div>
-    <div class="info-grid">
-      <div>
-        <p class="section-head">Document Details</p>
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-          <div class="info-block"><label>Title</label><p>${esc(q.title)}</p></div>
-          <div class="info-block"><label>Pricing Type</label><p>${pricingLabel[q.pricingType] ?? q.pricingType}</p></div>
-          <div class="info-block"><label>Currency</label><p>${q.currency}</p></div>
-          <div class="info-block"><label>Created</label><p>${fmtDate(q.createdAt)}</p></div>
-          ${q.validUntil ? `<div class="info-block"><label>Valid Until</label><p>${fmtDate(q.validUntil)}</p></div>` : ""}
-        </div>
-      </div>
-      <div>${clientBlock}</div>
-    </div>
-    ${q.description ? `<p class="section-head">Scope of Work</p><div class="desc-block">${esc(q.description)}</div>` : ""}
-    <p class="section-head">Services &amp; Deliverables</p>
-    <table>
-      <thead>
-        <tr>
-          <th style="width:36px;">#</th>
-          <th>Item / Description</th>
-          <th class="r" style="width:70px;">Type</th>
-          <th class="r" style="width:50px;">Qty</th>
-          <th class="r" style="width:90px;">Unit Price</th>
-          <th class="r" style="width:90px;">Subtotal</th>
-        </tr>
-      </thead>
-      <tbody>${lineItemsRows}</tbody>
-    </table>
-    <div class="totals-wrap"><div class="totals-box">${totalsRows}</div></div>
-    ${q.notes ? `<div class="note-block"><h4>Notes</h4><p>${esc(q.notes)}</p></div>` : ""}
-    ${q.terms ? `<div class="note-block"><h4>Terms &amp; Conditions</h4><pre>${esc(q.terms)}</pre></div>` : ""}
-    ${footerHtml(s)}`;
-
-  return wrapHtml(`${q.number} — ${q.title}`, accent, cfg.font, body);
-}
-
 /* ── CONTRACT ─────────────────────────────────────────────── */
 export interface ContractPartyPdf {
   name: string;
@@ -704,7 +594,6 @@ export interface InvoicePdfData {
   notes:         string | null;
   client:        { id: string; name: string; companyName: string | null } | null;
   project:       { id: string; name: string } | null;
-  quotation:     { id: string; number: string; title: string } | null;
   lineItems:     { description: string; quantity: number; unitPrice: number; unit: string | null; isFree?: boolean; kind?: string }[];
 }
 
@@ -756,7 +645,6 @@ export function buildInvoiceHtml(inv: InvoicePdfData, s: CompanySettings): strin
       <div>
         <div class="doc-title">Invoice</div>
         <div class="doc-number">#${esc(inv.invoiceNumber)}</div>
-        ${inv.quotation ? `<div class="doc-number" style="margin-top:3px;">Ref: ${esc(inv.quotation.title ?? inv.quotation.number)}</div>` : ""}
       </div>
       <div class="doc-meta">
         <div class="doc-status"><span class="badge ${fmtStatus[inv.status] ?? "badge-gray"}">${statusLabel[inv.status] ?? inv.status}</span></div>

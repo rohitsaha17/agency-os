@@ -9,7 +9,6 @@ import { canViewFinancials } from "@/lib/permissions";
 const INCLUDE = {
   lineItems: { orderBy: { order: "asc" as const } },
   project:   { select: { id: true, name: true } },
-  quotation: { select: { id: true, number: true, title: true } },
   // Pull client inline so we avoid an N+1 fetch per invoice
   client:    { select: { id: true, name: true, companyName: true } },
 } as const;
@@ -97,15 +96,14 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json();
     const {
-      clientId, projectId, quotationId,
+      clientId, projectId,
       dueDate, currency, discountPct, taxPct,
       notes, lineItems,
-      fromQuotationId,
     } = body;
 
     if (!clientId) throw new ApiError("clientId is required", 400);
 
-    // Verify the client (and optionally project/quotation) belong to this org
+    // Verify the client (and optionally the project) belong to this org
     // before creating the invoice.
     const client = await prisma.client.findFirst({
       where: { id: clientId, organizationId: user.organizationId },
@@ -119,14 +117,6 @@ export async function POST(req: NextRequest) {
         select: { id: true },
       });
       if (!project) throw new ApiError("Project not found", 404);
-    }
-    const quotationRef = quotationId || fromQuotationId;
-    if (quotationRef) {
-      const q = await prisma.quotation.findFirst({
-        where: { id: quotationRef, organizationId: user.organizationId },
-        select: { id: true },
-      });
-      if (!q) throw new ApiError("Quotation not found", 404);
     }
 
     // Wrap the whole create (invoice number lookup + invoice + line items) in a
@@ -155,43 +145,12 @@ export async function POST(req: NextRequest) {
       let resolvedDiscountPct = discountPct != null ? parseFloat(discountPct) : null;
       let resolvedTaxPct = taxPct != null ? parseFloat(taxPct) : null;
 
-      if (fromQuotationId && !resolvedLineItems?.length) {
-        const quotation = await tx.quotation.findFirst({
-          where: { id: fromQuotationId, organizationId: user.organizationId },
-          include: { lineItems: { orderBy: { order: "asc" } } },
-        });
-        if (quotation) {
-          resolvedLineItems = quotation.lineItems.map((li, i) => ({
-            description: li.title + (li.description ? ` — ${li.description}` : ""),
-            quantity: Number(li.quantity),
-            unitPrice: Number(li.unitPrice),
-            unit: li.unit ?? undefined,
-            order: i,
-          }));
-          // Inherit the quotation's discount/tax when the form left them
-          // blank, so the invoice total matches the approved quote. A fixed
-          // discount amount is converted to its percentage of the subtotal.
-          if (resolvedTaxPct == null && quotation.taxRate != null) {
-            resolvedTaxPct = Number(quotation.taxRate);
-          }
-          if (resolvedDiscountPct == null && quotation.discountType) {
-            const subtotal = Number(quotation.subtotal ?? 0);
-            if (quotation.discountType === "PERCENT") {
-              resolvedDiscountPct = Number(quotation.discountValue ?? 0);
-            } else if (subtotal > 0) {
-              resolvedDiscountPct = (Number(quotation.discountValue ?? 0) / subtotal) * 100;
-            }
-          }
-        }
-      }
-
       const created = await tx.invoice.create({
         data: {
           organizationId: user.organizationId,
           invoiceNumber,
           clientId,
           projectId:   projectId   || null,
-          quotationId: quotationId || fromQuotationId || null,
           status:      "DRAFT",
           dueDate:     dueDate ? new Date(dueDate) : null,
           currency:    currency || "USD",

@@ -13,7 +13,6 @@ export type ServiceType =
 export type TaskStatus       = "TODO" | "IN_PROGRESS" | "IN_REVIEW" | "DONE" | "BLOCKED";
 export type Priority         = "LOW" | "MEDIUM" | "HIGH" | "URGENT";
 export type ProjectRole      = "EDITOR" | "VIEWER";
-export type QuotationStatus  = "DRAFT" | "SENT" | "APPROVED" | "REJECTED" | "EXPIRED" | "CONVERTED";
 export type PricingType      = "FIXED" | "RETAINER" | "PER_ITEM";
 export type DiscountType     = "PERCENT" | "AMOUNT";
 
@@ -441,105 +440,6 @@ export interface CalendarEvent {
   color: string;
 }
 
-// ── Rate Cards ───────────────────────────────────────────────
-
-export interface RateCard {
-  id: string;
-  name: string;
-  description: string | null;
-  category: string | null;
-  pricingType: PricingType;
-  unit: string;
-  unitPrice: number;
-  currency: string;
-  isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface RateCardFormData {
-  name: string;
-  description: string;
-  category: string;
-  pricingType: PricingType;
-  unit: string;
-  unitPrice: string;
-  currency: string;
-}
-
-// ── Quotations ───────────────────────────────────────────────
-
-export interface QuotationLineItem {
-  id: string;
-  quotationId: string;
-  rateCardId: string | null;
-  title: string;
-  description: string | null;
-  pricingType: PricingType;
-  quantity: number;
-  unitPrice: number;
-  unit: string | null;
-  subtotal: number;
-  order: number;
-}
-
-export interface Quotation {
-  id: string;
-  number: string;
-  clientId: string;
-  title: string;
-  description: string | null;
-  status: QuotationStatus;
-  pricingType: PricingType;
-  validUntil: string | null;
-  currency: string;
-  subtotal: number;
-  discountType: DiscountType | null;
-  discountValue: number;
-  taxRate: number;
-  total: number;
-  notes: string | null;
-  terms: string | null;
-  createdAt: string;
-  updatedAt: string;
-  client?: { id: string; name: string; companyName: string | null; email: string | null; logoUrl: string | null };
-  lineItems: QuotationLineItem[];
-  project?: { id: string; name: string } | null;
-}
-
-export interface QuotationLineItemFormData {
-  id?: string;           // undefined = new item
-  rateCardId: string;
-  title: string;
-  description: string;
-  pricingType: PricingType;
-  quantity: string;
-  unitPrice: string;
-  unit: string;
-}
-
-export interface QuotationFormData {
-  clientId: string;
-  title: string;
-  description: string;
-  pricingType: PricingType;
-  validUntil: string;
-  currency: string;
-  discountType: DiscountType | "";
-  discountValue: string;
-  taxRate: string;
-  notes: string;
-  terms: string;
-  lineItems: QuotationLineItemFormData[];
-}
-
-export interface ConvertQuotationData {
-  projectName: string;
-  projectType: ProjectType;
-  startDate: string;
-  createTasks: boolean;
-}
-
 // ── Folders ──────────────────────────────────────────────────
 
 export type FolderScope = "PROJECT" | "CLIENT" | "COMMON";
@@ -641,42 +541,6 @@ export interface AssetFile {
   _count?: { comments: number; versions: number };
 }
 
-// ── Stakeholders ─────────────────────────────────────────────
-
-export type StakeholderType = "FREELANCER" | "AGENCY" | "VENDOR" | "INTERNAL_TEAM";
-export type StakeholderRole = "OWNER" | "ADMIN" | "EXECUTIVE" | "FINANCE" | "MANAGER" | "MEMBER";
-
-export interface Stakeholder {
-  id: string;
-  name: string;
-  type: StakeholderType;
-  role: StakeholderRole | null;
-  email: string | null;
-  phone: string | null;
-  website: string | null;
-  address: string | null;
-  skills: string[];
-  currency: string;
-  defaultRate: number | null;
-  notes: string | null;
-  isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
-  _count?: { expenses: number; contracts: number };
-}
-
-export interface StakeholderFormData {
-  name: string;
-  type: StakeholderType;
-  role: StakeholderRole | "";
-  email: string;
-  phone: string;
-  website: string;
-  address: string;
-  skills: string;
-  notes: string;
-}
-
 // ── Expenses ─────────────────────────────────────────────────
 
 export type ExpenseCategory =
@@ -697,7 +561,6 @@ export interface Expense {
   status: ExpenseStatus;
   projectId: string | null;
   clientId: string | null;
-  stakeholderId: string | null;
   userId: string | null;
   isReimbursable: boolean;
   receiptUrl: string | null;
@@ -706,7 +569,6 @@ export interface Expense {
   updatedAt: string;
   project?: { id: string; name: string } | null;
   client?: { id: string; name: string; companyName: string | null } | null;
-  stakeholder?: { id: string; name: string; type: StakeholderType } | null;
   user?: { id: string; name: string } | null;
 }
 
@@ -720,7 +582,6 @@ export interface ExpenseFormData {
   status: ExpenseStatus;
   projectId: string;
   clientId: string;
-  stakeholderId: string;
   userId: string;
   isReimbursable: boolean;
   receiptUrl: string;
@@ -774,7 +635,6 @@ export interface ContractParty {
   contractId: string;
   partyType: ContractPartyType;
   clientId: string | null;
-  stakeholderId: string | null;
   userId: string | null;
   name: string;
   email: string | null;
@@ -782,7 +642,6 @@ export interface ContractParty {
   signatureNote: string | null;
   createdAt: string;
   client?: { id: string; name: string } | null;
-  stakeholder?: { id: string; name: string; type: StakeholderType } | null;
   user?: { id: string; name: string } | null;
 }
 
@@ -809,7 +668,6 @@ export interface Contract {
 export interface ContractPartyFormData {
   partyType: ContractPartyType;
   clientId: string;
-  stakeholderId: string;
   userId: string;
   name: string;
   email: string;
@@ -846,7 +704,6 @@ export interface Invoice {
   id: string;
   invoiceNumber: string;
   projectId: string | null;
-  quotationId: string | null;
   clientId: string;
   status: InvoiceStatus;
   dueDate: string | null;
@@ -859,7 +716,6 @@ export interface Invoice {
   updatedAt: string;
   lineItems: InvoiceLineItem[];
   project?: { id: string; name: string } | null;
-  quotation?: { id: string; number: string; title: string } | null;
   client?: { id: string; name: string; companyName: string | null } | null;
 }
 

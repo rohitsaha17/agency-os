@@ -18,7 +18,7 @@ datasource db {
 enum UserRole {
   OWNER // Organization owner — super admin, cannot be removed
   ADMIN // Full system access within the organization
-  MANAGER // Can manage projects, tasks, quotations
+  MANAGER // Can manage clients, projects and tasks
   MEMBER // Can only work on assigned tasks
 }
 
@@ -113,15 +113,6 @@ enum ContentStatus {
   MISSED
 }
 
-enum QuotationStatus {
-  DRAFT
-  SENT
-  APPROVED
-  REJECTED
-  EXPIRED
-  CONVERTED
-}
-
 enum PricingType {
   FIXED // Lump-sum price for the whole line item
   RETAINER // Monthly recurring fee
@@ -146,21 +137,6 @@ enum FileStatus {
 enum FileCommentStatus {
   OPEN
   RESOLVED
-}
-
-enum StakeholderType {
-  FREELANCER
-  AGENCY
-  VENDOR
-  INTERNAL_TEAM
-}
-
-enum StakeholderRole {
-  OWNER
-  ADMIN
-  EXECUTIVE
-  MANAGER
-  MEMBER
 }
 
 enum ExpenseCategory {
@@ -204,6 +180,8 @@ enum ContractStatus {
 
 enum ContractPartyType {
   CLIENT
+  // v3: the Stakeholder model is retired — an external party is now just a
+  // name/email captured on the ContractParty row itself.
   STAKEHOLDER
   USER
 }
@@ -240,7 +218,6 @@ model User {
   managedTasks       Task[]          @relation("TaskManager")
   taskAssignments    TaskAssignee[]
   createdProjects    Project[]       @relation("ProjectCreator")
-  createdQuotations  Quotation[]     @relation("QuotationCreator")
   uploadedFiles      File[]          @relation("UploadedFiles")
   comments           Comment[]
   timeEntries        TimeEntry[]
@@ -262,8 +239,6 @@ model User {
   createdEvents        CalendarEvent[] @relation("CreatedEvents")
   assignedFollowUps    FollowUp[]      @relation("AssignedFollowUps")
   createdFollowUps     FollowUp[]      @relation("CreatedFollowUps")
-  photographerBookings Booking[]       @relation("PhotographerBookings")
-  createdBookings      Booking[]       @relation("CreatedBookings")
   createdReviewBatches ReviewBatch[]   @relation("CreatedReviewBatches")
 
   @@unique([organizationId, email])
@@ -333,7 +308,6 @@ model Client {
 
   contacts        ClientContact[]
   projects        Project[]
-  quotations      Quotation[]
   invoices        Invoice[]
   files           File[]
   folders         Folder[]
@@ -347,7 +321,6 @@ model Client {
   events          CalendarEvent[] @relation("ClientEvents")
   packages        ClientPackage[] @relation("ClientPackages")
   followUps       FollowUp[]      @relation("ClientFollowUps")
-  bookings        Booking[]       @relation("ClientBookings")
   reviewBatches   ReviewBatch[]   @relation("ClientReviewBatches")
 
   @@index([organizationId])
@@ -379,7 +352,6 @@ model Project {
   organizationId     String
   clientId           String
   createdById        String?
-  quotationId        String?       @unique
   name               String
   description        String?
   type               ProjectType   @default(ONE_TIME)
@@ -396,7 +368,6 @@ model Project {
   organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   client       Client          @relation(fields: [clientId], references: [id])
   createdBy    User?           @relation("ProjectCreator", fields: [createdById], references: [id])
-  quotation    Quotation?      @relation(fields: [quotationId], references: [id])
   tasks        Task[]
   files        File[]
   folders      Folder[]
@@ -406,7 +377,6 @@ model Project {
   channels     Channel[]
   members      ProjectMember[]
   contentItems ContentItem[]   @relation("ProjectContentItems")
-  bookings     Booking[]       @relation("ProjectBookings")
 
   @@index([status, clientId])
   @@index([clientId])
@@ -566,7 +536,6 @@ model ContentItem {
   createdBy     User?         @relation("CreatedContentItems", fields: [createdById], references: [id])
   tasks         Task[]        @relation("ContentItemTasks")
   billedLines   InvoiceLineItem[] @relation("BilledContentItems")
-  bookings      Booking[]     @relation("ContentItemBookings")
 
   @@index([organizationId, clientId, date])
   @@index([clientId, status])
@@ -686,89 +655,6 @@ model TaskTemplateItem {
 }
 
 // ============================================================
-// RATE CARDS — Predefined pricing catalog
-// ============================================================
-
-model RateCard {
-  id             String      @id @default(cuid())
-  organizationId String
-  name           String
-  description    String?
-  category       String? // e.g. "Design", "Development", "Strategy"
-  pricingType    PricingType @default(PER_ITEM)
-  unit           String      @default("hour") // hour, day, month, piece, word, etc.
-  unitPrice      Decimal     @db.Decimal(10, 2)
-  currency       String      @default("USD")
-  isActive       Boolean     @default(true)
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
-
-  organization       Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  quotationLineItems QuotationLineItem[]
-
-  @@index([organizationId])
-  @@map("rate_cards")
-}
-
-// ============================================================
-// QUOTATIONS
-// ============================================================
-
-model Quotation {
-  id             String          @id @default(cuid())
-  organizationId String
-  number         String // e.g. QUO-2025-001 — unique per organization
-  clientId       String
-  createdById    String? // Nullable until auth is wired up
-  title          String
-  description    String?
-  status         QuotationStatus @default(DRAFT)
-  pricingType    PricingType     @default(FIXED)
-  validUntil     DateTime?
-  currency       String          @default("USD")
-  subtotal       Decimal         @default(0) @db.Decimal(12, 2)
-  discountType   String? // "PERCENT" or "AMOUNT"
-  discountValue  Decimal?        @default(0) @db.Decimal(10, 2)
-  taxRate        Decimal?        @default(0) @db.Decimal(5, 2)
-  total          Decimal         @default(0) @db.Decimal(12, 2)
-  notes          String?
-  terms          String?
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-
-  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  client       Client              @relation(fields: [clientId], references: [id])
-  createdBy    User?               @relation("QuotationCreator", fields: [createdById], references: [id])
-  lineItems    QuotationLineItem[]
-  project      Project?
-  invoice      Invoice?            @relation("QuotationInvoice")
-
-  @@unique([organizationId, number])
-  @@index([organizationId])
-  @@map("quotations")
-}
-
-model QuotationLineItem {
-  id          String      @id @default(cuid())
-  quotationId String
-  rateCardId  String?
-  title       String
-  description String?
-  pricingType PricingType @default(PER_ITEM)
-  quantity    Decimal     @default(1) @db.Decimal(10, 2)
-  unitPrice   Decimal     @db.Decimal(10, 2)
-  unit        String? // hour, day, month, piece, etc.
-  subtotal    Decimal     @default(0) @db.Decimal(12, 2) // quantity × unitPrice
-  order       Int         @default(0)
-  createdAt   DateTime    @default(now())
-
-  quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
-  rateCard  RateCard? @relation(fields: [rateCardId], references: [id])
-
-  @@map("quotation_line_items")
-}
-
-// ============================================================
 // INVOICES
 // ============================================================
 
@@ -776,7 +662,6 @@ model Invoice {
   id             String        @id @default(cuid())
   organizationId String
   projectId      String?
-  quotationId    String?       @unique
   clientId       String
   invoiceNumber  String // unique per organization
   status         InvoiceStatus @default(DRAFT)
@@ -791,7 +676,6 @@ model Invoice {
 
   organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   project      Project?          @relation(fields: [projectId], references: [id])
-  quotation    Quotation?        @relation("QuotationInvoice", fields: [quotationId], references: [id])
   client       Client            @relation(fields: [clientId], references: [id])
   lineItems    InvoiceLineItem[]
   receipts     Receipt[]
@@ -830,36 +714,6 @@ model InvoiceLineItem {
 }
 
 // ============================================================
-// STAKEHOLDERS — Freelancers, agencies, vendors, internal team
-// ============================================================
-
-model Stakeholder {
-  id             String           @id @default(cuid())
-  organizationId String
-  name           String
-  type           StakeholderType  @default(FREELANCER)
-  role           StakeholderRole?
-  email          String?
-  phone          String?
-  website        String?
-  address        String?
-  skills         String[]         @default([])
-  currency       String           @default("USD")
-  defaultRate    Decimal?         @db.Decimal(10, 2)
-  notes          String?
-  isActive       Boolean          @default(true)
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
-
-  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  expenses     Expense[]
-  contracts    ContractParty[]
-
-  @@index([organizationId])
-  @@map("stakeholders")
-}
-
-// ============================================================
 // EXPENSES — Outgoing costs linked to projects / vendors
 // ============================================================
 
@@ -875,7 +729,6 @@ model Expense {
   status         ExpenseStatus   @default(PENDING)
   projectId      String?
   clientId       String?
-  stakeholderId  String?
   userId         String?
   isReimbursable Boolean         @default(false)
   receiptUrl     String?
@@ -886,7 +739,6 @@ model Expense {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   project      Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
   client       Client?      @relation(fields: [clientId], references: [id], onDelete: SetNull)
-  stakeholder  Stakeholder? @relation(fields: [stakeholderId], references: [id], onDelete: SetNull)
   user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([clientId])
@@ -970,7 +822,6 @@ model ContractParty {
   contractId    String
   partyType     ContractPartyType
   clientId      String?
-  stakeholderId String?
   userId        String?
   name          String
   email         String?
@@ -980,7 +831,6 @@ model ContractParty {
 
   contract    Contract     @relation(fields: [contractId], references: [id], onDelete: Cascade)
   client      Client?      @relation(fields: [clientId], references: [id], onDelete: SetNull)
-  stakeholder Stakeholder? @relation(fields: [stakeholderId], references: [id], onDelete: SetNull)
   user        User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@map("contract_parties")
@@ -1302,13 +1152,10 @@ model Organization {
   clients       Client[]
   projects      Project[]
   tasks         Task[]
-  quotations    Quotation[]
   invoices      Invoice[]
   contracts     Contract[]
   expenses      Expense[]
   receipts      Receipt[]
-  stakeholders  Stakeholder[]
-  rateCards     RateCard[]
   files         File[]
   folders       Folder[]
   channels      Channel[]
@@ -1320,7 +1167,6 @@ model Organization {
   events        CalendarEvent[]
   clientPackages ClientPackage[]
   followUps     FollowUp[]
-  bookings      Booking[]
   reviewBatches ReviewBatch[]
 
   @@map("organizations")
@@ -1347,46 +1193,6 @@ model ReviewBatch {
 
   @@index([clientId])
   @@map("review_batches")
-}
-
-// ============================================================
-// V2 — PHOTOGRAPHER BOOKINGS
-// ============================================================
-
-enum BookingStatus {
-  REQUESTED
-  CONFIRMED
-  COMPLETED
-  CANCELLED
-}
-
-model Booking {
-  id             String        @id @default(cuid())
-  organizationId String
-  photographerId String
-  clientId       String?
-  projectId      String?
-  contentItemId  String?
-  startAt        DateTime
-  endAt          DateTime
-  location       String?
-  notes          String?
-  status         BookingStatus @default(REQUESTED)
-  isAdHoc        Boolean       @default(false)
-  createdById    String?
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  photographer User         @relation("PhotographerBookings", fields: [photographerId], references: [id], onDelete: Cascade)
-  client       Client?      @relation("ClientBookings", fields: [clientId], references: [id], onDelete: SetNull)
-  project      Project?     @relation("ProjectBookings", fields: [projectId], references: [id], onDelete: SetNull)
-  contentItem  ContentItem? @relation("ContentItemBookings", fields: [contentItemId], references: [id], onDelete: SetNull)
-  createdBy    User?        @relation("CreatedBookings", fields: [createdById], references: [id])
-
-  @@index([organizationId, startAt])
-  @@index([photographerId, startAt])
-  @@map("bookings")
 }
 
 // ============================================================

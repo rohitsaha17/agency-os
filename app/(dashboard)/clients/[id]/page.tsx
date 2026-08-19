@@ -23,16 +23,15 @@ import { PackageTab } from "@/components/content/PackageTab";
 import { FulfillmentLine } from "@/components/content/FulfillmentLine";
 import { FollowUpsCard } from "@/components/content/FollowUpsCard";
 import { ProjectForm } from "@/components/projects/ProjectForm";
-import { QuotationBuilder } from "@/components/quotations/QuotationBuilder";
 import { useToast } from "@/components/ui/Toast";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useCurrentUser } from "@/lib/useCurrentUser";
-import { Client, ContactFormData, ClientContact, ProjectStatus, ProjectType, Quotation, AssetFile, ContractType, ContractPartyType, Stakeholder, User, Invoice, InvoiceStatus, Channel, ChatMessage, Expense, ExpenseCategory, ExpenseStatus, Receipt, ReceiptMethod } from "@/types";
+import { Client, ContactFormData, ClientContact, ProjectStatus, ProjectType, AssetFile, ContractType, ContractPartyType, User, Invoice, InvoiceStatus, Channel, ChatMessage, Expense, ExpenseCategory, ExpenseStatus, Receipt, ReceiptMethod } from "@/types";
 import { calcInvoiceTotal } from "@/lib/format";
 import { formatMoney, resolveClientCurrency } from "@/lib/money";
 
 // ── helpers ──────────────────────────────────────────────────
-type Tab = "content" | "package" | "overview" | "contacts" | "brand" | "tax" | "projects" | "quotations" | "files" | "contracts" | "chat" | "invoices" | "expenses" | "receipts";
+type Tab = "content" | "package" | "overview" | "contacts" | "brand" | "tax" | "projects" | "files" | "contracts" | "chat" | "invoices" | "expenses" | "receipts";
 
 const EXPENSE_CATEGORY_LABELS: Record<ExpenseCategory, string> = {
   SOFTWARE_TOOLS: "Software & Tools",
@@ -98,11 +97,11 @@ const EMPTY_CONTRACT_FORM = {
 };
 
 type ClientPartyDraft = {
-  partyType: ContractPartyType; clientId: string; stakeholderId: string;
+  partyType: ContractPartyType; clientId: string;
   userId: string; name: string; email: string;
 };
 const EMPTY_CLIENT_PARTY: ClientPartyDraft = {
-  partyType: "CLIENT", clientId: "", stakeholderId: "", userId: "", name: "", email: "",
+  partyType: "CLIENT", clientId: "", userId: "", name: "", email: "",
 };
 
 // ── Contact Form (inline modal) ──────────────────────────────
@@ -241,8 +240,6 @@ export default function ClientDetailPage() {
   const [brandAssets, setBrandAssets] = useState<BrandAsset[]>([]);
   const [clientLinks, setClientLinks] = useState<ClientLink[]>([]);
   const [savingBrand, setSavingBrand] = useState(false);
-  const [quotations, setQuotations] = useState<Quotation[]>([]);
-  const [quotationsLoaded, setQuotationsLoaded] = useState(false);
   const [files, setFiles] = useState<AssetFile[]>([]);
   const [filesLoaded, setFilesLoaded] = useState(false);
   const [clientContracts, setClientContracts] = useState<import("@/types").Contract[]>([]);
@@ -293,13 +290,11 @@ export default function ClientDetailPage() {
 
   // Inline create modals
   const [projectModalOpen, setProjectModalOpen] = useState(false);
-  const [quotationModalOpen, setQuotationModalOpen] = useState(false);
   const [contractModalOpen, setContractModalOpen] = useState(false);
   const [clientContractForm, setClientContractForm] = useState(EMPTY_CONTRACT_FORM);
   const [clientContractSaving, setClientContractSaving] = useState(false);
   const [clientContractError, setClientContractError] = useState<string | null>(null);
   const [clientContractParties, setClientContractParties] = useState<ClientPartyDraft[]>([{ ...EMPTY_CLIENT_PARTY }]);
-  const [contractFormStakeholders, setContractFormStakeholders] = useState<Pick<Stakeholder, "id" | "name">[]>([]);
   const [contractFormUsers, setContractFormUsers] = useState<Pick<User, "id" | "name" | "email">[]>([]);
 
   const fetchClient = useCallback(async () => {
@@ -322,11 +317,6 @@ export default function ClientDetailPage() {
   useEffect(() => { fetchClient(); }, [fetchClient]);
 
   useEffect(() => {
-    if (tab === "quotations" && !quotationsLoaded) {
-      fetch(`/api/quotations?clientId=${id}`)
-        .then((r) => r.json())
-        .then((d) => { if (Array.isArray(d)) setQuotations(d); setQuotationsLoaded(true); });
-    }
     if (tab === "files" && !filesLoaded) {
       fetch(`/api/files?clientId=${id}`)
         .then((r) => r.json())
@@ -344,11 +334,6 @@ export default function ClientDetailPage() {
     }
     if (tab === "overview") {
       // Auto-load financial data so the summary is populated.
-      if (!quotationsLoaded) {
-        fetch(`/api/quotations?clientId=${id}`)
-          .then((r) => r.json())
-          .then((d) => { if (Array.isArray(d)) setQuotations(d); setQuotationsLoaded(true); });
-      }
       if (!invoicesLoaded) {
         fetch(`/api/invoices?clientId=${id}`)
           .then((r) => r.json())
@@ -394,16 +379,12 @@ export default function ClientDetailPage() {
         fetch("/api/users").then(r => r.json()).then(d => setTeamUsers(Array.isArray(d) ? d : d.users ?? [])).catch(() => {});
       }
     }
-  }, [tab, id, quotationsLoaded, filesLoaded, contractsLoaded, invoicesLoaded, expensesLoaded, receiptsLoaded, channelsLoaded, activeChannel, teamUsers]);
+  }, [tab, id, filesLoaded, contractsLoaded, invoicesLoaded, expensesLoaded, receiptsLoaded, channelsLoaded, activeChannel, teamUsers]);
 
-  // Load stakeholders + users when contract modal opens
+  // Load the internal users that can be named as a contract party
   useEffect(() => {
-    if (contractModalOpen && contractFormStakeholders.length === 0) {
-      Promise.all([
-        fetch("/api/stakeholders").then((r) => r.json()),
-        fetch("/api/users").then((r) => r.json()),
-      ]).then(([s, u]) => {
-        setContractFormStakeholders(Array.isArray(s) ? s : []);
+    if (contractModalOpen && contractFormUsers.length === 0) {
+      fetch("/api/users").then((r) => r.json()).then((u) => {
         setContractFormUsers(Array.isArray(u) ? u : []);
       });
     }
@@ -416,16 +397,12 @@ export default function ClientDetailPage() {
       if (k === "clientId" && v && client) {
         updated.name = client.companyName || client.name;
       }
-      if (k === "stakeholderId" && v) {
-        const s = contractFormStakeholders.find((s) => s.id === v);
-        if (s) updated.name = s.name;
-      }
       if (k === "userId" && v) {
         const u = contractFormUsers.find((u) => u.id === v);
         if (u) { updated.name = u.name; updated.email = u.email; }
       }
       if (k === "partyType") {
-        updated.clientId = ""; updated.stakeholderId = ""; updated.userId = "";
+        updated.clientId = ""; updated.userId = "";
         updated.name = ""; updated.email = "";
       }
       return updated;
@@ -822,7 +799,6 @@ export default function ClientDetailPage() {
     { id: "brand",       label: `Brand (${brandColors.length + brandAssets.length})` },
     { id: "tax",         label: "Tax & Billing" },
     { id: "projects",    label: `Projects (${client.projects.length})` },
-    { id: "quotations",  label: "Quotations" },
     { id: "invoices",    label: "Invoices" },
     { id: "receipts",    label: "Receipts" },
     { id: "expenses",    label: "Expenses" },
@@ -917,8 +893,6 @@ export default function ClientDetailPage() {
         {/* ── OVERVIEW ── */}
         {tab === "overview" && (() => {
           // ── Financial Summary calculations ──
-          const pipelineQuotations = quotations.filter((q) => q.status === "APPROVED" || q.status === "SENT");
-          const pipelineTotal = pipelineQuotations.reduce((s, q) => s + Number(q.total ?? 0), 0);
           const invTotal = (inv: Invoice) =>
             calcInvoiceTotal(inv.lineItems, { discountRate: inv.discountPct, taxRate: inv.taxPct }).total;
           const invoicedTotal = invoices.reduce((s, inv) => s + invTotal(inv), 0);
@@ -941,7 +915,6 @@ export default function ClientDetailPage() {
             currentUser?.organization,
           );
           const finStats: { label: string; value: number; color: string; icon: typeof DollarSign }[] = [
-            { label: "Pipeline (Quotations)", value: pipelineTotal, color: "text-indigo-600", icon: FileText },
             { label: "Invoiced", value: invoicedTotal, color: "text-gray-700", icon: DollarSign },
             { label: "Paid", value: paidTotal, color: "text-emerald-600", icon: CheckCircle2 },
             { label: "Outstanding", value: outstanding, color: "text-amber-600", icon: AlertCircle },
@@ -1242,69 +1215,6 @@ export default function ClientDetailPage() {
                     </div>
                   </Link>
                 ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ── QUOTATIONS ── */}
-        {tab === "quotations" && (
-          <div className="max-w-2xl space-y-4">
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-gray-500">{quotations.length} quotation{quotations.length !== 1 ? "s" : ""}</p>
-              <Button size="sm" icon={<Plus className="w-3.5 h-3.5" />} onClick={() => setQuotationModalOpen(true)}>New Quotation</Button>
-            </div>
-
-            {!quotationsLoaded ? (
-              <div className="space-y-2">
-                {[1,2,3].map((i) => (
-                  <div key={i} className="bg-white border border-gray-200 rounded-xl p-4 animate-pulse">
-                    <div className="h-4 bg-gray-200 rounded w-1/2 mb-2" />
-                    <div className="h-3 bg-gray-100 rounded w-1/4" />
-                  </div>
-                ))}
-              </div>
-            ) : quotations.length === 0 ? (
-              <div className="bg-white border border-gray-200 rounded-xl p-10 text-center">
-                <FileText className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-                <p className="text-sm text-gray-500">No quotations yet.</p>
-                <button onClick={() => setQuotationModalOpen(true)} className="mt-3 inline-block text-sm text-indigo-600 hover:underline">
-                  Create first quotation
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {quotations.map((q) => {
-                  const statusColor = {
-                    DRAFT: "bg-gray-100 text-gray-600",
-                    SENT: "bg-blue-50 text-blue-700",
-                    APPROVED: "bg-emerald-50 text-emerald-700",
-                    REJECTED: "bg-red-50 text-red-600",
-                    EXPIRED: "bg-yellow-50 text-yellow-700",
-                    CONVERTED: "bg-indigo-50 text-indigo-700",
-                  }[q.status] ?? "bg-gray-100 text-gray-600";
-                  return (
-                    <Link
-                      key={q.id}
-                      href={`/quotations/${q.id}`}
-                      className="bg-white border border-gray-200 rounded-xl px-5 py-4 flex items-center justify-between hover:border-indigo-300 hover:bg-indigo-50/30 transition-colors group"
-                    >
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-gray-900 group-hover:text-indigo-700 truncate">{q.title}</p>
-                        <p className="text-xs text-gray-400 mt-0.5 font-mono">{q.number}</p>
-                      </div>
-                      <div className="flex items-center gap-3 flex-shrink-0">
-                        <span className="text-sm font-semibold text-gray-700">
-                          {formatMoney(Number(q.total), resolveClientCurrency(client, currentUser?.organization), { precision: 0 })}
-                        </span>
-                        <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${statusColor}`}>
-                          {q.status.charAt(0) + q.status.slice(1).toLowerCase()}
-                        </span>
-                        <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-indigo-400" />
-                      </div>
-                    </Link>
-                  );
-                })}
               </div>
             )}
           </div>
@@ -2277,18 +2187,6 @@ export default function ClientDetailPage() {
         />
       </Modal>
 
-      {/* ── New Quotation Modal ── */}
-      <Modal open={quotationModalOpen} title="New Quotation" onClose={() => setQuotationModalOpen(false)} width="max-w-4xl">
-        <QuotationBuilder
-          initialData={{ clientId: id }}
-          onSuccess={(newId) => {
-            setQuotationModalOpen(false);
-            setQuotationsLoaded(false); // force refresh when tab is visited
-          }}
-          onCancel={() => setQuotationModalOpen(false)}
-        />
-      </Modal>
-
       {/* ── New Contract Modal ── */}
       <Modal open={contractModalOpen} title="New Contract / NDA" onClose={() => { setContractModalOpen(false); setClientContractForm(EMPTY_CONTRACT_FORM); setClientContractParties([{ ...EMPTY_CLIENT_PARTY }]); }} width="max-w-2xl">
         <form onSubmit={handleAddClientContract} className="space-y-5">
@@ -2382,7 +2280,7 @@ export default function ClientDetailPage() {
                           party.partyType === t ? "bg-indigo-600 text-white" : "text-gray-500 hover:text-gray-700"
                         }`}
                       >
-                        {t === "USER" ? "Internal" : t === "CLIENT" ? "Client" : "Stakeholder"}
+                        {t === "USER" ? "Internal" : t === "CLIENT" ? "Client" : "External"}
                       </button>
                     ))}
                   </div>
@@ -2395,17 +2293,8 @@ export default function ClientDetailPage() {
                         />
                       </div>
                     )}
-                    {party.partyType === "STAKEHOLDER" && (
-                      <div>
-                        <label className="block text-xs text-gray-400 mb-1">Stakeholder</label>
-                        <select value={party.stakeholderId} onChange={(e) => updateClientContractParty(i, "stakeholderId", e.target.value)}
-                          className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-                        >
-                          <option value="">Pick stakeholder…</option>
-                          {contractFormStakeholders.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                        </select>
-                      </div>
-                    )}
+                    {/* v3: external parties are typed in directly — the name
+                        and email fields below are the whole record. */}
                     {party.partyType === "USER" && (
                       <div>
                         <label className="block text-xs text-gray-400 mb-1">Team Member</label>

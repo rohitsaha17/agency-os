@@ -114,7 +114,7 @@ export default function OnboardingPage() {
         </h1>
         <p className="mt-2 text-slate-400">
           Let&rsquo;s set up your agency. These details appear across the app and
-          on every PDF you send — quotations, invoices and contracts.
+          on every PDF you send — invoices and contracts.
         </p>
 
         <form onSubmit={handleSubmit} className="mt-10 space-y-8">

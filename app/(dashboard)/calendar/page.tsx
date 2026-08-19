@@ -568,7 +568,6 @@ export default function CalendarPage() {
                             className="px-2.5 py-1 text-[11px] font-medium bg-white/70 rounded-lg hover:bg-white">
                             Create task
                           </button>
-                          {/* TODO(phase-9): "Create booking" hook lands with the booking calendar */}
                         </div>
                       )}
                     </div>

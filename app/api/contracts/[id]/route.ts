@@ -11,7 +11,6 @@ const CONTRACT_INCLUDE = {
   parties: {
     include: {
       client: { select: { id: true, name: true } },
-      stakeholder: { select: { id: true, name: true, type: true } },
       user: { select: { id: true, name: true } },
     },
   },

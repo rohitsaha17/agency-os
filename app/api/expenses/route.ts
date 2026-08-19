@@ -7,7 +7,6 @@ import { canViewFinancials } from "@/lib/permissions";
 const expenseInclude = {
   project:     { select: { id: true, name: true, clientId: true } },
   client:      { select: { id: true, name: true, companyName: true } },
-  stakeholder: { select: { id: true, name: true, type: true } },
   user:        { select: { id: true, name: true } },
 };
 
@@ -17,7 +16,6 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const projectId     = searchParams.get("projectId");
     const clientId      = searchParams.get("clientId");
-    const stakeholderId = searchParams.get("stakeholderId");
     const category      = searchParams.get("category");
     const status        = searchParams.get("status");
     const search        = searchParams.get("search");
@@ -29,7 +27,6 @@ export async function GET(req: NextRequest) {
     const where: Record<string, unknown> = {
       organizationId: user.organizationId,
       ...(projectId     ? { projectId }     : {}),
-      ...(stakeholderId ? { stakeholderId } : {}),
       ...(category ? { category: category as never } : {}),
       ...(status   ? { status:   status   as never } : {}),
       ...(search   ? { title: { contains: search, mode: "insensitive" } } : {}),
@@ -69,14 +66,14 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const {
       title, description, category, amount, currency,
-      date, status, projectId, clientId, stakeholderId, userId,
+      date, status, projectId, clientId, userId,
       isReimbursable, receiptUrl, notes,
     } = body;
 
     if (!title?.trim()) throw new ApiError("Title is required", 400);
     if (!amount || isNaN(parseFloat(amount))) throw new ApiError("Valid amount is required", 400);
 
-    // If linking to project/client/stakeholder, confirm each is in the caller's org.
+    // If linking to a project or client, confirm each is in the caller's org.
     if (projectId) {
       const p = await prisma.project.findFirst({
         where: { id: projectId, organizationId: user.organizationId },
@@ -91,13 +88,6 @@ export async function POST(req: NextRequest) {
       });
       if (!c) throw new ApiError("Client not found", 404);
     }
-    if (stakeholderId) {
-      const s = await prisma.stakeholder.findFirst({
-        where: { id: stakeholderId, organizationId: user.organizationId },
-        select: { id: true },
-      });
-      if (!s) throw new ApiError("Stakeholder not found", 404);
-    }
 
     const expense = await prisma.expense.create({
       data: {
@@ -111,7 +101,6 @@ export async function POST(req: NextRequest) {
         status:         status || "PENDING",
         projectId:      projectId      || null,
         clientId:       clientId       || null,
-        stakeholderId:  stakeholderId  || null,
         userId:         userId         || null,
         isReimbursable: !!isReimbursable,
         receiptUrl:     receiptUrl?.trim() || null,

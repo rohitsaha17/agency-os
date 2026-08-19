@@ -9,7 +9,6 @@ type Params = { params: Promise<{ id: string }> };
 const INCLUDE = {
   lineItems: { orderBy: { order: "asc" as const } },
   project:   { select: { id: true, name: true } },
-  quotation: { select: { id: true, number: true, title: true } },
   client:    { select: { id: true, name: true, companyName: true } },
 } as const;
 

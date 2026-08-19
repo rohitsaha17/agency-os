@@ -19,8 +19,6 @@ interface DashboardStats {
   blockedTasksCount: number;
   filesInReview: number;
   activeClients: number;
-  pipelineValue: number | null; // null when the caller is a MEMBER (v2 strip)
-  openQuotations: number;
   completionRate: number;
   monthCompletionRate: number;
   completedThisMonth: number;
@@ -237,7 +235,6 @@ function UrgentPanel({ items }: { items: UrgentItem[] }) {
     task_overdue: "OVERDUE",
     task_blocked: "BLOCKED",
     files_review: "REVIEW",
-    quotation_sent: "FOLLOW UP",
   };
 
   return (
@@ -458,7 +455,6 @@ function QuickActions() {
   // accent text color so they stay legible in both themes.
   const actions = [
     { label: "New Project",    href: "/projects",       icon: <FolderKanban className="w-5 h-5" />, accent: "bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border-indigo-200 dark:border-indigo-500/30" },
-    { label: "New Quotation",  href: "/quotations/new", icon: <FileText className="w-5 h-5" />,    accent: "bg-purple-50 text-purple-600 hover:bg-purple-100 border-purple-200 dark:border-purple-500/30" },
     { label: "Add Client",     href: "/clients",        icon: <UserPlus className="w-5 h-5" />,    accent: "bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border-emerald-200 dark:border-emerald-500/30" },
     { label: "New Invoice",    href: "/invoices",       icon: <Receipt className="w-5 h-5" />,     accent: "bg-amber-50 text-amber-600 hover:bg-amber-100 border-amber-200 dark:border-amber-500/30" },
     { label: "Upload Files",   href: "/files",          icon: <HardDrive className="w-5 h-5" />,   accent: "bg-sky-50 text-sky-600 hover:bg-sky-100 border-sky-200 dark:border-sky-500/30" },
@@ -672,7 +668,7 @@ export default function DashboardPage() {
               { icon: <FolderKanban className="w-5 h-5 text-indigo-600" />, label: "Projects", desc: "Manage client projects, tasks, timelines", href: "/projects", color: "bg-indigo-50" },
               { icon: <Users className="w-5 h-5 text-emerald-600" />, label: "Clients", desc: "CRM, brand assets, contacts, tax info", href: "/clients", color: "bg-emerald-50" },
               { icon: <CheckCircle2 className="w-5 h-5 text-blue-600" />, label: "Tasks", desc: "Hierarchical tasks with Kanban + list view", href: "/tasks", color: "bg-blue-50" },
-              { icon: <FileText className="w-5 h-5 text-purple-600" />, label: "Quotations", desc: "Build and send professional proposals", href: "/quotations", color: "bg-purple-50" },
+              { icon: <Receipt className="w-5 h-5 text-purple-600" />, label: "Invoices", desc: "Bill clients and track what is outstanding", href: "/invoices", color: "bg-purple-50" },
               { icon: <HardDrive className="w-5 h-5 text-sky-600" />, label: "Files", desc: "Frame.io-style review and asset management", href: "/files", color: "bg-sky-50" },
               { icon: <Calendar className="w-5 h-5 text-pink-600" />, label: "Calendar", desc: "Deadlines and project timelines at a glance", href: "/calendar", color: "bg-pink-50" },
             ].map((m) => (
@@ -767,16 +763,6 @@ export default function DashboardPage() {
           {/* v2: money cards are hidden from MEMBERs (API also strips values) */}
           {canSeeMoney && (
             <StatCard
-              icon={<FileText className="w-5 h-5 text-purple-600" />}
-              label="Pipeline Value"
-              value={fmt(stats.pipelineValue ?? 0, data.currency)}
-              sub={`${stats.openQuotations} open quotation${stats.openQuotations !== 1 ? "s" : ""}`}
-              color="bg-purple-50"
-              href="/quotations"
-            />
-          )}
-          {canSeeMoney && (
-            <StatCard
               icon={<Receipt className="w-5 h-5 text-amber-600" />}
               label="Expenses (Month)"
               value={fmt(stats.expensesThisMonth ?? 0, data.currency)}
@@ -850,12 +836,6 @@ export default function DashboardPage() {
                   <span className="text-gray-600">Tasks completed</span>
                   <span className="font-semibold text-gray-900">{stats.completedThisMonth} this month</span>
                 </div>
-                {canSeeMoney && (
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-gray-600">Pipeline value</span>
-                    <span className="font-semibold text-indigo-700">{fmt(stats.pipelineValue ?? 0, data.currency)}</span>
-                  </div>
-                )}
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-gray-600">Active clients</span>
                   <span className="font-semibold text-gray-900">{stats.activeClients}</span>

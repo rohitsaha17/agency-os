@@ -11,7 +11,7 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useDebounce } from "@/lib/hooks";
 import { formatMoney } from "@/lib/money";
 import { useCurrentUser } from "@/lib/useCurrentUser";
-import type { Expense, ExpenseCategory, ExpenseStatus, Project, Stakeholder, ClientSummary } from "@/types";
+import type { Expense, ExpenseCategory, ExpenseStatus, Project, ClientSummary } from "@/types";
 
 const CATEGORY_LABELS: Record<ExpenseCategory, string> = {
   SOFTWARE_TOOLS: "Software & Tools",
@@ -54,7 +54,7 @@ function formatDate(d: string) {
 const EMPTY_FORM = {
   title: "", description: "", category: "OTHER" as ExpenseCategory,
   amount: "", currency: "USD", date: new Date().toISOString().slice(0, 10),
-  status: "PENDING" as ExpenseStatus, projectId: "", clientId: "", stakeholderId: "", userId: "",
+  status: "PENDING" as ExpenseStatus, projectId: "", clientId: "", userId: "",
   isReimbursable: false, receiptUrl: "", notes: "",
 };
 
@@ -74,7 +74,6 @@ function ExpensesPageInner() {
   const [filterStatus, setFilterStatus] = useState("");
   const [filterProjectId, setFilterProjectId] = useState("");
   const [filterClientId, setFilterClientId] = useState("");
-  const [filterStakeholderId, setFilterStakeholderId] = useState(() => searchParams.get("stakeholderId") ?? "");
   const [addOpen, setAddOpen] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
 
@@ -90,7 +89,6 @@ function ExpensesPageInner() {
   const [projects, setProjects] = useState<Pick<Project, "id" | "name">[]>([]);
   const [allProjectsFull, setAllProjectsFull] = useState<(Pick<Project, "id" | "name"> & { clientId?: string })[]>([]);
   const [clients, setClients] = useState<Pick<ClientSummary, "id" | "name" | "companyName">[]>([]);
-  const [stakeholders, setStakeholders] = useState<Pick<Stakeholder, "id" | "name" | "type">[]>([]);
 
   const debouncedSearch = useDebounce(search, 300);
 
@@ -122,7 +120,6 @@ function ExpensesPageInner() {
 
   useEffect(() => {
     if (addOpen) {
-      fetch("/api/stakeholders").then((r) => r.json()).then((d) => { if (Array.isArray(d)) setStakeholders(d); });
     }
   }, [addOpen]);
 
@@ -203,7 +200,6 @@ function ExpensesPageInner() {
       const expClientId = e.clientId ?? (e.projectId ? projectClientMap.get(e.projectId) : undefined);
       if (expClientId !== filterClientId) return false;
     }
-    if (filterStakeholderId && (e.stakeholder?.id ?? e.stakeholderId) !== filterStakeholderId) return false;
     return true;
   });
 
@@ -290,14 +286,8 @@ function ExpensesPageInner() {
               <option key={s} value={s}>{s.charAt(0) + s.slice(1).toLowerCase()}</option>
             ))}
           </select>
-          {filterStakeholderId && (
-            <span className="text-xs bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-full inline-flex items-center gap-1.5">
-              Stakeholder: {stakeholders.find((st) => st.id === filterStakeholderId)?.name ?? "filtered"}
-              <button onClick={() => setFilterStakeholderId("")} className="hover:text-indigo-900 font-semibold">×</button>
-            </span>
-          )}
-          {(filterCategory || filterStatus || search || filterProjectId || filterClientId || filterStakeholderId) && (
-            <button onClick={() => { setSearch(""); setFilterCategory(""); setFilterStatus(""); setFilterProjectId(""); setFilterClientId(""); setFilterStakeholderId(""); }} className="text-xs text-gray-500 hover:text-gray-800 flex items-center gap-1">
+          {(filterCategory || filterStatus || search || filterProjectId || filterClientId) && (
+            <button onClick={() => { setSearch(""); setFilterCategory(""); setFilterStatus(""); setFilterProjectId(""); setFilterClientId(""); }} className="text-xs text-gray-500 hover:text-gray-800 flex items-center gap-1">
               <Filter className="w-3 h-3" /> Clear
             </button>
           )}
@@ -336,7 +326,7 @@ function ExpensesPageInner() {
                 <tr className="border-b border-gray-100 bg-gray-50 text-xs font-medium text-gray-400 uppercase tracking-wide">
                   <th className="text-left px-5 py-3">Title</th>
                   <th className="text-left px-5 py-3">Category</th>
-                  <th className="text-left px-5 py-3">Project / Stakeholder</th>
+                  <th className="text-left px-5 py-3">Project</th>
                   <th className="text-left px-5 py-3">Date</th>
                   <th className="text-right px-5 py-3">Amount</th>
                   <th className="text-center px-5 py-3">Status</th>
@@ -364,8 +354,7 @@ function ExpensesPageInner() {
                     <td className="px-5 py-3 text-gray-600">{CATEGORY_LABELS[exp.category]}</td>
                     <td className="px-5 py-3 text-gray-500">
                       {exp.project && <Link href={`/projects/${exp.project.id}`} className="text-indigo-600 hover:underline">{exp.project.name}</Link>}
-                      {exp.stakeholder && <p className="text-xs text-gray-400">{exp.stakeholder.name}</p>}
-                      {!exp.project && !exp.stakeholder && <span className="text-gray-300">—</span>}
+                      {!exp.project && <span className="text-gray-300">—</span>}
                     </td>
                     <td className="px-5 py-3 text-gray-500 whitespace-nowrap">{formatDate(exp.date)}</td>
                     <td className="px-5 py-3 text-right font-semibold text-gray-900">
@@ -459,15 +448,6 @@ function ExpensesPageInner() {
                 >
                   <option value="">No project</option>
                   {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Stakeholder</label>
-                <select value={form.stakeholderId} onChange={(e) => set("stakeholderId", e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                >
-                  <option value="">None</option>
-                  {stakeholders.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
               </div>
             </div>

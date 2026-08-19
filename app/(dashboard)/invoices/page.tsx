@@ -54,7 +54,7 @@ function EmptyState({ onNew }: { onNew: () => void }) {
       </div>
       <p className="text-base font-semibold text-gray-800 mb-1">No invoices yet</p>
       <p className="text-sm text-gray-400 mb-6 max-w-xs">
-        Create invoices from scratch or generate them directly from approved quotations.
+        Create an invoice from scratch, or generate one from a client's package month.
       </p>
       <Button icon={<Plus className="w-4 h-4" />} onClick={onNew}>Create First Invoice</Button>
     </div>
@@ -84,13 +84,11 @@ function InvoiceFormModal({
   const toast = useToast();
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
-    clientId: "", projectId: "", quotationId: "",
+    clientId: "", projectId: "",
     dueDate: "", currency: "USD",
     discountPct: "", taxPct: "", notes: "",
   });
   const [lineItems, setLineItems] = useState<LineItemDraft[]>([{ ...EMPTY_LINE }]);
-  const [quotations, setQuotations] = useState<{ id: string; number: string; title: string; clientId: string }[]>([]);
-  const [fromQuotation, setFromQuotation] = useState(false);
   // v2 Phase 7: generate from a client's package month
   const [fromMonth, setFromMonth] = useState(false);
   const [genMonth, setGenMonth] = useState(new Date().toISOString().slice(0, 7));
@@ -126,15 +124,6 @@ function InvoiceFormModal({
     }
   };
 
-  // Load approved quotations when client changes
-  useEffect(() => {
-    if (!form.clientId) { setQuotations([]); return; }
-    fetch(`/api/quotations?clientId=${form.clientId}&status=APPROVED`)
-      .then((r) => r.json())
-      .then((d) => setQuotations(Array.isArray(d) ? d : []))
-      .catch(() => {});
-  }, [form.clientId]);
-
   const setField = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
   const addLine    = () => setLineItems((l) => [...l, { ...EMPTY_LINE }]);
@@ -145,15 +134,9 @@ function InvoiceFormModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.clientId) { toast.error("Client is required"); return; }
-    if (fromQuotation && !form.quotationId) {
-      toast.error("Please pick a quotation to import line items from");
-      return;
-    }
     setSaving(true);
     try {
-      const payload = fromQuotation
-        ? { ...form, fromQuotationId: form.quotationId }
-        : { ...form, lineItems: lineItems
+      const payload = { ...form, lineItems: lineItems
             .filter((li) => li.mode !== "exclude")
             .map((li, i) => ({
               description: li.description, quantity: parseFloat(li.quantity) || 1,
@@ -199,7 +182,7 @@ function InvoiceFormModal({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">Client *</label>
-            <select value={form.clientId} onChange={(e) => { setField("clientId", e.target.value); setField("quotationId", ""); }}
+            <select value={form.clientId} onChange={(e) => setField("clientId", e.target.value)}
               className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
               required
             >
@@ -228,7 +211,6 @@ function InvoiceFormModal({
                 onChange={(e) => {
                   setFromMonth(e.target.checked);
                   if (e.target.checked) {
-                    setFromQuotation(false);
                     generateFromMonth(form.clientId, genMonth);
                   } else {
                     setLineItems([{ ...EMPTY_LINE }]);
@@ -250,32 +232,8 @@ function InvoiceFormModal({
           </div>
         )}
 
-        {/* Quotation toggle */}
-        {form.clientId && !fromMonth && quotations.length > 0 && (
-          <div className="flex items-center gap-3 p-3 bg-indigo-50 rounded-xl border border-indigo-100">
-            <input type="checkbox" id="fromQuote" checked={fromQuotation} onChange={(e) => setFromQuotation(e.target.checked)}
-              className="w-4 h-4 text-indigo-600 rounded"
-            />
-            <label htmlFor="fromQuote" className="text-sm text-indigo-800 font-medium">
-              Import line items from an approved quotation
-            </label>
-          </div>
-        )}
-
-        {fromQuotation && (
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Select Quotation</label>
-            <select value={form.quotationId} onChange={(e) => setField("quotationId", e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            >
-              <option value="">Pick a quotation…</option>
-              {quotations.map((q) => <option key={q.id} value={q.id}>{q.number} — {q.title}</option>)}
-            </select>
-          </div>
-        )}
-
-        {/* Line items (shown when not from quotation, or quotation not selected) */}
-        {!fromQuotation && (
+        {/* Line items */}
+        {(
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="text-xs font-medium text-gray-500">Line Items</label>
@@ -382,7 +340,7 @@ function InvoiceFormModal({
           </select>
         </div>
 
-        {!fromQuotation && (
+        {(
           <div className="text-right text-sm text-gray-600 bg-gray-50 rounded-xl px-4 py-3 space-y-1">
             <div className="flex justify-between"><span>Subtotal</span><span className="font-medium">{formatMoney(subtotal, form.currency || "USD")}</span></div>
             {disc > 0 && <div className="flex justify-between text-red-600"><span>Discount ({form.discountPct}%)</span><span>−{formatMoney(disc, form.currency)}</span></div>}
@@ -514,7 +472,7 @@ export default function InvoicesPage() {
         import("@/lib/pdfTemplates"),
       ]);
       const settings = await fetchSettings();
-      const html = buildInvoiceHtml({ ...inv, client: inv.client ?? null, project: inv.project ?? null, quotation: inv.quotation ?? null }, settings);
+      const html = buildInvoiceHtml({ ...inv, client: inv.client ?? null, project: inv.project ?? null }, settings);
       await openPrintPdf(html);
     } catch {
       toast.error("Failed to generate PDF");

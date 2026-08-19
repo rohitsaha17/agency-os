@@ -55,7 +55,6 @@ export async function POST(req: NextRequest, { params }: Params) {
         parties: {
           include: {
             client: { select: { id: true, name: true } },
-            stakeholder: { select: { id: true, name: true, type: true } },
             user: { select: { id: true, name: true } },
           },
         },
@@ -110,7 +109,6 @@ export async function DELETE(req: NextRequest, { params }: Params) {
         parties: {
           include: {
             client: { select: { id: true, name: true } },
-            stakeholder: { select: { id: true, name: true, type: true } },
             user: { select: { id: true, name: true } },
           },
         },

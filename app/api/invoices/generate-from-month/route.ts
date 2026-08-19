@@ -12,8 +12,8 @@ const MONTH_NAMES = [
 // Prefill lines for the "Generate from month" invoice mode:
 //   (a) PACKAGE line from the active ClientPackage
 //   (b) one EXTRA line per delivered (POSTED) extra/ad-hoc content item that
-//       month with invoicedInId null — unit price from a rate card whose
-//       service name matches the creative type (case-insensitive), else 0.
+//       month with invoicedInId null, unpriced — the admin sets the amount
+//       in the builder (v3 retired rate cards).
 export async function GET(req: NextRequest) {
   try {
     const user = await requireAuth(req);
@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
     const from = new Date(Date.UTC(y, m - 1, 1));
     const to = new Date(Date.UTC(y, m, 1));
 
-    const [packages, extras, rateCards] = await Promise.all([
+    const [packages, extras] = await Promise.all([
       prisma.clientPackage.findMany({
         where: {
           organizationId: user.organizationId, clientId, isActive: true,
@@ -55,15 +55,7 @@ export async function GET(req: NextRequest) {
         include: { creativeType: { select: { id: true, name: true } } },
         orderBy: { date: "asc" },
       }),
-      prisma.rateCard.findMany({
-        where: { organizationId: user.organizationId, isActive: true },
-        select: { name: true, unitPrice: true },
-      }),
     ]);
-
-    const rateByName = new Map(
-      rateCards.map((r) => [r.name.trim().toLowerCase(), Number(r.unitPrice)]),
-    );
 
     const monthLabel = `${MONTH_NAMES[m - 1]} ${y}`;
     const currency =
@@ -79,11 +71,13 @@ export async function GET(req: NextRequest) {
         unitPrice: p.billingAmount != null ? Number(p.billingAmount) : 0,
         contentItemId: null,
       })),
+      // v3: rate cards are retired — extras come through unpriced and the
+      // admin types the amount in the builder.
       ...extras.map((i) => ({
         kind: "EXTRA" as const,
         description: `Extra ${i.creativeType.name} — ${i.topic}`,
         quantity: 1,
-        unitPrice: rateByName.get(i.creativeType.name.trim().toLowerCase()) ?? 0,
+        unitPrice: 0,
         contentItemId: i.id,
       })),
     ];

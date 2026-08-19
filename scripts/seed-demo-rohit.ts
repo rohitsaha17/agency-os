@@ -80,16 +80,6 @@ async function main() {
     },
   });
 
-  // ── Rate cards (each row is one service) ─────────────────
-  await prisma.rateCard.createMany({
-    data: [
-      { organizationId: org.id, name: "Brand Identity", category: "Design", unit: "project", unitPrice: 250000, currency: "INR", description: "Logo, guidelines, collateral" },
-      { organizationId: org.id, name: "Social Media", category: "Marketing", unit: "month", unitPrice: 60000, currency: "INR" },
-      { organizationId: org.id, name: "Video Production", category: "Production", unit: "video", unitPrice: 85000, currency: "INR" },
-      { organizationId: org.id, name: "Website Design", category: "Design", unit: "project", unitPrice: 180000, currency: "INR" },
-    ],
-  });
-
   // ── Projects ─────────────────────────────────────────────
   const brandProject = await prisma.project.create({
     data: {
@@ -126,25 +116,10 @@ async function main() {
     ],
   });
 
-  // ── Quotation (approved) ─────────────────────────────────
-  const quote = await prisma.quotation.create({
-    data: {
-      organizationId: org.id, clientId: acme.id, number: "QUO-2026-001",
-      title: "Acme Rebrand Proposal", status: "APPROVED", pricingType: "FIXED",
-      currency: "INR", discountType: "PERCENT", discountValue: 5, taxRate: 18,
-      subtotal: 450000, total: 504900, validUntil: new Date("2026-08-31"),
-      notes: "50% advance to kick off.", terms: "Payment within 15 days of invoice.",
-      lineItems: { create: [
-        { title: "Brand Identity", description: "Logo + guidelines", pricingType: "FIXED", quantity: 1, unitPrice: 250000, subtotal: 250000, order: 0 },
-        { title: "Packaging Design", pricingType: "PER_ITEM", quantity: 4, unitPrice: 50000, unit: "SKUs", subtotal: 200000, order: 1 },
-      ] },
-    },
-  });
-
   // ── Invoices ─────────────────────────────────────────────
   const inv1 = await prisma.invoice.create({
     data: {
-      organizationId: org.id, clientId: acme.id, projectId: brandProject.id, quotationId: quote.id,
+      organizationId: org.id, clientId: acme.id, projectId: brandProject.id,
       invoiceNumber: "INV-2026-001", status: "PAID", currency: "INR",
       discountPct: 5, taxPct: 18, dueDate: new Date("2026-06-15"), paidAt: new Date("2026-06-12"),
       notes: "Advance invoice — 50%.",
@@ -169,14 +144,11 @@ async function main() {
     },
   });
 
-  // ── Stakeholder + expenses ───────────────────────────────
-  const vendor = await prisma.stakeholder.create({
-    data: { organizationId: org.id, name: "Lumen Print Co", type: "VENDOR", email: "sales@lumenprint.in", phone: "+91 90000 55555" },
-  });
+  // ── Expenses ─────────────────────────────────────────────
   await prisma.expense.createMany({
     data: [
       { organizationId: org.id, title: "Stock photography", amount: 8500, currency: "INR", category: "STOCK_ASSETS", status: "APPROVED", projectId: brandProject.id, date: new Date("2026-06-20") },
-      { organizationId: org.id, title: "Print proofs", amount: 12000, currency: "INR", category: "PRINTING", status: "PAID", projectId: brandProject.id, stakeholderId: vendor.id, date: new Date("2026-06-28") },
+      { organizationId: org.id, title: "Print proofs", amount: 12000, currency: "INR", category: "PRINTING", status: "PAID", projectId: brandProject.id, date: new Date("2026-06-28") },
       { organizationId: org.id, title: "Design software (annual)", amount: 45000, currency: "INR", category: "SOFTWARE_TOOLS", status: "PENDING", clientId: null, date: new Date("2026-07-01") },
     ],
   });

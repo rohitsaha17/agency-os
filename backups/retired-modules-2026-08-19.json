@@ -1,0 +1,267 @@
+{
+  "exportedAt": "2026-08-19T19:52:55.246Z",
+  "reason": "V3 Phase 0 — retiring Quotations, Rate Cards, Stakeholders and Bookings",
+  "counts": {
+    "quotations": 1,
+    "quotationLineItems": 2,
+    "rateCards": 4,
+    "stakeholders": 1,
+    "bookings": 3
+  },
+  "quotations": [
+    {
+      "id": "demo_q_1",
+      "organizationId": "demo_org",
+      "number": "QUO-2026-001",
+      "clientId": "demo_c_acme",
+      "createdById": null,
+      "title": "Acme Rebrand Proposal",
+      "description": null,
+      "status": "APPROVED",
+      "pricingType": "FIXED",
+      "validUntil": "2026-08-31T00:00:00.000Z",
+      "currency": "INR",
+      "subtotal": "450000",
+      "discountType": "PERCENT",
+      "discountValue": "5",
+      "taxRate": "18",
+      "total": "504900",
+      "notes": "50% advance to kick off.",
+      "terms": "Payment within 15 days of invoice.",
+      "createdAt": "2026-08-18T08:43:24.976Z",
+      "updatedAt": "2026-08-18T08:43:24.976Z",
+      "lineItems": [
+        {
+          "id": "demo_qli_1",
+          "quotationId": "demo_q_1",
+          "rateCardId": null,
+          "title": "Brand Identity",
+          "description": "Logo + guidelines",
+          "pricingType": "FIXED",
+          "quantity": "1",
+          "unitPrice": "250000",
+          "unit": null,
+          "subtotal": "250000",
+          "order": 0,
+          "createdAt": "2026-08-18T08:43:24.976Z",
+          "rateCard": null
+        },
+        {
+          "id": "demo_qli_2",
+          "quotationId": "demo_q_1",
+          "rateCardId": null,
+          "title": "Packaging Design",
+          "description": null,
+          "pricingType": "PER_ITEM",
+          "quantity": "4",
+          "unitPrice": "50000",
+          "unit": "SKUs",
+          "subtotal": "200000",
+          "order": 1,
+          "createdAt": "2026-08-18T08:43:24.976Z",
+          "rateCard": null
+        }
+      ],
+      "client": {
+        "id": "demo_c_acme",
+        "name": "Acme Beverages"
+      },
+      "createdBy": null,
+      "project": null,
+      "invoice": {
+        "id": "demo_i_1",
+        "invoiceNumber": "INV-2026-001"
+      }
+    }
+  ],
+  "rateCards": [
+    {
+      "id": "demo_rc_1",
+      "organizationId": "demo_org",
+      "name": "Brand Identity",
+      "description": "Logo, guidelines, collateral",
+      "category": "Design",
+      "pricingType": "PER_ITEM",
+      "unit": "project",
+      "unitPrice": "250000",
+      "currency": "INR",
+      "isActive": true,
+      "createdAt": "2026-08-18T08:43:24.976Z",
+      "updatedAt": "2026-08-18T08:43:24.976Z"
+    },
+    {
+      "id": "demo_rc_2",
+      "organizationId": "demo_org",
+      "name": "Social Media",
+      "description": null,
+      "category": "Marketing",
+      "pricingType": "PER_ITEM",
+      "unit": "month",
+      "unitPrice": "60000",
+      "currency": "INR",
+      "isActive": true,
+      "createdAt": "2026-08-18T08:43:24.976Z",
+      "updatedAt": "2026-08-18T08:43:24.976Z"
+    },
+    {
+      "id": "demo_rc_3",
+      "organizationId": "demo_org",
+      "name": "Video Production",
+      "description": null,
+      "category": "Production",
+      "pricingType": "PER_ITEM",
+      "unit": "video",
+      "unitPrice": "85000",
+      "currency": "INR",
+      "isActive": true,
+      "createdAt": "2026-08-18T08:43:24.976Z",
+      "updatedAt": "2026-08-18T08:43:24.976Z"
+    },
+    {
+      "id": "demo_rc_4",
+      "organizationId": "demo_org",
+      "name": "Website Design",
+      "description": null,
+      "category": "Design",
+      "pricingType": "PER_ITEM",
+      "unit": "project",
+      "unitPrice": "180000",
+      "currency": "INR",
+      "isActive": true,
+      "createdAt": "2026-08-18T08:43:24.976Z",
+      "updatedAt": "2026-08-18T08:43:24.976Z"
+    }
+  ],
+  "stakeholders": [
+    {
+      "id": "demo_s_lumen",
+      "organizationId": "demo_org",
+      "name": "Lumen Print Co",
+      "type": "VENDOR",
+      "role": null,
+      "email": "sales@lumenprint.in",
+      "phone": "+91 90000 55555",
+      "website": null,
+      "address": null,
+      "skills": [],
+      "currency": "USD",
+      "defaultRate": null,
+      "notes": null,
+      "isActive": true,
+      "createdAt": "2026-08-18T08:43:24.976Z",
+      "updatedAt": "2026-08-18T08:43:24.976Z",
+      "expenses": [
+        {
+          "id": "demo_e_2",
+          "title": "Print proofs",
+          "amount": "12000",
+          "date": "2026-06-28T00:00:00.000Z"
+        }
+      ],
+      "contracts": []
+    }
+  ],
+  "bookings": [
+    {
+      "id": "cmsz63l1a0000hotr86bpwhkt",
+      "organizationId": "demo_org",
+      "photographerId": "demo_u_priya",
+      "clientId": "demo_c_acme",
+      "projectId": null,
+      "contentItemId": "cmsz4auos000h5ktr3kjeyqot",
+      "startAt": "2026-08-20T04:30:00.000Z",
+      "endAt": "2026-08-20T07:30:00.000Z",
+      "location": "Acme HQ, BKC",
+      "notes": null,
+      "status": "COMPLETED",
+      "isAdHoc": false,
+      "createdById": "demo_owner",
+      "createdAt": "2026-08-18T21:21:16.606Z",
+      "updatedAt": "2026-08-18T21:21:40.698Z",
+      "photographer": {
+        "id": "demo_u_priya",
+        "name": "Priya Nair",
+        "email": "priya@vibrnd.studio"
+      },
+      "client": {
+        "id": "demo_c_acme",
+        "name": "Acme Beverages"
+      },
+      "project": null,
+      "contentItem": {
+        "id": "cmsz4auos000h5ktr3kjeyqot",
+        "topic": "Monthly product shoot",
+        "date": "2026-08-26T00:00:00.000Z"
+      },
+      "createdBy": {
+        "id": "demo_owner",
+        "name": "Rohit Saha"
+      }
+    },
+    {
+      "id": "cmsz63l9j0003hotrydhftoud",
+      "organizationId": "demo_org",
+      "photographerId": "demo_u_priya",
+      "clientId": null,
+      "projectId": null,
+      "contentItemId": null,
+      "startAt": "2026-08-20T06:30:00.000Z",
+      "endAt": "2026-08-20T08:30:00.000Z",
+      "location": null,
+      "notes": null,
+      "status": "CANCELLED",
+      "isAdHoc": false,
+      "createdById": "demo_owner",
+      "createdAt": "2026-08-18T21:21:16.903Z",
+      "updatedAt": "2026-08-18T21:21:44.500Z",
+      "photographer": {
+        "id": "demo_u_priya",
+        "name": "Priya Nair",
+        "email": "priya@vibrnd.studio"
+      },
+      "client": null,
+      "project": null,
+      "contentItem": null,
+      "createdBy": {
+        "id": "demo_owner",
+        "name": "Rohit Saha"
+      }
+    },
+    {
+      "id": "demo_bk_1",
+      "organizationId": "demo_org",
+      "photographerId": "demo_u_priya",
+      "clientId": "demo_c_acme",
+      "projectId": null,
+      "contentItemId": "demo_ci_6",
+      "startAt": "2026-08-20T10:00:00.000Z",
+      "endAt": "2026-08-20T13:00:00.000Z",
+      "location": "Acme HQ, BKC",
+      "notes": null,
+      "status": "CONFIRMED",
+      "isAdHoc": false,
+      "createdById": "demo_owner",
+      "createdAt": "2026-08-19T03:00:19.769Z",
+      "updatedAt": "2026-08-19T03:00:19.769Z",
+      "photographer": {
+        "id": "demo_u_priya",
+        "name": "Priya Nair",
+        "email": "priya@vibrnd.studio"
+      },
+      "client": {
+        "id": "demo_c_acme",
+        "name": "Acme Beverages"
+      },
+      "project": null,
+      "contentItem": {
+        "id": "demo_ci_6",
+        "topic": "Monthly product shoot",
+        "date": "2026-08-31T03:00:19.769Z"
+      },
+      "createdBy": {
+        "id": "demo_owner",
+        "name": "Rohit Saha"
+      }
+    }
+  ]
+}

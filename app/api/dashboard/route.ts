@@ -20,7 +20,6 @@ export async function GET(req: NextRequest) {
       projectsByStatus,
       allTaskStats,
       activeClients,
-      quotationPipeline,
       filesInReview,
       overdueTasks,
       upcomingTaskDeadlines,
@@ -52,13 +51,6 @@ export async function GET(req: NextRequest) {
 
       // Active client count
       prisma.client.count({ where: { organizationId: orgId, status: "ACTIVE" } }),
-
-      // Quotation pipeline value (draft + sent + approved)
-      prisma.quotation.aggregate({
-        where: { organizationId: orgId, status: { in: ["DRAFT", "SENT", "APPROVED"] } },
-        _sum: { total: true },
-        _count: { id: true },
-      }),
 
       // Files waiting for review
       prisma.file.count({ where: { organizationId: orgId, status: "IN_REVIEW" } }),
@@ -307,25 +299,6 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // Sent quotations awaiting response
-    const sentQuotations = await prisma.quotation.findMany({
-      where: { organizationId: orgId, status: "SENT" },
-      select: { id: true, title: true, validUntil: true, number: true },
-      orderBy: { createdAt: "asc" },
-      take: 3,
-    });
-    for (const q of sentQuotations) {
-      const isExpiringSoon = q.validUntil && new Date(q.validUntil).getTime() - now.getTime() < 3 * 86400000;
-      urgentItems.push({
-        type: "quotation_sent",
-        id: q.id,
-        title: q.title,
-        subtitle: isExpiringSoon ? "Expiring soon — follow up" : "Awaiting client response",
-        link: `/quotations/${q.id}`,
-        severity: isExpiringSoon ? "high" : "low",
-      });
-    }
-
     // Blocked tasks
     const blockedTasks = await prisma.task.findMany({
       where: { organizationId: orgId, status: "BLOCKED", deletedAt: null },
@@ -411,9 +384,6 @@ export async function GET(req: NextRequest) {
         blockedTasksCount: taskMap["BLOCKED"] ?? 0,
         filesInReview,
         activeClients,
-        // v2: money never reaches MEMBER clients (server-side strip)
-        pipelineValue:     showFinancials ? Number(quotationPipeline._sum.total ?? 0) : null,
-        openQuotations:    quotationPipeline._count.id,
         completionRate,
         monthCompletionRate,
         completedThisMonth,

@@ -41,7 +41,6 @@ function ContractsPageInner() {
   const [filterType, setFilterType] = useState<ContractType | "">("");
   const [filterClientId, setFilterClientId] = useState("");
   const [filterProjectId, setFilterProjectId] = useState("");
-  const [filterStakeholderId, setFilterStakeholderId] = useState(() => searchParams.get("stakeholderId") ?? "");
   const [clients, setClients] = useState<Pick<ClientSummary, "id" | "name" | "companyName">[]>([]);
   const [projects, setProjects] = useState<Pick<Project, "id" | "name">[]>([]);
 
@@ -51,11 +50,10 @@ function ContractsPageInner() {
     if (search) params.set("search", search);
     if (filterStatus) params.set("status", filterStatus);
     if (filterType) params.set("type", filterType);
-    if (filterStakeholderId) params.set("stakeholderId", filterStakeholderId);
     const res = await fetch(`/api/contracts?${params}`);
     if (res.ok) setContracts(await res.json());
     setLoading(false);
-  }, [search, filterStatus, filterType, filterStakeholderId]);
+  }, [search, filterStatus, filterType]);
 
   useEffect(() => { fetchContracts(); }, [fetchContracts]);
 
@@ -91,7 +89,7 @@ function ContractsPageInner() {
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:justify-between mb-5">
           <div>
             <h1 className="text-xl font-semibold text-gray-900">Contracts & NDAs</h1>
-            <p className="text-sm text-gray-500 mt-0.5">Manage agreements with clients, stakeholders, and team</p>
+            <p className="text-sm text-gray-500 mt-0.5">Manage agreements with clients, external parties and your team</p>
           </div>
           <Link href="/contracts/new">
             <Button icon={<Plus className="w-4 h-4" />}>New Contract</Button>
@@ -161,12 +159,6 @@ function ContractsPageInner() {
               <option key={s} value={s}>{STATUS_CONFIG[s].label}</option>
             ))}
           </select>
-          {filterStakeholderId && (
-            <span className="text-xs bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-full inline-flex items-center gap-1.5">
-              Filtered by stakeholder
-              <button onClick={() => setFilterStakeholderId("")} className="hover:text-indigo-900 font-semibold">×</button>
-            </span>
-          )}
         </div>
       </div>
 

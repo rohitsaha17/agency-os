@@ -52,9 +52,9 @@ const STEPS: TourStep[] = [
     body: "Hierarchical tasks with subtasks, assignees, priorities and due dates. Switch between list and kanban, drag to reorder.",
   },
   {
-    anchor: "quotations",
-    title: "Quotations → Invoices",
-    body: "Build quotes from your rate cards, send branded PDFs, then convert approved quotes into projects and invoices in one click.",
+    anchor: "invoices",
+    title: "Invoices",
+    body: "Bill a client's package month in one click — the retainer line and any extras come through ready to price, then print on your letterhead.",
   },
   {
     anchor: "files",

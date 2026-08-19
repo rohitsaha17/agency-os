@@ -13,7 +13,6 @@ export async function GET(req: NextRequest, { params }: Params) {
       where: { id, organizationId: user.organizationId },
       include: {
         project: { select: { id: true, name: true } },
-        stakeholder: { select: { id: true, name: true, type: true } },
         user: { select: { id: true, name: true } },
       },
     });
@@ -37,7 +36,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const body = await req.json();
     const {
       title, description, category, amount, currency,
-      date, status, projectId, stakeholderId, userId,
+      date, status, projectId, userId,
       isReimbursable, receiptUrl, notes,
     } = body;
 
@@ -52,7 +51,6 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         ...(date !== undefined ? { date: new Date(date) } : {}),
         ...(status !== undefined ? { status } : {}),
         ...(projectId !== undefined ? { projectId: projectId || null } : {}),
-        ...(stakeholderId !== undefined ? { stakeholderId: stakeholderId || null } : {}),
         ...(userId !== undefined ? { userId: userId || null } : {}),
         ...(isReimbursable !== undefined ? { isReimbursable } : {}),
         ...(receiptUrl !== undefined ? { receiptUrl: receiptUrl?.trim() || null } : {}),
@@ -60,7 +58,6 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       },
       include: {
         project: { select: { id: true, name: true } },
-        stakeholder: { select: { id: true, name: true, type: true } },
         user: { select: { id: true, name: true } },
       },
     });

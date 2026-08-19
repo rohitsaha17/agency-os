@@ -26,7 +26,7 @@ const VIEW_OPTIONS: { id: View; label: string; key: string }[] = [
   { id: "schedule", label: "Schedule", key: "A" },
 ];
 
-type Kind = "task" | "content" | "personal" | "event" | "booking";
+type Kind = "task" | "content" | "personal" | "event";
 
 interface Entry {
   kind: Kind;
@@ -61,11 +61,10 @@ const KIND_META: Record<Kind, { label: string; chip: string; dot: string }> = {
   content:  { label: "Content",   chip: "bg-fuchsia-50 border-fuchsia-200 text-fuchsia-800", dot: "bg-fuchsia-500" },
   personal: { label: "Reminders", chip: "bg-emerald-50 border-emerald-200 text-emerald-800", dot: "bg-emerald-500" },
   event:    { label: "Events",    chip: "bg-amber-50 border-amber-200 text-amber-800",       dot: "bg-amber-500" },
-  booking:  { label: "Shoots",    chip: "bg-sky-50 border-sky-200 text-sky-800",             dot: "bg-sky-500" },
 };
 
 const HOUR_H = 48; // px per hour in the time grid
-const ALL_KINDS: Kind[] = ["task", "content", "personal", "event", "booking"];
+const ALL_KINDS: Kind[] = ["task", "content", "personal", "event"];
 
 function startOfDay(d: Date) { const n = new Date(d); n.setHours(0, 0, 0, 0); return n; }
 function keyOf(d: Date) { return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`; }
@@ -76,7 +75,6 @@ function fmtHour(h: number) {
 }
 /** Minutes from midnight for a timed entry, or null when it's all-day. */
 function minutesOf(e: Entry): number | null {
-  if (e.kind === "booking") { const d = new Date(e.date); return d.getHours() * 60 + d.getMinutes(); }
   if (e.kind === "personal" && e.time) {
     const [h, m] = e.time.split(":").map(Number);
     if (Number.isFinite(h)) return h * 60 + (m || 0);

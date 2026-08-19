@@ -8,7 +8,9 @@ import {
 } from "lucide-react";
 import { TaskModal } from "@/components/tasks/TaskModal";
 import { DeliveryDialog } from "@/components/tasks/DeliveryDialog";
+import { CalendarTasksSwitch } from "@/components/calendar/CalendarTasksSwitch";
 import { useCurrentUser } from "@/lib/useCurrentUser";
+import { broadcastChange, useLiveRefresh } from "@/lib/live";
 import { toast } from "@/lib/toast";
 import type { Task } from "@/types";
 
@@ -74,6 +76,7 @@ function AddTaskComposer({ listId, onAdded }: { listId: string | null; onAdded: 
       if (!res.ok) { toast.error("Couldn't add the task"); return; }
       reset();
       onAdded();
+      broadcastChange("all"); // dated to-dos appear on My Calendar too
     } finally { setSaving(false); }
   };
 
@@ -196,6 +199,8 @@ function TasksBoardInner() {
   }, [currentUser?.id]);
 
   useEffect(() => { if (currentUser) fetchAll(); }, [currentUser, fetchAll]);
+  // Live: pick up calendar-side edits (and teammates' changes) instantly
+  useLiveRefresh(["tasks", "calendar"], () => { if (currentUser) fetchAll(); });
 
   useEffect(() => {
     if (searchParams.get("tab") === "approvals" && isHead) setShowApprovals(true);
@@ -221,6 +226,7 @@ function TasksBoardInner() {
       method: "PATCH", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ done: !p.done }),
     });
+    broadcastChange("all"); // the same item sits on My Calendar
   };
 
   const toggleStar = async (p: PersonalRow) => {
@@ -234,6 +240,7 @@ function TasksBoardInner() {
   const removePersonal = async (p: PersonalRow) => {
     setItems((prev) => prev.filter((x) => x.id !== p.id));
     await fetch(`/api/personal-items/${p.id}`, { method: "DELETE" });
+    broadcastChange("all");
   };
 
   const createList = async () => {
@@ -456,6 +463,7 @@ function TasksBoardInner() {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <CalendarTasksSwitch active="tasks" />
             {isHead && (
               <button onClick={() => setShowApprovals(true)}
                 className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg transition-colors">
@@ -647,7 +655,7 @@ function TasksBoardInner() {
           taskId={deliveryFor.id}
           taskTitle={deliveryFor.title}
           onClose={() => setDeliveryFor(null)}
-          onCompleted={() => { setDeliveryFor(null); fetchAll(); }}
+          onCompleted={() => { setDeliveryFor(null); fetchAll(); broadcastChange("all"); }}
         />
       )}
     </div>

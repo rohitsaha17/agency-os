@@ -120,9 +120,10 @@ export async function GET(req: NextRequest) {
         kind: "booking" as const,
         id: b.id,
         date: b.startAt.toISOString(),
-        time: b.startAt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
+        endDate: b.endAt.toISOString(),
         title: `Shoot${b.client ? ` — ${b.client.name}` : ""}${b.location ? ` @ ${b.location}` : ""}`,
         status: b.status,
+        clientName: b.client?.name ?? null,
         link: "/bookings",
       })),
     ].sort((a, b) => a.date.localeCompare(b.date));

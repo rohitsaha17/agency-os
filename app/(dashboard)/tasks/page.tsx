@@ -359,8 +359,8 @@ function TasksBoardInner() {
     const expanded = showCompleted.has(id);
 
     return (
-      <div className="w-[320px] flex-shrink-0 bg-white border border-gray-200 rounded-2xl flex flex-col max-h-full shadow-sm">
-        <div className="flex items-center justify-between px-4 pt-4 pb-2">
+      <div className="w-[320px] flex-shrink-0 bg-white border border-gray-200 rounded-2xl flex flex-col h-full shadow-sm">
+        <div className="flex items-center justify-between px-4 pt-4 pb-2 flex-shrink-0">
           {renaming?.id === id ? (
             <input autoFocus value={renaming.name}
               onChange={(e) => setRenaming({ id, name: e.target.value })}
@@ -443,107 +443,135 @@ function TasksBoardInner() {
   const myTasksCount = orgTasks.filter((t) => t.status !== "DONE").length + noListItems.filter((p) => !p.done).length;
 
   return (
-    <div className="flex h-full min-h-0">
-      {/* ── In-page sidebar ── */}
-      <div className="w-56 flex-shrink-0 border-r border-gray-200 bg-white py-4 px-3 hidden md:flex flex-col gap-1 overflow-y-auto">
-        <button onClick={() => setView("all")}
-          className={`flex items-center gap-2.5 px-3 py-2 rounded-full text-sm font-medium transition-colors ${
-            view === "all" ? "bg-indigo-50 text-indigo-700" : "text-gray-600 hover:bg-gray-50"
-          }`}>
-          <ListTodo className="w-4 h-4" /> All tasks
-        </button>
-        <button onClick={() => setView("starred")}
-          className={`flex items-center gap-2.5 px-3 py-2 rounded-full text-sm font-medium transition-colors ${
-            view === "starred" ? "bg-indigo-50 text-indigo-700" : "text-gray-600 hover:bg-gray-50"
-          }`}>
-          <Star className="w-4 h-4" /> Starred
-        </button>
-
-        <p className="px-3 mt-4 mb-1 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Lists</p>
-
-        <label className="flex items-center gap-2.5 px-3 py-1.5 text-sm text-gray-700 cursor-default">
-          <input type="checkbox" checked readOnly className="rounded border-gray-300 text-indigo-600" />
-          <span className="flex-1 truncate">My Tasks</span>
-          <span className="text-xs text-gray-400">{myTasksCount}</span>
-        </label>
-        {lists.map((l) => {
-          const count = (itemsByList.get(l.id) ?? []).filter((p) => !p.done).length;
-          return (
-            <label key={l.id} className="flex items-center gap-2.5 px-3 py-1.5 text-sm text-gray-700 cursor-pointer hover:bg-gray-50 rounded-lg">
-              <input type="checkbox"
-                checked={!hiddenLists.has(l.id)}
-                onChange={() => setHiddenLists((s) => { const x = new Set(s); if (x.has(l.id)) x.delete(l.id); else x.add(l.id); return x; })}
-                className="rounded border-gray-300 text-indigo-600" />
-              <span className="flex-1 truncate">{l.name}</span>
-              {count > 0 && <span className="text-xs text-gray-400">{count}</span>}
-            </label>
-          );
-        })}
-
-        {addingList ? (
-          <div className="px-3 py-1.5">
-            <input autoFocus value={newListName}
-              onChange={(e) => setNewListName(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") createList(); if (e.key === "Escape") { setAddingList(false); setNewListName(""); } }}
-              onBlur={createList}
-              placeholder="List name…"
-              className="w-full text-sm px-2 py-1.5 border border-indigo-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" />
+    // Anchor to the viewport so the rail and columns fill the page
+    // (the dashboard shell is min-h-screen, so h-full alone can't resolve).
+    <div className="flex flex-col h-[calc(100dvh-3.5rem)] lg:h-dvh min-h-0">
+      {/* ── Page header ── */}
+      <div className="bg-white border-b border-gray-200 px-4 sm:px-6 lg:px-8 py-4 flex-shrink-0">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <h1 className="text-xl font-semibold text-gray-900">Tasks</h1>
+            <p className="text-sm text-gray-500 mt-0.5">
+              {myTasksCount} open in My Tasks · work delegated to you lands here and on your calendar
+            </p>
           </div>
-        ) : (
-          <button onClick={() => setAddingList(true)}
-            className="flex items-center gap-2.5 px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded-full">
-            <Plus className="w-4 h-4" /> Create new list
-          </button>
-        )}
-
-        <div className="mt-auto pt-4 space-y-1">
-          {isHead && (
-            <button onClick={() => setShowApprovals(true)}
-              className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-xl">
-              <ShieldCheck className="w-3.5 h-3.5" /> Approvals
-              {approvals && approvals.length > 0 && (
-                <span className="ml-auto min-w-[18px] h-[18px] flex items-center justify-center text-[10px] font-bold text-white bg-amber-500 rounded-full">
-                  {approvals.length}
-                </span>
-              )}
+          <div className="flex items-center gap-2">
+            {isHead && (
+              <button onClick={() => setShowApprovals(true)}
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg transition-colors">
+                <ShieldCheck className="w-3.5 h-3.5" /> Approvals
+                {approvals && approvals.length > 0 && (
+                  <span className="min-w-[18px] h-[18px] flex items-center justify-center text-[10px] font-bold text-white bg-amber-500 rounded-full">
+                    {approvals.length}
+                  </span>
+                )}
+              </button>
+            )}
+            <button onClick={() => setShowOrgTaskModal(true)}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-500 transition-colors">
+              <Repeat className="w-4 h-4" /> Delegate a team task
             </button>
-          )}
-          <button onClick={() => setShowOrgTaskModal(true)}
-            className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-xl">
-            <Repeat className="w-3.5 h-3.5" /> Delegate a team task
-          </button>
+          </div>
         </div>
       </div>
 
-      {/* ── Board ── */}
-      <div className="flex-1 min-w-0 bg-gray-50 overflow-x-auto overflow-y-hidden">
-        <div className="h-full flex items-start gap-4 p-4 sm:p-6">
-          {view === "starred" ? (
-            <div className="w-[340px] flex-shrink-0 bg-white border border-gray-200 rounded-2xl flex flex-col max-h-full shadow-sm">
-              <div className="px-4 pt-4 pb-2">
-                <h2 className="text-base font-semibold text-gray-900 flex items-center gap-2">
-                  <Star className="w-4 h-4 text-amber-400 fill-amber-400" /> Starred
-                </h2>
+      <div className="flex flex-1 min-h-0">
+        {/* ── In-page rail ── */}
+        <div className="w-60 flex-shrink-0 border-r border-gray-200 bg-white hidden md:flex flex-col overflow-y-auto">
+          <div className="p-3 space-y-0.5">
+            <button onClick={() => setView("all")}
+              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                view === "all" ? "bg-indigo-50 text-indigo-700" : "text-gray-600 hover:bg-gray-50"
+              }`}>
+              <ListTodo className="w-4 h-4" /> All tasks
+            </button>
+            <button onClick={() => setView("starred")}
+              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                view === "starred" ? "bg-indigo-50 text-indigo-700" : "text-gray-600 hover:bg-gray-50"
+              }`}>
+              <Star className="w-4 h-4" /> Starred
+              {starredItems.length > 0 && <span className="ml-auto text-xs text-gray-400">{starredItems.length}</span>}
+            </button>
+          </div>
+
+          <div className="border-t border-gray-100 mx-3" />
+
+          <div className="p-3 space-y-0.5 flex-1">
+            <p className="px-3 pb-1 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Lists</p>
+
+            <label className="flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 rounded-lg cursor-default">
+              <input type="checkbox" checked readOnly className="rounded border-gray-300 text-indigo-600" />
+              <span className="flex-1 truncate font-medium">My Tasks</span>
+              <span className="text-xs text-gray-400">{myTasksCount}</span>
+            </label>
+            {lists.map((l) => {
+              const count = (itemsByList.get(l.id) ?? []).filter((p) => !p.done).length;
+              return (
+                <label key={l.id} className="flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-50 rounded-lg">
+                  <input type="checkbox"
+                    checked={!hiddenLists.has(l.id)}
+                    onChange={() => setHiddenLists((s) => { const x = new Set(s); if (x.has(l.id)) x.delete(l.id); else x.add(l.id); return x; })}
+                    className="rounded border-gray-300 text-indigo-600" />
+                  <span className="flex-1 truncate">{l.name}</span>
+                  {count > 0 && <span className="text-xs text-gray-400">{count}</span>}
+                </label>
+              );
+            })}
+
+            {addingList ? (
+              <div className="px-3 py-1.5">
+                <input autoFocus value={newListName}
+                  onChange={(e) => setNewListName(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") createList(); if (e.key === "Escape") { setAddingList(false); setNewListName(""); } }}
+                  onBlur={createList}
+                  placeholder="List name…"
+                  className="w-full text-sm px-2 py-1.5 border border-indigo-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" />
               </div>
-              <div className="flex-1 overflow-y-auto px-2 pb-2">
-                {starredItems.length === 0 ? (
-                  <p className="text-xs text-gray-400 px-4 py-8 text-center">Star a task to pin it here.</p>
-                ) : starredItems.map(renderPersonalRow)}
-              </div>
-            </div>
-          ) : (
-            <>
-              <Column id="my-tasks" title="My Tasks" personal={noListItems} org={orgTasks} />
-              {lists.filter((l) => !hiddenLists.has(l.id)).map((l) => (
-                <Column key={l.id} id={l.id} title={l.name} personal={itemsByList.get(l.id) ?? []} />
-              ))}
-              {/* Ghost column: quick create */}
+            ) : (
               <button onClick={() => setAddingList(true)}
-                className="w-[240px] flex-shrink-0 border-2 border-dashed border-gray-200 rounded-2xl py-8 text-sm font-medium text-gray-400 hover:text-indigo-600 hover:border-indigo-200 transition-colors">
-                <Plus className="w-4 h-4 inline mr-1" /> New list
+                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm font-medium text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors">
+                <Plus className="w-4 h-4" /> Create new list
               </button>
-            </>
-          )}
+            )}
+          </div>
+        </div>
+
+        {/* ── Board ── */}
+        <div className="flex-1 min-w-0 bg-gray-50 overflow-x-auto">
+          <div className="h-full flex items-stretch gap-4 p-4 sm:p-6">
+            {view === "starred" ? (
+              <div className="w-[340px] flex-shrink-0 bg-white border border-gray-200 rounded-2xl flex flex-col h-full shadow-sm">
+                <div className="px-4 pt-4 pb-2 flex-shrink-0">
+                  <h2 className="text-base font-semibold text-gray-900 flex items-center gap-2">
+                    <Star className="w-4 h-4 text-amber-400 fill-amber-400" /> Starred
+                  </h2>
+                </div>
+                <div className="flex-1 overflow-y-auto px-2 pb-2 min-h-0">
+                  {starredItems.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-14 text-center px-4">
+                      <Star className="w-9 h-9 text-amber-200 mb-2" />
+                      <p className="text-sm font-medium text-gray-600">Nothing starred</p>
+                      <p className="text-xs text-gray-400 mt-0.5">Hover a task and tap the star to pin it here.</p>
+                    </div>
+                  ) : starredItems.map(renderPersonalRow)}
+                </div>
+              </div>
+            ) : (
+              <>
+                <Column id="my-tasks" title="My Tasks" personal={noListItems} org={orgTasks} />
+                {lists.filter((l) => !hiddenLists.has(l.id)).map((l) => (
+                  <Column key={l.id} id={l.id} title={l.name} personal={itemsByList.get(l.id) ?? []} />
+                ))}
+                {/* Ghost column: quick create */}
+                <div className="w-[240px] flex-shrink-0 h-full">
+                  <button onClick={() => setAddingList(true)}
+                    className="w-full h-full min-h-[160px] border-2 border-dashed border-gray-200 rounded-2xl text-sm font-medium text-gray-400 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50/30 transition-colors">
+                    <Plus className="w-4 h-4 inline mr-1" /> New list
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
 

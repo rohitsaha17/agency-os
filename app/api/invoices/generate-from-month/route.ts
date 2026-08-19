@@ -34,14 +34,14 @@ export async function GET(req: NextRequest) {
     const from = new Date(Date.UTC(y, m - 1, 1));
     const to = new Date(Date.UTC(y, m, 1));
 
-    const [pkg, extras, rateCards] = await Promise.all([
-      prisma.clientPackage.findFirst({
+    const [packages, extras, rateCards] = await Promise.all([
+      prisma.clientPackage.findMany({
         where: {
           organizationId: user.organizationId, clientId, isActive: true,
           startMonth: { lte: from },
           OR: [{ endMonth: null }, { endMonth: { gte: from } }],
         },
-        orderBy: { createdAt: "desc" },
+        orderBy: { createdAt: "asc" },
       }),
       prisma.contentItem.findMany({
         where: {
@@ -66,18 +66,19 @@ export async function GET(req: NextRequest) {
     );
 
     const monthLabel = `${MONTH_NAMES[m - 1]} ${y}`;
-    const currency = pkg?.currency || client.currency || client.organization.currency || "USD";
+    const currency =
+      packages.find((p) => p.currency)?.currency ||
+      client.currency || client.organization.currency || "USD";
 
+    // Concurrent packages: one PACKAGE line each (e.g. social + website).
     const lines = [
-      ...(pkg
-        ? [{
-            kind: "PACKAGE" as const,
-            description: `${pkg.name} — ${monthLabel}`,
-            quantity: 1,
-            unitPrice: pkg.billingAmount != null ? Number(pkg.billingAmount) : 0,
-            contentItemId: null,
-          }]
-        : []),
+      ...packages.map((p) => ({
+        kind: "PACKAGE" as const,
+        description: `${p.name} — ${monthLabel}`,
+        quantity: 1,
+        unitPrice: p.billingAmount != null ? Number(p.billingAmount) : 0,
+        contentItemId: null,
+      })),
       ...extras.map((i) => ({
         kind: "EXTRA" as const,
         description: `Extra ${i.creativeType.name} — ${i.topic}`,
@@ -87,7 +88,7 @@ export async function GET(req: NextRequest) {
       })),
     ];
 
-    return NextResponse.json({ month, monthLabel, currency, packageFound: !!pkg, lines });
+    return NextResponse.json({ month, monthLabel, currency, packageFound: packages.length > 0, lines });
   } catch (error) {
     return handleApiError(error, "GET /api/invoices/generate-from-month");
   }

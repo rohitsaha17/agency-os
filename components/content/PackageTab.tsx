@@ -30,11 +30,13 @@ export function PackageTab({ clientId, clientCurrency }: { clientId: string; cli
   const resolveCurrency = (pkgCurrency: string | null) =>
     pkgCurrency || clientCurrency || currentUser?.organization?.currency || "USD";
 
-  const [active, setActive] = useState<Pkg | null>(null);
+  const [actives, setActives] = useState<Pkg[]>([]);
   const [history, setHistory] = useState<Pkg[]>([]);
   const [types, setTypes] = useState<CreativeType[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
+  // When set, saving deactivates THIS package and creates the new one.
+  const [replaceTarget, setReplaceTarget] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     name: "", startMonth: new Date().toISOString().slice(0, 7), endMonth: "",
@@ -51,7 +53,7 @@ export function PackageTab({ clientId, clientCurrency }: { clientId: string; cli
       ]);
       if (pkgRes.ok) {
         const d = await pkgRes.json();
-        setActive(d.active);
+        setActives(d.actives ?? (d.active ? [d.active] : []));
         setHistory(d.history ?? []);
       }
       if (typesRes.ok) setTypes(await typesRes.json());
@@ -62,15 +64,16 @@ export function PackageTab({ clientId, clientCurrency }: { clientId: string; cli
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  const startEdit = () => {
+  const startEdit = (pkg?: Pkg) => {
+    setReplaceTarget(pkg?.id ?? null);
     setForm({
-      name: active?.name ?? "",
-      startMonth: active?.startMonth?.slice(0, 7) ?? new Date().toISOString().slice(0, 7),
-      endMonth: active?.endMonth?.slice(0, 7) ?? "",
-      billingAmount: active?.billingAmount != null ? String(active.billingAmount) : "",
-      currency: active?.currency ?? clientCurrency ?? "",
-      notes: active?.notes ?? "",
-      quotas: Object.fromEntries((active?.quotas ?? []).map((q) => [q.creativeTypeId, String(q.monthlyQty)])),
+      name: pkg?.name ?? "",
+      startMonth: pkg?.startMonth?.slice(0, 7) ?? new Date().toISOString().slice(0, 7),
+      endMonth: pkg?.endMonth?.slice(0, 7) ?? "",
+      billingAmount: pkg?.billingAmount != null ? String(pkg.billingAmount) : "",
+      currency: pkg?.currency ?? clientCurrency ?? "",
+      notes: pkg?.notes ?? "",
+      quotas: Object.fromEntries((pkg?.quotas ?? []).map((q) => [q.creativeTypeId, String(q.monthlyQty)])),
     });
     setEditing(true);
   };
@@ -92,16 +95,29 @@ export function PackageTab({ clientId, clientCurrency }: { clientId: string; cli
           quotas: Object.entries(form.quotas)
             .filter(([, v]) => Number(v) > 0)
             .map(([creativeTypeId, v]) => ({ creativeTypeId, monthlyQty: Number(v) })),
+          replacePackageId: replaceTarget,
         }),
       });
       const d = await res.json();
       if (!res.ok) { toast.error(d.error?.message ?? "Save failed"); return; }
       toast.success("Package saved");
       setEditing(false);
+      setReplaceTarget(null);
       fetchAll();
     } finally {
       setSaving(false);
     }
+  };
+
+  const deactivate = async (pkg: Pkg) => {
+    if (!confirm(`Deactivate "${pkg.name}"? It moves to history; past months stay accounted.`)) return;
+    const res = await fetch(`/api/clients/${clientId}/package`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ packageId: pkg.id, isActive: false }),
+    });
+    if (res.ok) { toast.success("Package deactivated"); fetchAll(); }
+    else toast.error("Failed to deactivate");
   };
 
   const fmtMonth = (iso: string | null) =>
@@ -113,56 +129,74 @@ export function PackageTab({ clientId, clientCurrency }: { clientId: string; cli
 
   return (
     <div className="max-w-2xl space-y-5">
-      {/* Active package card */}
+      {/* Active packages — several can run at once (e.g. social + website);
+          their quotas merge on the content-calendar meters. */}
       {!editing && (
-        active ? (
-          <div className="bg-white border border-gray-200 rounded-xl p-5">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="flex items-center gap-2">
-                  <PackageIcon className="w-4 h-4 text-indigo-500" />
-                  <h3 className="text-sm font-semibold text-gray-900">{active.name}</h3>
-                  <span className="text-[10px] font-semibold px-1.5 py-0.5 bg-emerald-50 text-emerald-600 rounded-full border border-emerald-200">ACTIVE</span>
+        <>
+          {actives.map((pkg) => (
+            <div key={pkg.id} className="bg-white border border-gray-200 rounded-xl p-5">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <PackageIcon className="w-4 h-4 text-indigo-500" />
+                    <h3 className="text-sm font-semibold text-gray-900">{pkg.name}</h3>
+                    <span className="text-[10px] font-semibold px-1.5 py-0.5 bg-emerald-50 text-emerald-600 rounded-full border border-emerald-200">ACTIVE</span>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1">
+                    {fmtMonth(pkg.startMonth)} → {fmtMonth(pkg.endMonth)}
+                    {canSeeMoney && pkg.billingAmount != null && (
+                      <> · <span className="font-semibold text-gray-700">{formatMoney(Number(pkg.billingAmount), resolveCurrency(pkg.currency), { precision: 0 })}/mo</span></>
+                    )}
+                  </p>
+                  {pkg.notes && <p className="text-xs text-gray-500 mt-1.5">{pkg.notes}</p>}
                 </div>
-                <p className="text-xs text-gray-400 mt-1">
-                  {fmtMonth(active.startMonth)} → {fmtMonth(active.endMonth)}
-                  {canSeeMoney && active.billingAmount != null && (
-                    <> · <span className="font-semibold text-gray-700">{formatMoney(Number(active.billingAmount), resolveCurrency(active.currency), { precision: 0 })}/mo</span></>
-                  )}
-                </p>
-                {active.notes && <p className="text-xs text-gray-500 mt-1.5">{active.notes}</p>}
+                {canEdit && (
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <Button size="sm" variant="secondary" onClick={() => startEdit(pkg)}>Replace</Button>
+                    <button onClick={() => deactivate(pkg)}
+                      className="text-xs text-gray-400 hover:text-red-500 underline underline-offset-2">
+                      Deactivate
+                    </button>
+                  </div>
+                )}
               </div>
+
+              <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {pkg.quotas.map((q) => (
+                  <div key={q.id} className="bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 flex items-center gap-2">
+                    <span className="text-sm">{q.creativeType.icon ?? "✨"}</span>
+                    <span className="text-xs text-gray-600 flex-1">{q.creativeType.name}</span>
+                    <span className="text-sm font-bold text-gray-900">{q.monthlyQty}<span className="text-[10px] font-normal text-gray-400">/mo</span></span>
+                  </div>
+                ))}
+                {pkg.quotas.length === 0 && <p className="text-xs text-gray-400 col-span-3">No quotas set.</p>}
+              </div>
+            </div>
+          ))}
+
+          {actives.length === 0 ? (
+            <div className="bg-white border border-dashed border-gray-300 rounded-xl p-8 text-center">
+              <PackageIcon className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+              <p className="text-sm text-gray-500 mb-3">No package yet — define this client&apos;s monthly creative quotas.</p>
               {canEdit && (
-                <Button size="sm" variant="secondary" onClick={startEdit}>Replace package</Button>
+                <Button size="sm" icon={<Plus className="w-3.5 h-3.5" />} onClick={() => startEdit()}>Create package</Button>
               )}
             </div>
-
-            <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {active.quotas.map((q) => (
-                <div key={q.id} className="bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 flex items-center gap-2">
-                  <span className="text-sm">{q.creativeType.icon ?? "✨"}</span>
-                  <span className="text-xs text-gray-600 flex-1">{q.creativeType.name}</span>
-                  <span className="text-sm font-bold text-gray-900">{q.monthlyQty}<span className="text-[10px] font-normal text-gray-400">/mo</span></span>
-                </div>
-              ))}
-              {active.quotas.length === 0 && <p className="text-xs text-gray-400 col-span-3">No quotas set.</p>}
-            </div>
-          </div>
-        ) : (
-          <div className="bg-white border border-dashed border-gray-300 rounded-xl p-8 text-center">
-            <PackageIcon className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-            <p className="text-sm text-gray-500 mb-3">No package yet — define this client&apos;s monthly creative quotas.</p>
-            {canEdit && (
-              <Button size="sm" icon={<Plus className="w-3.5 h-3.5" />} onClick={startEdit}>Create package</Button>
-            )}
-          </div>
-        )
+          ) : (
+            canEdit && (
+              <button onClick={() => startEdit()}
+                className="w-full flex items-center justify-center gap-1.5 px-3 py-2.5 text-xs font-medium text-indigo-600 border border-dashed border-indigo-300 rounded-xl hover:bg-indigo-50">
+                <Plus className="w-3.5 h-3.5" /> Add another package (e.g. website retainer)
+              </button>
+            )
+          )}
+        </>
       )}
 
       {/* Edit form */}
       {editing && (
         <div className="bg-white border border-indigo-200 rounded-xl p-5 space-y-4">
-          <h3 className="text-sm font-semibold text-gray-900">{active ? "Replace package" : "New package"}</h3>
+          <h3 className="text-sm font-semibold text-gray-900">{replaceTarget ? "Replace package" : "New package"}</h3>
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2">
               <label className="block text-xs font-medium text-gray-700 mb-1.5">Name <span className="text-red-500">*</span></label>
@@ -224,11 +258,11 @@ export function PackageTab({ clientId, clientCurrency }: { clientId: string; cli
             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none" />
 
           <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => setEditing(false)}>Cancel</Button>
+            <Button variant="secondary" onClick={() => { setEditing(false); setReplaceTarget(null); }}>Cancel</Button>
             <Button loading={saving} onClick={save}>Save package</Button>
           </div>
-          {active && (
-            <p className="text-[11px] text-amber-600">Saving deactivates the current package — it stays in the history below.</p>
+          {replaceTarget && (
+            <p className="text-[11px] text-amber-600">Saving deactivates the package being replaced — it stays in the history below. Other active packages are untouched.</p>
           )}
         </div>
       )}

@@ -23,8 +23,9 @@ export async function GET(req: NextRequest, { params }: Params) {
     if (!client) throw new ApiError("Client not found", 404);
 
     const summary = await computeMonthSummary(user.organizationId, clientId, month);
-    if (!canViewFinancials(user) && summary.package) {
-      summary.package = { ...summary.package, billingAmount: null };
+    if (!canViewFinancials(user)) {
+      summary.packages = summary.packages.map((p) => ({ ...p, billingAmount: null }));
+      if (summary.package) summary.package = { ...summary.package, billingAmount: null };
     }
     return NextResponse.json(summary);
   } catch (error) {

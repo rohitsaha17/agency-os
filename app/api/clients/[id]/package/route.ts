@@ -11,7 +11,9 @@ function strip(pkg: { billingAmount: unknown; [k: string]: unknown } | null, sho
   return { ...pkg, billingAmount: showMoney ? pkg.billingAmount : null };
 }
 
-// GET /api/clients/[id]/package — active package + history
+// GET /api/clients/[id]/package — ALL active packages + history.
+// A client may run several packages simultaneously (e.g. one for social
+// media, one for the website); their quotas merge in the month summary.
 export async function GET(req: NextRequest, { params }: Params) {
   try {
     const user = await requireAuth(req);
@@ -28,9 +30,11 @@ export async function GET(req: NextRequest, { params }: Params) {
       orderBy: { createdAt: "desc" },
     });
     const showMoney = canViewFinancials(user);
-    const active = packages.find((p) => p.isActive) ?? null;
+    const actives = packages.filter((p) => p.isActive);
     return NextResponse.json({
-      active: strip(active, showMoney),
+      actives: actives.map((p) => strip(p, showMoney)),
+      // legacy shape kept for any older callers
+      active: strip(actives[0] ?? null, showMoney),
       history: packages.filter((p) => !p.isActive).map((p) => strip(p, showMoney)),
     });
   } catch (error) {
@@ -38,16 +42,18 @@ export async function GET(req: NextRequest, { params }: Params) {
   }
 }
 
-// POST /api/clients/[id]/package — create/replace the active package.
-// Enforces max one active package per client (previous ones deactivate).
+// POST /api/clients/[id]/package — add a package (packages can run
+// concurrently). Pass replacePackageId to deactivate ONE existing package
+// in the same transaction (the "replace" flow).
 // Body: { name, startMonth: YYYY-MM, endMonth?: YYYY-MM, billingAmount?,
-//         currency?, notes?, quotas: [{ creativeTypeId, monthlyQty }] }
+//         currency?, notes?, quotas: [{ creativeTypeId, monthlyQty }],
+//         replacePackageId? }
 export async function POST(req: NextRequest, { params }: Params) {
   try {
     const user = await requireAuth(req);
     requireRole(user, ["ADMIN", "MANAGER"]);
     const { id: clientId } = await params;
-    const { name, startMonth, endMonth, billingAmount, currency, notes, quotas } = await req.json();
+    const { name, startMonth, endMonth, billingAmount, currency, notes, quotas, replacePackageId } = await req.json();
 
     const client = await prisma.client.findFirst({
       where: { id: clientId, organizationId: user.organizationId },
@@ -64,10 +70,12 @@ export async function POST(req: NextRequest, { params }: Params) {
         .map((q) => ({ creativeTypeId: q.creativeTypeId, monthlyQty: Math.floor(Number(q.monthlyQty)) }));
 
     const created = await prisma.$transaction(async (tx) => {
-      await tx.clientPackage.updateMany({
-        where: { clientId, organizationId: user.organizationId, isActive: true },
-        data: { isActive: false },
-      });
+      if (replacePackageId) {
+        await tx.clientPackage.updateMany({
+          where: { id: replacePackageId, clientId, organizationId: user.organizationId },
+          data: { isActive: false },
+        });
+      }
       return tx.clientPackage.create({
         data: {
           organizationId: user.organizationId,
@@ -86,5 +94,31 @@ export async function POST(req: NextRequest, { params }: Params) {
     return NextResponse.json(created, { status: 201 });
   } catch (error) {
     return handleApiError(error, "POST /api/clients/[id]/package");
+  }
+}
+
+// PATCH /api/clients/[id]/package — { packageId, isActive } toggle
+// (deactivating moves the package to history; its months stay accountable).
+export async function PATCH(req: NextRequest, { params }: Params) {
+  try {
+    const user = await requireAuth(req);
+    requireRole(user, ["ADMIN", "MANAGER"]);
+    const { id: clientId } = await params;
+    const { packageId, isActive } = await req.json();
+
+    const pkg = await prisma.clientPackage.findFirst({
+      where: { id: packageId, clientId, organizationId: user.organizationId },
+      select: { id: true },
+    });
+    if (!pkg) throw new ApiError("Package not found", 404);
+
+    const updated = await prisma.clientPackage.update({
+      where: { id: packageId },
+      data: { isActive: !!isActive },
+      include: { quotas: { include: { creativeType: { select: { id: true, name: true, icon: true } } } } },
+    });
+    return NextResponse.json(strip(updated, canViewFinancials(user)));
+  } catch (error) {
+    return handleApiError(error, "PATCH /api/clients/[id]/package");
   }
 }

@@ -10,12 +10,20 @@ export interface TypeSummaryRow {
   carriedOut: number; // this month's MISSED items with a clone elsewhere
 }
 
+export interface PackageInfo {
+  id: string;
+  name: string;
+  billingAmount: number | null;
+  currency: string | null;
+  notes: string | null;
+}
+
 export interface MonthSummary {
   month: string; // YYYY-MM
-  package: {
-    id: string; name: string;
-    billingAmount: number | null; currency: string | null; notes: string | null;
-  } | null;
+  /** All packages active for the month — quotas below are their merged sum. */
+  packages: PackageInfo[];
+  /** Legacy single-package field (first of `packages`). */
+  package: PackageInfo | null;
   perType: TypeSummaryRow[];
   adHocCount: number;
   shootsPlanned: number;
@@ -54,14 +62,14 @@ export async function computeMonthSummary(
         carriedTo: { select: { id: true } },
       },
     }),
-    prisma.clientPackage.findFirst({
+    prisma.clientPackage.findMany({
       where: {
         organizationId, clientId, isActive: true,
         startMonth: { lte: monthStart },
         OR: [{ endMonth: null }, { endMonth: { gte: monthStart } }],
       },
       include: { quotas: true },
-      orderBy: { createdAt: "desc" },
+      orderBy: { createdAt: "asc" },
     }),
     prisma.creativeType.findMany({
       where: { organizationId, isActive: true },
@@ -82,7 +90,13 @@ export async function computeMonthSummary(
     .filter((r) => r.status === "COMPLETED")
     .reduce((s, r) => s + r._count._all, 0);
 
-  const quotaByType = new Map<string, number>(pkg?.quotas.map((q) => [q.creativeTypeId, q.monthlyQty]) ?? []);
+  // Concurrent packages: quotas MERGE per creative type (sum).
+  const quotaByType = new Map<string, number>();
+  for (const p of pkg) {
+    for (const q of p.quotas) {
+      quotaByType.set(q.creativeTypeId, (quotaByType.get(q.creativeTypeId) ?? 0) + q.monthlyQty);
+    }
+  }
 
   const perType: TypeSummaryRow[] = types.map((t) => {
     const mine = items.filter((i) => i.creativeTypeId === t.id);
@@ -113,15 +127,16 @@ export async function computeMonthSummary(
     { quota: 0, planned: 0, posted: 0, extra: 0, carriedIn: 0, carriedOut: 0 },
   );
 
+  const packages: PackageInfo[] = pkg.map((p) => ({
+    id: p.id, name: p.name,
+    billingAmount: p.billingAmount != null ? Number(p.billingAmount) : null,
+    currency: p.currency, notes: p.notes,
+  }));
+
   return {
     month: monthYYYYMM,
-    package: pkg
-      ? {
-          id: pkg.id, name: pkg.name,
-          billingAmount: pkg.billingAmount != null ? Number(pkg.billingAmount) : null,
-          currency: pkg.currency, notes: pkg.notes,
-        }
-      : null,
+    packages,
+    package: packages[0] ?? null,
     perType,
     adHocCount: items.filter((i) => i.isAdHoc).length,
     shootsPlanned: shootRows.reduce((s, r) => s + r.planned, 0) + bookingsConfirmed,

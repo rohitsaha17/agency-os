@@ -26,6 +26,9 @@ export function PackageTab({ clientId, clientCurrency }: { clientId: string; cli
   const { user: currentUser } = useCurrentUser();
   const canSeeMoney = !!currentUser && currentUser.role !== "MEMBER";
   const canEdit = currentUser?.role === "ADMIN" || currentUser?.role === "OWNER" || currentUser?.role === "MANAGER";
+  // A null package currency means "inherit": package → client → organization.
+  const resolveCurrency = (pkgCurrency: string | null) =>
+    pkgCurrency || clientCurrency || currentUser?.organization?.currency || "USD";
 
   const [active, setActive] = useState<Pkg | null>(null);
   const [history, setHistory] = useState<Pkg[]>([]);
@@ -124,7 +127,7 @@ export function PackageTab({ clientId, clientCurrency }: { clientId: string; cli
                 <p className="text-xs text-gray-400 mt-1">
                   {fmtMonth(active.startMonth)} → {fmtMonth(active.endMonth)}
                   {canSeeMoney && active.billingAmount != null && (
-                    <> · <span className="font-semibold text-gray-700">{formatMoney(Number(active.billingAmount), active.currency, { precision: 0 })}/mo</span></>
+                    <> · <span className="font-semibold text-gray-700">{formatMoney(Number(active.billingAmount), resolveCurrency(active.currency), { precision: 0 })}/mo</span></>
                   )}
                 </p>
                 {active.notes && <p className="text-xs text-gray-500 mt-1.5">{active.notes}</p>}
@@ -241,7 +244,7 @@ export function PackageTab({ clientId, clientCurrency }: { clientId: string; cli
                 <span className="text-xs font-medium text-gray-700 flex-1">{p.name}</span>
                 <span className="text-[11px] text-gray-400">{fmtMonth(p.startMonth)} → {fmtMonth(p.endMonth)}</span>
                 {canSeeMoney && p.billingAmount != null && (
-                  <span className="text-[11px] text-gray-500">{formatMoney(Number(p.billingAmount), p.currency, { precision: 0 })}/mo</span>
+                  <span className="text-[11px] text-gray-500">{formatMoney(Number(p.billingAmount), resolveCurrency(p.currency), { precision: 0 })}/mo</span>
                 )}
               </div>
             ))}

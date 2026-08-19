@@ -32,3 +32,7 @@ tsconfig.tsbuildinfo
 
 # Supabase CLI local state
 supabase/.temp/
+
+# Local DB snapshots (kept on disk, never in git)
+backups/*.zip
+backups/*.sql

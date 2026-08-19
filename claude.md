@@ -1,6 +1,7 @@
-## V2 work
+## V3 work
 
-Before making any changes, read docs/V2_CONTEXT.md and follow its Prime Directive (additive-only, never break v1).
+Before making any changes, read docs/V3_CONTEXT.md and follow its Prime Directive.
+It supersedes the v2 context, which is archived at docs/archive/V2_CONTEXT.md.
 
 ## Project Overview
 

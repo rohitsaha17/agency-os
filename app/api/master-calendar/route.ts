@@ -72,12 +72,17 @@ export async function GET(req: NextRequest) {
         return prisma.calendarEvent.findMany({
           where: {
             organizationId: user.organizationId,
-            OR: [
-              { date: { gte: from, lt: to } },
-              { endDate: { gte: from, lt: to } },
+            AND: [
+              // In range (single-day or spanning)
+              { OR: [{ date: { gte: from, lt: to } }, { endDate: { gte: from, lt: to } }] },
+              // Members: org-wide events only. Client filter: that client's
+              // events + org-wide ones (festivals stay as context).
+              ...(user.role === "MEMBER"
+                ? [{ clientId: null }]
+                : clientId
+                  ? [{ OR: [{ clientId }, { clientId: null }] }]
+                  : []),
             ],
-            // Members: org-wide events only
-            ...(user.role === "MEMBER" ? { clientId: null } : {}),
           },
           include: { client: { select: { id: true, name: true } } },
           orderBy: { date: "asc" },

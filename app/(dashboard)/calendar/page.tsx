@@ -270,15 +270,20 @@ export default function CalendarPage() {
 
   const initials = (name: string) => name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase();
 
+  const activeClientName = filterClientId ? clients.find((c) => c.id === filterClientId)?.name : null;
+
   return (
-    <div className="flex flex-col h-full">
+    // Viewport-locked so a whole month fits without scrolling the page.
+    <div className="flex flex-col h-[calc(100dvh-3.5rem)] lg:h-dvh min-h-0">
       {/* ── Header ──────────────────────────────────────────── */}
-      <div className="bg-white border-b border-gray-200 px-4 sm:px-6 lg:px-8 py-4">
+      <div className="bg-white border-b border-gray-200 px-4 sm:px-6 lg:px-8 py-3 flex-shrink-0">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div>
-            <h1 className="text-xl font-semibold text-gray-900">Master Calendar</h1>
-            <p className="text-sm text-gray-500 mt-0.5">
-              {items.length} content item{items.length !== 1 ? "s" : ""} across all clients
+            <h1 className="text-lg font-semibold text-gray-900">Master Calendar</h1>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {items.length} content item{items.length !== 1 ? "s" : ""}
+              {activeClientName ? ` · ${activeClientName}` : " across all clients"}
+              {activeFilterCount > 0 && ` · ${activeFilterCount} filter${activeFilterCount !== 1 ? "s" : ""} on`}
               {currentUser?.role === "MEMBER" && " (your linked work)"}
             </p>
           </div>
@@ -417,8 +422,9 @@ export default function CalendarPage() {
 
       {/* ── Body ────────────────────────────────────────────── */}
       <div className="flex flex-col lg:flex-row flex-1 min-h-0">
-        <div className="flex-1 px-3 sm:px-6 py-4 overflow-auto">
+        <div className="flex-1 min-w-0 min-h-0 flex flex-col px-3 sm:px-5 py-3">
           <MonthGrid
+            fill
             view={view}
             year={year}
             month={month}
@@ -449,7 +455,7 @@ export default function CalendarPage() {
               const legacy = (showTasks || showProjects) ? legacyOn(day) : [];
               const taskEvents = showTasks ? legacy.filter((e) => e.type === "task") : [];
               const projectEvents = showProjects ? legacy.filter((e) => e.type === "project") : [];
-              const maxShow = view === "week" ? 7 : 3;
+              const maxShow = view === "week" ? 7 : 2;
               return (
                 <>
                   {/* Project bars (legacy layer) */}
@@ -499,22 +505,20 @@ export default function CalendarPage() {
             }}
           />
 
-          {/* Legend — follows the Color by selection */}
-          <div className="flex flex-wrap items-center gap-3 mt-4 text-xs text-gray-500">
-            <span className="font-medium text-gray-700 capitalize">{colorBy}:</span>
+          {/* Legend — one compact line so the grid keeps the height */}
+          <div className="flex items-center gap-2 mt-2 pt-2 border-t border-gray-100 text-[11px] text-gray-500 overflow-x-auto flex-shrink-0">
+            <span className="font-medium text-gray-600 capitalize flex-shrink-0">{colorBy}:</span>
             {legend.length === 0 ? (
-              <span className="text-gray-400">nothing planned this month</span>
-            ) : legend.map((l) => (
-              <span key={l.label} className={`flex items-center gap-1 px-1.5 py-0.5 rounded border ${l.cls}`}>
+              <span className="text-gray-400 flex-shrink-0">nothing planned this month</span>
+            ) : legend.slice(0, 8).map((l) => (
+              <span key={l.label} className={`px-1.5 py-0.5 rounded border whitespace-nowrap flex-shrink-0 ${l.cls}`}>
                 {l.label}
               </span>
             ))}
-            <span className="mx-1 text-gray-300">|</span>
-            <span className="flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-indigo-600" /> status dot on every chip
-            </span>
-            <span className="flex items-center gap-1"><PartyPopper className="w-3 h-3 text-amber-500" /> Event strip</span>
-            <span className="flex items-center gap-1"><Zap className="w-3 h-3 text-amber-500" /> Ad-hoc (dashed)</span>
+            <span className="text-gray-300 flex-shrink-0">|</span>
+            <span className="flex items-center gap-1 flex-shrink-0"><PartyPopper className="w-3 h-3 text-amber-500" /> event</span>
+            <span className="flex items-center gap-1 flex-shrink-0"><Zap className="w-3 h-3 text-amber-500" /> ad-hoc</span>
+            <span className="flex-shrink-0 text-gray-400">· dot = status · click a day for details</span>
           </div>
         </div>
 

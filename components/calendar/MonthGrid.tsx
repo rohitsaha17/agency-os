@@ -65,25 +65,35 @@ export interface MonthGridProps {
   renderCell: (day: Date, ctx: { inMonth: boolean; today: boolean; selected: boolean }) => React.ReactNode;
   /** Optional full-width strip ABOVE the day number (event banners). */
   renderStrip?: (day: Date, ctx: { inMonth: boolean }) => React.ReactNode;
+  /**
+   * Stretch the grid to its container instead of using fixed row heights,
+   * so a whole month fits the viewport with no page scroll. The parent must
+   * have a resolved height.
+   */
+  fill?: boolean;
 }
 
 export function MonthGrid({
   view, year, month, weekStart, selected, loading,
-  onDayClick, cellCount, renderCell, renderStrip,
+  onDayClick, cellCount, renderCell, renderStrip, fill,
 }: MonthGridProps) {
   const days = view === "month" ? getDaysInGrid(year, month) : getWeekDays(weekStart ?? new Date());
+  const rows = days.length / 7;
 
   return (
-    <>
+    <div className={fill ? "flex flex-col h-full min-h-0" : undefined}>
       {/* Weekday headers */}
-      <div className="grid grid-cols-7 mb-2">
+      <div className="grid grid-cols-7 mb-2 flex-shrink-0">
         {WEEKDAYS.map((d) => (
-          <div key={d} className="text-center text-xs font-medium text-gray-400 py-2">{d}</div>
+          <div key={d} className="text-center text-xs font-medium text-gray-400 py-1.5">{d}</div>
         ))}
       </div>
 
       {/* Day grid */}
-      <div className="grid grid-cols-7 gap-px bg-gray-200 rounded-xl overflow-hidden">
+      <div
+        className={`grid grid-cols-7 gap-px bg-gray-200 rounded-xl overflow-hidden ${fill ? "flex-1 min-h-0" : ""}`}
+        style={fill ? { gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))` } : undefined}
+      >
         {days.map((day, i) => {
           const inMonth = view === "week" || day.getMonth() === month;
           const todayCell = isToday(day);
@@ -94,17 +104,19 @@ export function MonthGrid({
             <div
               key={i}
               onClick={() => inMonth && onDayClick?.(day)}
-              className={`bg-white transition-colors ${
-                view === "week" ? "min-h-[200px]" : "min-h-[80px] sm:min-h-[110px]"
-              } p-1.5 sm:p-2 ${
+              className={`bg-white transition-colors flex flex-col ${
+                fill
+                  ? "min-h-0 overflow-hidden"
+                  : view === "week" ? "min-h-[200px]" : "min-h-[80px] sm:min-h-[110px]"
+              } p-1 sm:p-1.5 ${
                 inMonth ? "cursor-pointer hover:bg-gray-50" : "opacity-30"
               } ${isSelected ? "ring-2 ring-inset ring-indigo-400 bg-indigo-50/30" : ""}`}
             >
-              {renderStrip?.(day, { inMonth })}
+              <div className="flex-shrink-0">{renderStrip?.(day, { inMonth })}</div>
 
               {/* Day number */}
-              <div className="flex items-center justify-between mb-1">
-                <span className={`w-7 h-7 flex items-center justify-center text-sm font-medium rounded-full ${
+              <div className="flex items-center justify-between mb-0.5 flex-shrink-0">
+                <span className={`w-6 h-6 flex items-center justify-center text-xs font-medium rounded-full ${
                   todayCell ? "bg-indigo-600 text-white" : "text-gray-700"
                 }`}>
                   {day.getDate()}
@@ -116,11 +128,15 @@ export function MonthGrid({
 
               {loading && inMonth && <div className="h-4 bg-gray-100 rounded animate-pulse" />}
 
-              {inMonth && renderCell(day, { inMonth, today: todayCell, selected: isSelected })}
+              {/* Cell body scrolls inside its own cell so the grid never
+                  pushes the page taller than the viewport. */}
+              <div className={fill ? "flex-1 min-h-0 overflow-y-auto" : ""}>
+                {inMonth && renderCell(day, { inMonth, today: todayCell, selected: isSelected })}
+              </div>
             </div>
           );
         })}
       </div>
-    </>
+    </div>
   );
 }

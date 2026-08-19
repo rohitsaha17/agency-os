@@ -6,6 +6,17 @@
    ───────────────────────────────────────────────────────────── */
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* ─────────────────────────────────────────────────────────────
+   Collapsible main sidebar — the shell renders `main` with a fixed
+   lg:ml-64; when the sidebar is collapsed the body carries this class
+   and the content pane shifts to the narrow icon rail instead.
+   ───────────────────────────────────────────────────────────── */
+@media (min-width: 1024px) {
+  body.sidebar-collapsed main {
+    margin-left: 4.5rem; /* 72px icon rail */
+  }
+}
+
 /* ═════════════════════════════════════════════════════════════
    BASE ENHANCEMENTS  (applies in all modes)
    ═════════════════════════════════════════════════════════════ */

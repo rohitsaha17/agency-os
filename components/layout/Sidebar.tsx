@@ -8,6 +8,7 @@ import {
   Calendar, CalendarClock, FileText, Tag, Receipt, Settings,
   HardDrive, Users2, TrendingDown, Scroll, Menu, X,
   Sun, MessageSquare, LogOut, BarChart3, Camera,
+  ChevronsLeft, ChevronsRight, Search,
 } from "lucide-react";
 import { ThemeToggle, ThemeToggleIcon } from "@/components/ui/ThemeToggle";
 import { BrandLogo } from "@/components/ui/BrandLogo";
@@ -62,6 +63,7 @@ function NavItem({
   soon,
   active,
   badge,
+  collapsed,
   onClick,
 }: {
   href: string;
@@ -70,6 +72,7 @@ function NavItem({
   soon?: boolean;
   active: boolean;
   badge?: number;
+  collapsed?: boolean;
   onClick?: () => void;
 }) {
   return (
@@ -77,10 +80,12 @@ function NavItem({
       <Link
         href={soon ? "#" : href}
         onClick={onClick}
+        title={collapsed ? label : undefined}
         data-tour={href === "/" ? "dashboard" : href.slice(1)}
         className={`
-          relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium
+          relative flex items-center rounded-lg text-sm font-medium
           transition-all duration-150 group overflow-hidden
+          ${collapsed ? "justify-center px-0 py-2.5" : "gap-3 px-3 py-2.5"}
           ${active
             ? "bg-white/[0.06] text-white"
             : "text-slate-400 hover:text-slate-100 hover:bg-white/[0.05]"
@@ -98,24 +103,36 @@ function NavItem({
         />
 
         {/* Icon — indigo tint when active */}
-        <Icon
-          className={`w-4 h-4 flex-shrink-0 transition-colors duration-150
-            ${active ? "text-indigo-400" : "text-slate-500 group-hover:text-slate-300"}
-          `}
-        />
+        <span className="relative flex-shrink-0">
+          <Icon
+            className={`w-4 h-4 transition-colors duration-150
+              ${active ? "text-indigo-400" : "text-slate-500 group-hover:text-slate-300"}
+            `}
+          />
+          {/* Collapsed: badge becomes a dot on the icon */}
+          {collapsed && badge != null && badge > 0 && (
+            <span className="absolute -top-1 -right-1.5 min-w-[14px] h-[14px] flex items-center justify-center px-0.5 text-[9px] font-bold leading-none text-white bg-indigo-500 rounded-full ring-2 ring-slate-900">
+              {badge > 9 ? "9+" : badge}
+            </span>
+          )}
+        </span>
 
-        <span className="flex-1 tracking-tight">{label}</span>
+        {!collapsed && (
+          <>
+            <span className="flex-1 tracking-tight">{label}</span>
 
-        {badge != null && badge > 0 && (
-          <span className="min-w-[20px] h-5 flex items-center justify-center px-1.5 text-[11px] font-semibold leading-none text-white bg-indigo-500 rounded-full">
-            {badge > 99 ? "99+" : badge}
-          </span>
-        )}
+            {badge != null && badge > 0 && (
+              <span className="min-w-[20px] h-5 flex items-center justify-center px-1.5 text-[11px] font-semibold leading-none text-white bg-indigo-500 rounded-full">
+                {badge > 99 ? "99+" : badge}
+              </span>
+            )}
 
-        {soon && (
-          <span className="text-[10px] font-normal text-slate-600 bg-slate-800 px-1.5 py-0.5 rounded-md">
-            Soon
-          </span>
+            {soon && (
+              <span className="text-[10px] font-normal text-slate-600 bg-slate-800 px-1.5 py-0.5 rounded-md">
+                Soon
+              </span>
+            )}
+          </>
         )}
       </Link>
     </li>
@@ -130,11 +147,13 @@ function NavContent({
   onClose,
   appUser,
   unreadCount,
+  collapsed,
 }: {
   pathname: string;
   onClose?: () => void;
   appUser?: { name: string; email: string; role?: string } | null;
   unreadCount: number;
+  collapsed?: boolean;
 }) {
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
@@ -152,18 +171,32 @@ function NavContent({
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      {/* Global Search */}
-      <div className="px-2.5 pt-3 pb-1 flex-shrink-0">
-        <GlobalSearch />
+      {/* Global Search — collapsed shows a compact icon trigger */}
+      <div className={`pt-3 pb-1 flex-shrink-0 ${collapsed ? "px-3" : "px-2.5"}`}>
+        {collapsed ? (
+          <button
+            title="Search (⌘K)"
+            onClick={() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true, bubbles: true }))}
+            className="w-full flex items-center justify-center py-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] transition-colors"
+          >
+            <Search className="w-4 h-4" />
+          </button>
+        ) : (
+          <GlobalSearch />
+        )}
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto py-2 px-2.5 space-y-5">
+      <nav className={`flex-1 overflow-y-auto py-2 space-y-5 ${collapsed ? "px-3" : "px-2.5"}`}>
         {visibleNavItems.map((section) => (
           <div key={section.group}>
-            <p className="px-3 mb-1 text-[10px] font-semibold text-slate-600 uppercase tracking-widest select-none">
-              {section.group}
-            </p>
+            {collapsed ? (
+              <div className="h-px bg-white/[0.06] mx-1 mb-1.5" />
+            ) : (
+              <p className="px-3 mb-1 text-[10px] font-semibold text-slate-600 uppercase tracking-widest select-none">
+                {section.group}
+              </p>
+            )}
             <ul className="space-y-0.5">
               {section.links.map(({ href, label, icon, soon }: { href: string; label: string; icon: React.ElementType; soon?: boolean }) => (
                 <NavItem
@@ -172,6 +205,7 @@ function NavContent({
                   label={label}
                   icon={icon}
                   soon={soon}
+                  collapsed={collapsed}
                   active={isActive(href)}
                   badge={href === "/messages" ? unreadCount : undefined}
                   onClick={onClose}
@@ -183,51 +217,85 @@ function NavContent({
       </nav>
 
       {/* Footer */}
-      <div className="px-2.5 py-3 border-t border-white/[0.06] space-y-0.5">
-        {/* Dark mode toggle row */}
-        <div className="flex items-center justify-between px-3 py-2">
-          <span className="flex items-center gap-2.5 text-xs font-medium text-slate-400">
-            <Sun className="w-3.5 h-3.5 text-slate-500" />
-            Dark mode
-          </span>
-          <ThemeToggle />
-        </div>
+      <div className={`py-3 border-t border-white/[0.06] space-y-0.5 ${collapsed ? "px-3" : "px-2.5"}`}>
+        {collapsed ? (
+          <>
+            <div className="flex justify-center py-1.5" title="Toggle dark mode">
+              <ThemeToggleIcon />
+            </div>
+            <Link
+              href="/settings"
+              onClick={onClose}
+              title="Settings"
+              data-tour="settings"
+              className="flex items-center justify-center py-2.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-white/[0.05] transition-all duration-150"
+            >
+              <Settings className="w-4 h-4" />
+            </Link>
+            <div className="flex justify-center pt-1" title={appUser?.name ?? "Signed out"}>
+              <div className="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center text-white text-xs font-bold shadow-sm ring-1 ring-indigo-400/30">
+                {appUser ? appUser.name.charAt(0).toUpperCase() : "·"}
+              </div>
+            </div>
+            <button
+              onClick={async () => {
+                try { await fetch("/api/auth/logout", { method: "POST" }); } catch { /* ignore */ }
+                window.location.href = "/login";
+              }}
+              title="Log out"
+              className="w-full flex items-center justify-center py-2 rounded-lg text-slate-500 hover:text-red-400 hover:bg-white/[0.06] transition-colors"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+            </button>
+          </>
+        ) : (
+          <>
+            {/* Dark mode toggle row */}
+            <div className="flex items-center justify-between px-3 py-2">
+              <span className="flex items-center gap-2.5 text-xs font-medium text-slate-400">
+                <Sun className="w-3.5 h-3.5 text-slate-500" />
+                Dark mode
+              </span>
+              <ThemeToggle />
+            </div>
 
-        {/* Settings */}
-        <Link
-          href="/settings"
-          onClick={onClose}
-          data-tour="settings"
-          className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-400 hover:text-slate-100 hover:bg-white/[0.05] transition-all duration-150"
-        >
-          <Settings className="w-4 h-4 text-slate-500" />
-          Settings
-        </Link>
+            {/* Settings */}
+            <Link
+              href="/settings"
+              onClick={onClose}
+              data-tour="settings"
+              className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-400 hover:text-slate-100 hover:bg-white/[0.05] transition-all duration-150"
+            >
+              <Settings className="w-4 h-4 text-slate-500" />
+              Settings
+            </Link>
 
-        {/* User row */}
-        <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg mt-1">
-          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0 shadow-sm ring-1 ring-indigo-400/30">
-            {appUser ? appUser.name.charAt(0).toUpperCase() : "·"}
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-semibold text-slate-200 truncate leading-tight">
-              {appUser?.name ?? "Signed out"}
-            </p>
-            <p className="text-[10px] text-slate-500 truncate leading-tight mt-0.5">
-              {appUser?.email ?? "Vibrnd Studio Flow"}
-            </p>
-          </div>
-          <button
-            onClick={async () => {
-              try { await fetch("/api/auth/logout", { method: "POST" }); } catch { /* ignore */ }
-              window.location.href = "/login";
-            }}
-            title="Log out"
-            className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-white/[0.06] transition-colors flex-shrink-0"
-          >
-            <LogOut className="w-3.5 h-3.5" />
-          </button>
-        </div>
+            {/* User row */}
+            <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg mt-1">
+              <div className="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0 shadow-sm ring-1 ring-indigo-400/30">
+                {appUser ? appUser.name.charAt(0).toUpperCase() : "·"}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-semibold text-slate-200 truncate leading-tight">
+                  {appUser?.name ?? "Signed out"}
+                </p>
+                <p className="text-[10px] text-slate-500 truncate leading-tight mt-0.5">
+                  {appUser?.email ?? "Vibrnd Studio Flow"}
+                </p>
+              </div>
+              <button
+                onClick={async () => {
+                  try { await fetch("/api/auth/logout", { method: "POST" }); } catch { /* ignore */ }
+                  window.location.href = "/login";
+                }}
+                title="Log out"
+                className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-white/[0.06] transition-colors flex-shrink-0"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -257,11 +325,28 @@ function Logo() {
    ───────────────────────────────────────────────────────────── */
 interface AppUser { id: string; name: string; email: string; role: string; }
 
+const COLLAPSE_KEY = "vsf_sidebar_collapsed";
+
 export function Sidebar() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [appUser, setAppUser] = useState<AppUser | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [collapsed, setCollapsed] = useState(false);
+
+  /* Restore the collapsed preference, then keep `body` in sync so the
+     content pane (styled in globals.css) shifts with the rail. */
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(COLLAPSE_KEY) === "1") setCollapsed(true);
+    } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => {
+    document.body.classList.toggle("sidebar-collapsed", collapsed);
+    try { localStorage.setItem(COLLAPSE_KEY, collapsed ? "1" : "0"); } catch { /* ignore */ }
+    return () => document.body.classList.remove("sidebar-collapsed");
+  }, [collapsed]);
 
   /* Fetch unread message count */
   const fetchUnread = useCallback(() => {
@@ -320,17 +405,49 @@ export function Sidebar() {
   return (
     <>
       {/* ── Desktop sidebar (lg+) ─────────────────────────────── */}
-      <aside className="hidden lg:flex fixed inset-y-0 left-0 w-64 flex-col z-30 bg-slate-900">
+      <aside
+        // Inline width so the rail animates reliably regardless of which
+        // Tailwind width utilities get generated.
+        style={{ width: collapsed ? 72 : 256, transition: "width 200ms ease" }}
+        className="hidden lg:flex fixed inset-y-0 left-0 flex-col z-30 bg-slate-900"
+      >
         {/* Subtle top border accent */}
         <div className="absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-indigo-500/40 to-transparent" />
 
         {/* Logo / Brand + notification bell */}
-        <div className="h-16 flex items-center justify-between px-5 border-b border-white/[0.06] flex-shrink-0">
-          <Logo />
-          <NotificationBell />
+        <div className={`h-16 flex items-center border-b border-white/[0.06] flex-shrink-0 ${
+          collapsed ? "justify-center px-2" : "justify-between px-5"
+        }`}>
+          {collapsed ? (
+            <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-lg flex items-center justify-center shadow-sm ring-1 ring-indigo-400/20" title="Vibrnd Studio Flow">
+              <BrandLogo className="w-5 h-5 text-white" />
+            </div>
+          ) : (
+            <>
+              <Logo />
+              <NotificationBell />
+            </>
+          )}
         </div>
 
-        <NavContent pathname={pathname} appUser={appUser} unreadCount={unreadCount} />
+        {/* Collapsed: bell moves under the mark so it stays reachable */}
+        {collapsed && (
+          <div className="flex justify-center pt-2 flex-shrink-0">
+            <NotificationBell />
+          </div>
+        )}
+
+        <NavContent pathname={pathname} appUser={appUser} unreadCount={unreadCount} collapsed={collapsed} />
+
+        {/* Collapse / expand handle */}
+        <button
+          onClick={() => setCollapsed((c) => !c)}
+          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          className="absolute -right-3 top-20 w-6 h-6 rounded-full bg-slate-800 border border-white/10 text-slate-400 hover:text-white hover:bg-slate-700 shadow-md flex items-center justify-center transition-colors z-40"
+        >
+          {collapsed ? <ChevronsRight className="w-3.5 h-3.5" /> : <ChevronsLeft className="w-3.5 h-3.5" />}
+        </button>
       </aside>
 
       {/* ── Mobile / tablet top bar ───────────────────────────── */}

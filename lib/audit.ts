@@ -8,11 +8,11 @@ export type StatusEntityType =
   | "TASK"
   | "PROJECT"
   | "CONTENT_ITEM"
-  | "BOOKING"
+  | "CYCLE" // v3: opened, closed, reopened
+  | "BILLABLE_ITEM" // v3: priced, invoiced, waived
   | "INVOICE"
   | "CONTRACT"
   | "EXPENSE"
-  | "QUOTATION"
   | "FILE";
 
 export interface LogStatusArgs {

@@ -6,6 +6,8 @@ import { apiError, handleApiError, ApiError } from "@/lib/api-errors";
 import { parsePagination, paginationMeta } from "@/lib/pagination";
 import { checkRateLimit, WRITE_RATE_LIMITS } from "@/lib/rate-limit";
 import { canViewFinancials, can } from "@/lib/permissions";
+import { ensureCycles } from "@/lib/cycles";
+import { createPlanningTask } from "@/lib/auto-tasks";
 
 // GET /api/projects — list all projects with optional filters
 export async function GET(req: NextRequest) {
@@ -116,6 +118,9 @@ export async function POST(req: NextRequest) {
     const {
       clientId, name, description, type, serviceType, recurringFrequency, status,
       startDate, endDate, budget, currency,
+      // v3: the project IS the commercial unit
+      cycleAmount, cycleUnit, cycleStartDate, cycleEndDate,
+      deliverables, members,
     } = body;
 
     if (!clientId?.trim()) throw new ApiError("Client is required", 400);
@@ -128,6 +133,8 @@ export async function POST(req: NextRequest) {
         throw new ApiError(`${label} is invalid`, 400);
       }
     }
+
+    const canSetPricing = can(user, "projects.pricing");
 
     // Verify the client is in the caller's org before creating a project against it.
     const client = await prisma.client.findFirst({
@@ -167,6 +174,29 @@ export async function POST(req: NextRequest) {
           endDate: endDate ? new Date(endDate) : null,
           budget: budget != null && budget !== "" ? parseFloat(budget) : null,
           currency: currency || "USD",
+          // v3 commercials. Only someone with projects.pricing may set an
+          // amount — an SMM creating a project leaves it null rather than
+          // having their input silently accepted.
+          cycleAmount: canSetPricing && cycleAmount != null && cycleAmount !== ""
+            ? parseFloat(cycleAmount) : null,
+          cycleUnit: cycleUnit === "WEEK" || cycleUnit === "QUARTER" ? cycleUnit : "MONTH",
+          cycleStartDate: cycleStartDate ? new Date(cycleStartDate)
+            : startDate ? new Date(startDate) : null,
+          cycleEndDate: cycleEndDate ? new Date(cycleEndDate) : null,
+          ...(Array.isArray(deliverables) && deliverables.length
+            ? {
+                deliverables: {
+                  create: deliverables
+                    .map((d: { creativeTypeId?: string; qtyPerCycle?: number | string; notes?: string }, i: number) => ({
+                      creativeTypeId: String(d.creativeTypeId ?? ""),
+                      qtyPerCycle: Math.max(0, Math.trunc(Number(d.qtyPerCycle ?? 0))),
+                      notes: d.notes?.trim() || null,
+                      sortOrder: i,
+                    }))
+                    .filter((d) => d.creativeTypeId && d.qtyPerCycle > 0),
+                },
+              }
+            : {}),
         },
         include: {
           client: { select: { id: true, name: true, logoUrl: true } },
@@ -190,6 +220,38 @@ export async function POST(req: NextRequest) {
 
       return created;
     });
+
+    // Cycles and the SMM's planning task happen AFTER the transaction: they
+    // are follow-on effects, and a notification failing must not roll back a
+    // project the user just created.
+    await ensureCycles(project.id);
+
+    const smmIds: string[] = [];
+    if (Array.isArray(members)) {
+      for (const m of members as { userId?: string; role?: string }[]) {
+        if (!m?.userId) continue;
+        const memberRole = m.role === "SMM" ? "SMM" : "CONTRIBUTOR";
+        const ok = await prisma.user.findFirst({
+          where: { id: m.userId, organizationId: user.organizationId, isActive: true },
+          select: { id: true },
+        });
+        if (!ok) continue;
+        await prisma.projectMember.upsert({
+          where: { projectId_userId: { projectId: project.id, userId: m.userId } },
+          create: { projectId: project.id, userId: m.userId, role: memberRole, addedById: user.id },
+          update: { role: memberRole },
+        });
+        if (memberRole === "SMM") smmIds.push(m.userId);
+      }
+    }
+    for (const userId of smmIds) {
+      await createPlanningTask({
+        organizationId: user.organizationId,
+        projectId: project.id,
+        userId,
+        createdById: user.id,
+      });
+    }
 
     return jsonFor(user, { ...project, progress: 0 }, { status: 201 });
   } catch (error) {

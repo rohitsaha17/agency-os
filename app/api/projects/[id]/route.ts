@@ -5,7 +5,8 @@ import { jsonFor } from "@/lib/api-permissions";
 import { apiError, handleApiError, ApiError } from "@/lib/api-errors";
 import { checkRateLimit, WRITE_RATE_LIMITS } from "@/lib/rate-limit";
 import { logStatus } from "@/lib/audit";
-import { canViewFinancials } from "@/lib/permissions";
+import { canViewFinancials, can } from "@/lib/permissions";
+import { ensureCycles } from "@/lib/cycles";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -18,8 +19,19 @@ export async function GET(req: NextRequest, { params }: Params) {
     const project = await prisma.project.findFirst({
       where: { id, organizationId: user.organizationId },
       include: {
-        client: { select: { id: true, name: true, logoUrl: true } },
+        client: { select: { id: true, name: true, logoUrl: true, currency: true } },
         _count: { select: { tasks: true } },
+        // v3: the deal, and who is on it
+        deliverables: {
+          include: { creativeType: { select: { id: true, name: true, icon: true, color: true } } },
+          orderBy: { sortOrder: "asc" },
+        },
+        members: {
+          include: {
+            user: { select: { id: true, name: true, avatarUrl: true, role: true } },
+          },
+          orderBy: { addedAt: "asc" },
+        },
       },
     });
 
@@ -60,7 +72,13 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const {
       name, description, type, serviceType, recurringFrequency, status,
       startDate, endDate, budget, currency, clientId,
+      // v3 commercials
+      cycleAmount, cycleUnit, cycleStartDate, cycleEndDate,
     } = body;
+
+    // Only projects.pricing may move an amount. A caller without it can still
+    // edit the project; their cycleAmount is simply ignored.
+    const canSetPricing = can(user, "projects.pricing");
 
     // If the client is being reassigned, verify that client is also in the org.
     if (clientId !== undefined && clientId !== null) {
@@ -94,12 +112,29 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         ...(endDate !== undefined && { endDate: endDate ? new Date(endDate) : null }),
         ...(budget !== undefined && { budget: budget != null && budget !== "" ? parseFloat(budget) : null }),
         ...(currency !== undefined && { currency }),
+        ...(canSetPricing && cycleAmount !== undefined && {
+          cycleAmount: cycleAmount != null && cycleAmount !== "" ? parseFloat(cycleAmount) : null,
+        }),
+        ...(cycleUnit !== undefined && { cycleUnit }),
+        ...(cycleStartDate !== undefined && {
+          cycleStartDate: cycleStartDate ? new Date(cycleStartDate) : null,
+        }),
+        ...(cycleEndDate !== undefined && {
+          cycleEndDate: cycleEndDate ? new Date(cycleEndDate) : null,
+        }),
       },
       include: {
         client: { select: { id: true, name: true, logoUrl: true } },
         _count: { select: { tasks: true } },
       },
     });
+
+    // A changed schedule means different cycles. ensureCycles only fills
+    // gaps, so shortening a project leaves its existing cycles (and the
+    // content planned into them) alone.
+    if (cycleStartDate !== undefined || cycleEndDate !== undefined || type !== undefined) {
+      await ensureCycles(id);
+    }
 
     // v2 audit: record the status transition
     if (status !== undefined && status !== existing.status) {

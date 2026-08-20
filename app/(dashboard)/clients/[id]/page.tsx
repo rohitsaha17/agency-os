@@ -19,7 +19,6 @@ import { StatusBadge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
 import { ClientForm } from "@/components/clients/ClientForm";
 import { ContentCalendarTab } from "@/components/content/ContentCalendarTab";
-import { PackageTab } from "@/components/content/PackageTab";
 import { FulfillmentLine } from "@/components/content/FulfillmentLine";
 import { FollowUpsCard } from "@/components/content/FollowUpsCard";
 import { ProjectForm } from "@/components/projects/ProjectForm";
@@ -32,7 +31,7 @@ import { calcInvoiceTotal } from "@/lib/format";
 import { formatMoney, resolveClientCurrency } from "@/lib/money";
 
 // ── helpers ──────────────────────────────────────────────────
-type Tab = "content" | "package" | "overview" | "contacts" | "brand" | "tax" | "projects" | "files" | "contracts" | "chat" | "invoices" | "expenses" | "receipts";
+type Tab = "content" | "overview" | "contacts" | "brand" | "tax" | "projects" | "files" | "contracts" | "chat" | "invoices" | "expenses" | "receipts";
 
 const EXPENSE_CATEGORY_LABELS: Record<ExpenseCategory, string> = {
   SOFTWARE_TOOLS: "Software & Tools",
@@ -795,7 +794,6 @@ export default function ClientDetailPage() {
   const tabs: { id: Tab; label: string }[] = [
     // v2: the client's ONE content calendar — first tab, the source of all work
     { id: "content",     label: "Content Calendar" },
-    { id: "package",     label: "Package" },
     { id: "overview",    label: "Overview" },
     // v3: juniors never see client contacts (API strips them too)
     ...(seesContacts ? [{ id: "contacts" as Tab, label: `Contacts (${client.contacts.length})` }] : []),
@@ -892,9 +890,6 @@ export default function ClientDetailPage() {
       <div className="flex-1 px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
         {/* ── CONTENT CALENDAR (v2 — the client's ONE calendar) ── */}
         {tab === "content" && <ContentCalendarTab clientId={id} />}
-
-        {/* ── PACKAGE (v2 — monthly creative quotas) ── */}
-        {tab === "package" && <PackageTab clientId={id} clientCurrency={client.currency} />}
 
         {/* ── OVERVIEW ── */}
         {tab === "overview" && (() => {

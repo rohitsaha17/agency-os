@@ -228,6 +228,39 @@ export interface ProjectFormData {
   endDate: string;
   budget: string;
   currency: string;
+  // ── v3: the project is the commercial unit ──
+  /** What the client pays per cycle (ONE_TIME: the whole price). */
+  cycleAmount?: string;
+  cycleStartDate?: string;
+  /** Empty/absent = open-ended. */
+  cycleEndDate?: string;
+  deliverables?: { creativeTypeId: string; qtyPerCycle: string }[];
+  members?: { userId: string; role: "SMM" | "CONTRIBUTOR" }[];
+}
+
+/** One line of the deal: "15 × Reel per cycle". */
+export interface ProjectDeliverable {
+  id: string;
+  projectId: string;
+  creativeTypeId: string;
+  qtyPerCycle: number;
+  notes: string | null;
+  sortOrder: number;
+  creativeType: { id: string; name: string; icon: string | null; color: string | null };
+}
+
+/** One billing period of a project — "Aug 2026". */
+export interface ProjectCycle {
+  id: string;
+  projectId: string;
+  label: string;
+  startDate: string;
+  endDate: string;
+  status: "OPEN" | "CLOSED";
+  closedAt: string | null;
+  closedById: string | null;
+  closedBy?: { id: string; name: string } | null;
+  invoiceId: string | null;
 }
 
 // ── Tasks ─────────────────────────────────────────────────────

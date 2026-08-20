@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
-  ChevronRight, Plus, Calendar, DollarSign, CheckSquare,
+  ChevronLeft, ChevronRight, Plus, Calendar, DollarSign, CheckSquare,
   LayoutGrid, List, Edit3, FileText, Sparkles,
   TrendingDown, Scroll, Clock, CheckCircle2, XCircle, Paperclip,
   Upload, Download, Image, Film, File as FileIcon, Grid3X3,
@@ -21,7 +21,7 @@ import { TaskModal } from "@/components/tasks/TaskModal";
 import { TaskPanel } from "@/components/tasks/TaskPanel";
 import { DeliveryDialog } from "@/components/tasks/DeliveryDialog";
 import type {
-  Project, Task, TaskStatus, ProjectFormData,
+  Project, ProjectDeliverable, ProjectCycle, Task, TaskStatus, ProjectFormData,
   Expense, Contract, ExpenseCategory, ExpenseStatus,
   ContractType, ContractPartyType, AssetFile, MimeCategory,
   Channel, ChatMessage, Invoice, InvoiceStatus,
@@ -140,7 +140,21 @@ export default function ProjectDetailPage() {
 
   const [pdfLoading, setPdfLoading] = useState(false);
 
-  const [project, setProject] = useState<(Project & { progress: number }) | null>(null);
+  // v3: the API now returns the deal (deliverables) and the team alongside
+  // the project. cycleAmount is absent entirely without financials.view.
+  type ProjectWithDeal = Project & {
+    progress: number;
+    cycleAmount?: string | number | null;
+    cycleStartDate?: string | null;
+    cycleEndDate?: string | null;
+    deliverables?: ProjectDeliverable[];
+    members?: { userId: string; role: string; user: { id: string; name: string; avatarUrl: string | null } }[];
+  };
+  const [project, setProject] = useState<ProjectWithDeal | null>(null);
+  // v3: the project's billing periods, and which one the page is showing.
+  // Defaults to the cycle containing today so the page opens on "now".
+  const [cycles, setCycles] = useState<ProjectCycle[]>([]);
+  const [cycleIndex, setCycleIndex] = useState(0);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [tasksLoading, setTasksLoading] = useState(true);
@@ -213,6 +227,22 @@ export default function ProjectDetailPage() {
     } catch (e) { setError(e instanceof Error ? e.message : "Unknown error"); }
     finally { setLoading(false); }
   }, [id]);
+
+  // v3: load the billing periods and open on the one containing today, so
+  // the page lands on "now" rather than the start of the engagement.
+  const fetchCycles = useCallback(async () => {
+    const res = await fetch(`/api/projects/${id}/cycles`);
+    if (!res.ok) return;
+    const data: ProjectCycle[] = await res.json();
+    setCycles(data);
+    const now = Date.now();
+    const current = data.findIndex(
+      (c) => new Date(c.startDate).getTime() <= now && new Date(c.endDate).getTime() >= now,
+    );
+    setCycleIndex(current >= 0 ? current : Math.max(0, data.length - 1));
+  }, [id]);
+
+  useEffect(() => { fetchCycles(); }, [fetchCycles]);
 
   const fetchExpenses = useCallback(async () => {
     const res = await fetch(`/api/projects/${id}/expenses`);
@@ -660,16 +690,28 @@ export default function ProjectDetailPage() {
 
         {/* Meta bar */}
         <div className="flex items-center gap-6 mt-4 pt-4 border-t border-gray-100 text-xs text-gray-500 flex-wrap">
-          {project.startDate && (
+          <span className="flex items-center gap-1.5 font-medium text-gray-600">
+            {project.type === "RETAINER" ? "Retainer" : "One-time"}
+          </span>
+          {/* v3: the period the deal runs for */}
+          {(project.cycleStartDate ?? project.startDate) && (
             <span className="flex items-center gap-1.5">
               <Calendar className="w-3.5 h-3.5 text-gray-400" />
-              {formatDate(project.startDate)}{project.endDate && <> → {formatDate(project.endDate)}</>}
+              {formatDate(project.cycleStartDate ?? project.startDate)}
+              {" → "}
+              {project.cycleEndDate ?? project.endDate
+                ? formatDate(project.cycleEndDate ?? project.endDate)
+                : <span className="text-gray-400">open-ended</span>}
             </span>
           )}
-          {project.budget && (
-            <span className="flex items-center gap-1.5">
+          {/* v3: the amount — absent entirely for anyone without financials.view */}
+          {project.cycleAmount != null && (
+            <span className="flex items-center gap-1.5 font-medium text-gray-700">
               <DollarSign className="w-3.5 h-3.5 text-gray-400" />
-              {formatBudget(project.budget, project.currency)}
+              {formatBudget(Number(project.cycleAmount), project.currency)}
+              <span className="font-normal text-gray-400">
+                {project.type === "RETAINER" ? "per cycle" : "total"}
+              </span>
             </span>
           )}
           <span className="flex items-center gap-1.5">
@@ -678,6 +720,61 @@ export default function ProjectDetailPage() {
             {taskCounts.inProgress > 0 && ` · ${taskCounts.inProgress} in progress`}
           </span>
         </div>
+
+        {/* v3: the deal at a glance — what's owed, and who's on it */}
+        {((project.deliverables?.length ?? 0) > 0 || (project.members?.length ?? 0) > 0) && (
+          <div className="flex items-center gap-4 mt-3 flex-wrap">
+            {(project.deliverables ?? []).map((d) => (
+              <span key={d.id}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gray-50 border border-gray-200 text-xs text-gray-700">
+                {d.creativeType.icon && <span>{d.creativeType.icon}</span>}
+                <span className="font-semibold">{d.qtyPerCycle}</span>
+                {d.creativeType.name}
+                {d.qtyPerCycle !== 1 ? "s" : ""}
+              </span>
+            ))}
+            {(project.members ?? []).filter((m) => m.role === "SMM").length > 0 && (
+              <span className="inline-flex items-center gap-1.5 text-xs text-gray-500">
+                <span className="text-gray-400">SMM</span>
+                <span className="flex -space-x-1.5">
+                  {(project.members ?? []).filter((m) => m.role === "SMM").map((m) => (
+                    <span key={m.userId} title={m.user.name}
+                      className="w-6 h-6 rounded-full bg-gradient-to-br from-indigo-400 to-indigo-600 text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-white">
+                      {m.user.name.split(" ").map((w) => w[0]).slice(0, 2).join("")}
+                    </span>
+                  ))}
+                </span>
+              </span>
+            )}
+
+            {/* v3: which cycle we're looking at. Phase 3's Plan tab reads
+                this selection, so switching here changes what's planned. */}
+            {cycles.length > 0 && (
+              <span className="inline-flex items-center gap-0.5 ml-auto">
+                <button
+                  onClick={() => setCycleIndex((i) => Math.max(0, i - 1))}
+                  disabled={cycleIndex <= 0}
+                  title="Previous cycle"
+                  className="p-1 rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-30 disabled:hover:bg-transparent transition-colors">
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                </button>
+                <span className="text-xs font-medium text-gray-700 min-w-[72px] text-center">
+                  {cycles[cycleIndex]?.label}
+                  {cycles[cycleIndex]?.status === "CLOSED" && (
+                    <span className="block text-[10px] font-normal text-gray-400 leading-none">closed</span>
+                  )}
+                </span>
+                <button
+                  onClick={() => setCycleIndex((i) => Math.min(cycles.length - 1, i + 1))}
+                  disabled={cycleIndex >= cycles.length - 1}
+                  title="Next cycle"
+                  className="p-1 rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-30 disabled:hover:bg-transparent transition-colors">
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Page tabs */}

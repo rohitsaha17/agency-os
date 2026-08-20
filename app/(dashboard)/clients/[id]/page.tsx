@@ -889,7 +889,9 @@ export default function ClientDetailPage() {
       {/* Tab Content */}
       <div className="flex-1 px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
         {/* ── CONTENT CALENDAR (v2 — the client's ONE calendar) ── */}
-        {tab === "content" && <ContentCalendarTab clientId={id} />}
+        {/* v3: at client level this is a READ-ONLY roll-up of every project's
+            plan. Work is created on Project ▸ Plan. */}
+        {tab === "content" && <ContentCalendarTab clientId={id} readOnly />}
 
         {/* ── OVERVIEW ── */}
         {tab === "overview" && (() => {

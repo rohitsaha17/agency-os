@@ -128,6 +128,26 @@ enum ContentStatus {
   SCHEDULED
   POSTED
   MISSED
+  // ── v3 (docs/V3_CONTEXT.md §3) ──
+  SUBMITTED // the junior sent it in with proof; waiting on the SMM
+  APPROVED // the SMM approved it; the posting task now exists
+  CHANGES_REQUESTED // sent back for another round
+  CARRIED_FORWARD // not posted this cycle; cloned into the next one
+}
+
+// v3: whether an item is inside the deal, an extra to bill, or a freebie.
+// The SMM sets this at cycle close and NEVER sees an amount.
+enum BillingIntent {
+  INCLUDED
+  EXTRA_BILLABLE
+  COMPLIMENTARY
+}
+
+// v3: when an item is carried into the next cycle, does it eat that cycle's
+// quota or sit on top of it?
+enum CarryMode {
+  INSIDE_QUOTA
+  ABOVE_QUOTA
 }
 
 enum PricingType {
@@ -515,8 +535,9 @@ model ProjectCycle {
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
 
-  project  Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  closedBy User?   @relation("CyclesClosed", fields: [closedById], references: [id], onDelete: SetNull)
+  project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  closedBy     User?         @relation("CyclesClosed", fields: [closedById], references: [id], onDelete: SetNull)
+  contentItems ContentItem[]
 
   @@unique([projectId, startDate])
   @@index([projectId, status])
@@ -643,6 +664,17 @@ model ContentItem {
   isAdHoc               Boolean       @default(false)
   carriedFromId         String?
   countAgainstPrevMonth Boolean       @default(false)
+
+  // ── v3: which cycle this belongs to, and how it bills ──
+  /// The billing period this item is planned into. Nullable so legacy items
+  /// planned against a client rather than a project still read.
+  cycleId       String?
+  billingIntent BillingIntent @default(INCLUDED)
+  /// Only set on an item that was carried in from a previous cycle.
+  carryMode     CarryMode?
+  submittedAt   DateTime?
+  approvedAt    DateTime?
+
   postedAt              DateTime?
   teamApprovedAt        DateTime?
   clientApprovedAt      DateTime?
@@ -657,6 +689,7 @@ model ContentItem {
   client        Client        @relation("ClientContentItems", fields: [clientId], references: [id], onDelete: Cascade)
   project       Project?      @relation("ProjectContentItems", fields: [projectId], references: [id], onDelete: SetNull)
   creativeType  CreativeType  @relation(fields: [creativeTypeId], references: [id])
+  cycle         ProjectCycle? @relation(fields: [cycleId], references: [id], onDelete: SetNull)
   referenceFile File?         @relation("ContentReferenceFiles", fields: [referenceFileId], references: [id])
   carriedFrom   ContentItem?  @relation("CarryForward", fields: [carriedFromId], references: [id])
   carriedTo     ContentItem[] @relation("CarryForward")
@@ -664,6 +697,7 @@ model ContentItem {
   tasks         Task[]        @relation("ContentItemTasks")
   billedLines   InvoiceLineItem[] @relation("BilledContentItems")
 
+  @@index([cycleId, status])
   @@index([organizationId, clientId, date])
   @@index([clientId, status])
   @@index([organizationId, date])

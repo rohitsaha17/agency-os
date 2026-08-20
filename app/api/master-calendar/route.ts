@@ -56,6 +56,9 @@ export async function GET(req: NextRequest) {
           id: true, clientId: true, projectId: true, date: true, topic: true,
           status: true, isExtra: true, isAdHoc: true, carriedFromId: true,
           client: { select: { id: true, name: true } },
+          // v3: chips name the project too, so a client with several
+          // retainers reads clearly on the org-wide view
+          project: { select: { id: true, name: true } },
           creativeType: { select: { id: true, name: true, icon: true, color: true } },
           tasks: {
             where: { deletedAt: null },

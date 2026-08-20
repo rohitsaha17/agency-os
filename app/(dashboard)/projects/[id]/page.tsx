@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
-  ChevronLeft, ChevronRight, Plus, Calendar, DollarSign, CheckSquare,
+  ChevronLeft, ChevronRight, Plus, Calendar, Calendar as CalIcon, DollarSign, CheckSquare,
   LayoutGrid, List, Edit3, FileText, Sparkles,
   TrendingDown, Scroll, Clock, CheckCircle2, XCircle, Paperclip,
   Upload, Download, Image, Film, File as FileIcon, Grid3X3,
@@ -18,6 +18,7 @@ import { TemplatePickerModal } from "@/components/projects/TemplatePickerModal";
 import { TaskBoard } from "@/components/tasks/TaskBoard";
 import { TaskList } from "@/components/tasks/TaskList";
 import { TaskModal } from "@/components/tasks/TaskModal";
+import { PlanTab } from "@/components/projects/PlanTab";
 import { TaskPanel } from "@/components/tasks/TaskPanel";
 import { DeliveryDialog } from "@/components/tasks/DeliveryDialog";
 import type {
@@ -32,7 +33,7 @@ import { formatMoney } from "@/lib/money";
 import { useToast } from "@/components/ui/Toast";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 
-type PageTab = "tasks" | "files" | "expenses" | "contracts" | "chat" | "invoices" | "tax";
+type PageTab = "plan" | "tasks" | "files" | "expenses" | "contracts" | "chat" | "invoices" | "tax";
 type ViewMode = "kanban" | "list";
 
 function formatFileSize(bytes: number) {
@@ -160,7 +161,15 @@ export default function ProjectDetailPage() {
   const [tasksLoading, setTasksLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<ViewMode>("list");
-  const [pageTab, setPageTab] = useState<PageTab>("tasks");
+  const [pageTab, setPageTab] = useState<PageTab>("plan");
+
+  // v3: the planning task's notification deep-links to ?tab=plan, so honour
+  // whichever tab the link names.
+  useEffect(() => {
+    const requested = new URLSearchParams(window.location.search).get("tab");
+    const valid: PageTab[] = ["plan", "tasks", "files", "expenses", "contracts", "chat", "invoices", "tax"];
+    if (requested && valid.includes(requested as PageTab)) setPageTab(requested as PageTab);
+  }, []);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [expenseSummary, setExpenseSummary] = useState<{ total: number; budget: number | null; remaining: number | null; reimbursable: number; currency: string } | null>(null);
   const [contracts, setContracts] = useState<Contract[]>([]);
@@ -782,6 +791,8 @@ export default function ProjectDetailPage() {
         <div className="overflow-x-auto -mb-px">
         <div className="flex items-center gap-1 whitespace-nowrap">
           {([
+            // v3: Plan is the FIRST tab — it's where the work is created
+            { id: "plan", label: "Plan", icon: <CalIcon className="w-3.5 h-3.5" /> },
             { id: "tasks", label: "Tasks", icon: <CheckSquare className="w-3.5 h-3.5" /> },
             { id: "files", label: `Files${projectFiles.length > 0 ? ` (${projectFiles.length})` : ""}`, icon: <Paperclip className="w-3.5 h-3.5" /> },
             { id: "expenses", label: `Expenses${expenses.length > 0 ? ` (${expenses.length})` : ""}`, icon: <TrendingDown className="w-3.5 h-3.5" /> },
@@ -808,6 +819,8 @@ export default function ProjectDetailPage() {
       {/* Content area */}
       <div className="flex-1 px-4 sm:px-6 lg:px-8 py-4 sm:py-6 overflow-auto">
         {/* ── TASKS TAB ── */}
+        {pageTab === "plan" && <PlanTab projectId={id} />}
+
         {pageTab === "tasks" && (<>
         <div className="flex items-center justify-between mb-5 gap-3 flex-wrap">
           <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1">

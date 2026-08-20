@@ -69,6 +69,7 @@ interface MasterItem {
   isExtra: boolean;
   isAdHoc: boolean;
   client: { id: string; name: string };
+  project: { id: string; name: string } | null;
   creativeType: { id: string; name: string; icon: string | null; color: string | null };
   tasks: { id: string; status: string; assignees: { user: { id: string; name: string } }[] }[];
 }
@@ -493,7 +494,7 @@ export default function CalendarPage() {
                     return (
                       <button key={i.id} type="button"
                         onClick={(e) => { e.stopPropagation(); setSelected(day); setSelectedItem(i); }}
-                        title={`${i.client.name} — ${i.creativeType.name}: ${i.topic} (${meta.label})`}
+                        title={`${i.client.name}${i.project ? ` · ${i.project.name}` : ""} — ${i.creativeType.name}: ${i.topic} (${meta.label})`}
                         className={`w-full text-left flex items-center gap-1 mb-0.5 px-1 py-0.5 rounded border ${chipClass(i)} ${i.isAdHoc ? "border-dashed" : ""}`}
                       >
                         <span className="w-3.5 h-3.5 rounded-full bg-white/70 text-[7px] font-bold flex items-center justify-center flex-shrink-0">
@@ -580,6 +581,12 @@ export default function CalendarPage() {
                     <dt className="text-gray-400 mb-0.5">Client</dt>
                     <dd className="text-gray-900 font-medium">{selectedItem.client.name}</dd>
                   </div>
+                  {selectedItem.project && (
+                    <div>
+                      <dt className="text-gray-400 mb-0.5">Project</dt>
+                      <dd className="text-gray-900 font-medium">{selectedItem.project.name}</dd>
+                    </div>
+                  )}
                   <div>
                     <dt className="text-gray-400 mb-0.5">Publish date</dt>
                     <dd className="text-gray-900 font-medium">

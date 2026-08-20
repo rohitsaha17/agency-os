@@ -3,10 +3,14 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 import { logStatus } from "@/lib/audit";
+import { cycleForDate } from "@/lib/cycles";
+import { quotaCheck } from "@/lib/cycle-quota";
 
 const ITEM_INCLUDE = {
   creativeType: true,
   client: { select: { id: true, name: true } },
+  // v3: the client roll-up groups and colours by project
+  project: { select: { id: true, name: true } },
   carriedFrom: { select: { id: true, date: true } },
   createdBy: { select: { id: true, name: true } },
   tasks: {
@@ -77,6 +81,9 @@ export async function POST(req: NextRequest) {
     const {
       clientId, projectId, date, creativeTypeId, topic, description,
       referenceUrl, referenceFileId, isExtra, isAdHoc,
+      // v3: planning happens against a project cycle, and may assign in the
+      // same action (Phase 4 turns assigneeId into the junior's task).
+      cycleId, assigneeId, acknowledgeExtra,
     } = await req.json();
 
     if (!clientId) throw new ApiError("Client is required", 400);
@@ -98,18 +105,47 @@ export async function POST(req: NextRequest) {
       if (!project) throw new ApiError("Project not found for this client", 404);
     }
 
+    // v3: work out which cycle this date falls into, then check the quota.
+    // Planning beyond the deal is allowed but must be acknowledged, and the
+    // item is flagged EXTRA_BILLABLE so cycle close can price it later.
+    let resolvedCycleId: string | null = cycleId ?? null;
+    if (!resolvedCycleId && projectId) {
+      const cycle = await cycleForDate(projectId, new Date(date));
+      resolvedCycleId = cycle?.id ?? null;
+    }
+
+    let beyondQuota = false;
+    if (resolvedCycleId && !isExtra) {
+      const q = await quotaCheck(resolvedCycleId, creativeTypeId, user.organizationId);
+      beyondQuota = q.full;
+      if (beyondQuota && !acknowledgeExtra) {
+        // Not an error — the caller needs to confirm, so tell them what
+        // they're about to do rather than silently deciding for them.
+        return NextResponse.json(
+          {
+            needsExtraConfirmation: true,
+            quota: q,
+            message: `Quota is full (${q.used}/${q.quota}) — this will be an EXTRA.`,
+          },
+          { status: 409 },
+        );
+      }
+    }
+
     const item = await prisma.contentItem.create({
       data: {
         organizationId: user.organizationId,
         clientId,
         projectId: projectId || null,
+        cycleId: resolvedCycleId,
         date: new Date(date),
         creativeTypeId,
         topic: topic.trim(),
         description: description?.trim() || null,
         referenceUrl: referenceUrl?.trim() || null,
         referenceFileId: referenceFileId || null,
-        isExtra: !!isExtra,
+        isExtra: !!isExtra || beyondQuota,
+        billingIntent: (!!isExtra || beyondQuota) ? "EXTRA_BILLABLE" : "INCLUDED",
         isAdHoc: !!isAdHoc,
         createdById: user.id,
       },
@@ -123,7 +159,7 @@ export async function POST(req: NextRequest) {
       from: null,
       to: "PLANNED",
       userId: user.id,
-      note: "planned",
+      note: beyondQuota ? "planned — beyond quota, flagged EXTRA" : "planned",
     });
 
     return NextResponse.json(serialize(item), { status: 201 });

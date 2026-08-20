@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { handleApiError, ApiError } from "@/lib/api-errors";
+import { can } from "@/lib/permissions";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -49,7 +50,14 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const {
       date, creativeTypeId, topic, description, referenceUrl, referenceFileId,
       isExtra, isAdHoc, projectId, countAgainstPrevMonth,
+      // v3: billing intent, and the cycle the item belongs to
+      billingIntent, cycleId,
     } = await req.json();
+
+    // v3: an SMM flags work but never un-flags an extra — turning a billable
+    // extra back into included work is a pricing decision, so it needs
+    // projects.pricing (docs/V3_CONTEXT.md §2).
+    const canOverrideBilling = can(user, "projects.pricing");
 
     if (creativeTypeId) {
       const type = await prisma.creativeType.findFirst({
@@ -68,7 +76,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         ...(description !== undefined && { description: description?.trim() || null }),
         ...(referenceUrl !== undefined && { referenceUrl: referenceUrl?.trim() || null }),
         ...(referenceFileId !== undefined && { referenceFileId: referenceFileId || null }),
-        ...(isExtra !== undefined && { isExtra: !!isExtra }),
+        ...(isExtra !== undefined && canOverrideBilling && { isExtra: !!isExtra }),
+        ...(billingIntent !== undefined && canOverrideBilling && { billingIntent }),
+        ...(cycleId !== undefined && { cycleId: cycleId || null }),
         ...(isAdHoc !== undefined && { isAdHoc: !!isAdHoc }),
         ...(projectId !== undefined && { projectId: projectId || null }),
         ...(countAgainstPrevMonth !== undefined && { countAgainstPrevMonth: !!countAgainstPrevMonth }),

@@ -355,6 +355,12 @@ export interface ContentItem {
   tasks: ContentItemTask[];
   createdAt: string;
   updatedAt: string;
+  /** v3: which project planned this — drives the client roll-up */
+  project?: { id: string; name: string } | null;
+  /** v3: which billing cycle it belongs to */
+  cycleId?: string | null;
+  billingIntent?: "INCLUDED" | "EXTRA_BILLABLE" | "COMPLIMENTARY";
+  carryMode?: "INSIDE_QUOTA" | "ABOVE_QUOTA" | null;
 }
 
 export type AssignmentStatus = "NONE" | "PENDING_HEAD_APPROVAL" | "APPROVED" | "REASSIGNED";

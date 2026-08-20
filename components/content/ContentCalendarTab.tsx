@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import Link from "next/link";
 import {
   ChevronLeft, ChevronRight, Plus, X, Calendar as CalIcon, List as ListIcon,
   LayoutGrid, Link2, Upload, Zap, ArrowRightCircle, CheckCircle2, UserPlus, Share2,
@@ -579,7 +580,12 @@ function ItemPanel({
 
 // ── Main tab ─────────────────────────────────────────────────
 
-export function ContentCalendarTab({ clientId }: { clientId: string }) {
+/**
+ * v3: at CLIENT level this is a read-only roll-up of every project's plan
+ * (docs/V3_CONTEXT.md §4). Work is created on Project ▸ Plan, so the client
+ * view shows what's happening and links through rather than editing here.
+ */
+export function ContentCalendarTab({ clientId, readOnly = false }: { clientId: string; readOnly?: boolean }) {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth());
@@ -623,6 +629,27 @@ export function ContentCalendarTab({ clientId }: { clientId: string }) {
   const itemsOnDay = useCallback(
     (day: Date) => items.filter((i) => isSameDay(new Date(i.date), day)),
     [items],
+  );
+
+  // v3: which projects contributed to this month, each with a stable colour
+  // so the roll-up reads as "who is doing what" at a glance.
+  const projectsInMonth = useMemo(() => {
+    const palette = ["#6366f1", "#10b981", "#f59e0b", "#ec4899", "#0ea5e9", "#8b5cf6"];
+    const seen = new Map<string, { id: string; name: string; color: string }>();
+    for (const i of items) {
+      const p = (i as { project?: { id: string; name: string } | null }).project;
+      if (!p || seen.has(p.id)) continue;
+      seen.set(p.id, { id: p.id, name: p.name, color: palette[seen.size % palette.length] });
+    }
+    return [...seen.values()];
+  }, [items]);
+
+  const projectColor = useCallback(
+    (item: ContentItem) => {
+      const p = (item as { project?: { id: string } | null }).project;
+      return p ? projectsInMonth.find((x) => x.id === p.id)?.color : undefined;
+    },
+    [projectsInMonth],
   );
 
   const counters = useMemo(() => ({
@@ -673,6 +700,20 @@ export function ContentCalendarTab({ clientId }: { clientId: string }) {
             <span><b className="text-fuchsia-600">{counters.extra}</b> extra</span>
             <span><b className="text-orange-600">{counters.carried}</b> carried</span>
           </div>
+          {/* v3: this view rolls up every project — planning happens there */}
+          {readOnly && projectsInMonth.length > 0 && (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {projectsInMonth.map((p) => (
+                <Link key={p.id} href={`/projects/${p.id}?tab=plan`}
+                  title={`Plan in ${p.name}`}
+                  className="inline-flex items-center gap-1.5 px-2 py-1 text-[11px] font-medium rounded-lg border transition-colors hover:bg-gray-50"
+                  style={{ borderColor: `${p.color}55`, color: p.color }}>
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ background: p.color }} />
+                  Plan in {p.name}
+                </Link>
+              ))}
+            </div>
+          )}
           <button
             title="Create a public review link listing every team-approved item this month"
             onClick={async () => {
@@ -690,10 +731,12 @@ export function ContentCalendarTab({ clientId }: { clientId: string }) {
             className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border border-indigo-300 text-indigo-600 rounded-lg hover:bg-indigo-50">
             <Share2 className="w-3.5 h-3.5" /> Share month
           </button>
-          <Button size="sm" icon={<Plus className="w-3.5 h-3.5" />}
-            onClick={() => setDialog({ open: true, date: selectedDay ?? null })}>
-            Add content
-          </Button>
+          {!readOnly && (
+            <Button size="sm" icon={<Plus className="w-3.5 h-3.5" />}
+              onClick={() => setDialog({ open: true, date: selectedDay ?? null })}>
+              Add content
+            </Button>
+          )}
         </div>
       </div>
 
@@ -762,6 +805,12 @@ export function ContentCalendarTab({ clientId }: { clientId: string }) {
                           title={`${i.creativeType.name}: ${i.topic} (${meta.label})`}
                           className={`w-full flex items-center gap-1 mb-0.5 px-1 py-0.5 rounded border text-left ${meta.chip} ${i.isAdHoc ? "border-dashed" : ""}`}
                         >
+                          {/* v3 roll-up: a colour bar says which project this
+                              belongs to without stealing room from the topic */}
+                          {readOnly && projectColor(i) && (
+                            <span className="w-0.5 h-3 rounded-full flex-shrink-0"
+                              style={{ background: projectColor(i) }} />
+                          )}
                           <span className="text-[10px] flex-shrink-0">{i.creativeType.icon ?? "✨"}</span>
                           <span className="text-[10px] truncate leading-tight flex-1">{i.topic}</span>
                           {i.isExtra && <span className="text-[8px] font-bold text-fuchsia-500">E</span>}
@@ -835,11 +884,13 @@ export function ContentCalendarTab({ clientId }: { clientId: string }) {
                 })}
               </ul>
             )}
-            <button
-              onClick={() => setDialog({ open: true, date: selectedDay })}
-              className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-indigo-600 border border-dashed border-indigo-300 rounded-lg hover:bg-indigo-50">
-              <Plus className="w-3.5 h-3.5" /> Add content
-            </button>
+            {!readOnly && (
+              <button
+                onClick={() => setDialog({ open: true, date: selectedDay })}
+                className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-indigo-600 border border-dashed border-indigo-300 rounded-lg hover:bg-indigo-50">
+                <Plus className="w-3.5 h-3.5" /> Add content
+              </button>
+            )}
           </div>
         )}
       </div>

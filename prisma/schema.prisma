@@ -119,6 +119,12 @@ enum ChangeRequestStatus {
   RESOLVED
 }
 
+// v3: the reviewer's verdict on one round of submitted work.
+enum ReviewDecision {
+  APPROVED
+  CHANGES_REQUESTED
+}
+
 // v2: content-item pipeline (every transition logged + timestamped)
 enum ContentStatus {
   PLANNED
@@ -301,6 +307,7 @@ model User {
   projectMembersAdded  ProjectMember[] @relation("ProjectMembersAdded")
   closedCycles         ProjectCycle[]  @relation("CyclesClosed")
   tasksToApprove       Task[]          @relation("TaskApprover")
+  taskReviews          TaskReview[]    @relation("TaskReviews")
 
   @@unique([organizationId, email])
   @@index([organizationId])
@@ -615,6 +622,7 @@ model Task {
   cycle             ProjectCycle? @relation(fields: [cycleId], references: [id], onDelete: SetNull)
   preferredAssignee User?       @relation("TaskPreferredAssignee", fields: [preferredAssigneeId], references: [id])
   deliveries    TaskDelivery[]
+  reviews       TaskReview[]
   changeRequests ChangeRequest[]
   manager      User?            @relation("TaskManager", fields: [managerId], references: [id])
   assignees    TaskAssignee[]
@@ -722,9 +730,18 @@ model ContentItem {
 }
 
 // v2: delivery proof recorded when a task is completed
+/// The proof that work was handed in.
+///
+/// v3 calls this a SUBMISSION (docs/V3_CONTEXT.md §3). It's the same concept
+/// v2 recorded as a delivery — how the work reached the reviewer, with a link,
+/// a file or just a note — so the model is reused rather than duplicated. The
+/// only addition is `revision`, because the same task can be submitted more
+/// than once when changes are requested.
 model TaskDelivery {
   id            String         @id @default(cuid())
   taskId        String
+  /// Which round this submission belongs to. 1 is the first hand-in.
+  revision      Int            @default(1)
   method        DeliveryMethod
   fileId        String?
   url           String?
@@ -736,8 +753,31 @@ model TaskDelivery {
   file        File? @relation("DeliveryFiles", fields: [fileId], references: [id])
   deliveredBy User? @relation("Deliveries", fields: [deliveredById], references: [id])
 
-  @@index([taskId])
+  @@index([taskId, revision])
   @@map("task_deliveries")
+}
+
+/// The reviewer's verdict on one round.
+///
+/// Supersedes ChangeRequest, which could only express "please change this"
+/// and had no way to record an approval. Existing ChangeRequest rows are
+/// migrated across; that table stays unused for one release.
+model TaskReview {
+  id           String         @id @default(cuid())
+  taskId       String
+  /// The round being judged — pairs with TaskDelivery.revision.
+  revision     Int            @default(1)
+  decision     ReviewDecision
+  /// Required when asking for changes; optional on an approval.
+  comments     String?
+  reviewedById String?
+  reviewedAt   DateTime       @default(now())
+
+  task       Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  reviewedBy User? @relation("TaskReviews", fields: [reviewedById], references: [id])
+
+  @@index([taskId, revision])
+  @@map("task_reviews")
 }
 
 // v2: "assign changes" — what to change, flips the task back to work

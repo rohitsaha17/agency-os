@@ -11,6 +11,7 @@ import { PriorityBadge } from "./PriorityBadge";
 import { CommentThread } from "./CommentThread";
 import { DependencyList } from "./DependencyList";
 import { TimeTracker } from "./TimeTracker";
+import { RoundHistory } from "@/components/tasks/RoundHistory";
 import { TaskUpdates } from "./TaskUpdates";
 import { TaskFiles } from "./TaskFiles";
 import { DeliveryDialog } from "./DeliveryDialog";
@@ -517,7 +518,24 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
             </div>
           )}
 
-          {tab === "updates"      && <TaskUpdates taskId={task.id} />}
+          {tab === "updates" && (
+            <div className="space-y-5">
+              {/* v3: the round trail comes first — it's the accountability
+                  the whole submit/review loop exists to produce. */}
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-2">
+                  Rounds
+                </p>
+                <RoundHistory taskId={task.id} />
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-2">
+                  Updates
+                </p>
+                <TaskUpdates taskId={task.id} />
+              </div>
+            </div>
+          )}
           {tab === "files"        && <TaskFiles taskId={task.id} projectId={projectId} />}
           {tab === "comments"     && <CommentThread taskId={task.id} />}
           {tab === "dependencies" && <DependencyList taskId={task.id} allTasks={allTasks.filter((t) => t.id !== task.id)} />}

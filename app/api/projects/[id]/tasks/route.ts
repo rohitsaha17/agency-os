@@ -4,7 +4,7 @@ import { requireAuth } from "@/lib/auth";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 import { notifyMany } from "@/lib/notify";
 import { logStatus } from "@/lib/audit";
-import { resolveRouting, notifyHeads } from "@/lib/task-routing";
+import { resolveRouting, notifyHeads, assignmentRequiresApproval } from "@/lib/task-routing";
 import type { Task } from "@/types";
 
 type Params = { params: Promise<{ id: string }> };
@@ -145,7 +145,8 @@ export async function POST(req: NextRequest, { params }: Params) {
     }
 
     // v2: preferred-assignee routing through the Head-of-Design queue
-    const routing = resolveRouting(user, preferredAssigneeId, assigneeIds);
+    const requireApproval = await assignmentRequiresApproval(user.organizationId);
+    const routing = resolveRouting(user, preferredAssigneeId, assigneeIds, requireApproval);
 
     // If parentId provided, verify it belongs to the same project (and thus org).
     if (parentId) {

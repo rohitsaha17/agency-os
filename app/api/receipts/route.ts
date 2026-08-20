@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
+import { requireCapability } from "@/lib/api-permissions";
 import { apiError, handleApiError, ApiError } from "@/lib/api-errors";
 import { checkRateLimit, WRITE_RATE_LIMITS } from "@/lib/rate-limit";
 import { canViewFinancials } from "@/lib/permissions";
@@ -14,6 +15,7 @@ const receiptInclude = {
 export async function GET(req: NextRequest) {
   try {
     const user = await requireAuth(req);
+    requireCapability(user, "invoices.manage");
     const { searchParams } = new URL(req.url);
     const clientId = searchParams.get("clientId") ?? undefined;
     const invoiceId = searchParams.get("invoiceId") ?? undefined;
@@ -43,6 +45,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const user = await requireAuth(req);
+    requireCapability(user, "invoices.manage");
     const rl = checkRateLimit(req, `receipts:create:${user.id}`, WRITE_RATE_LIMITS.light);
     if (!rl.allowed) return apiError("Too many requests", 429);
 

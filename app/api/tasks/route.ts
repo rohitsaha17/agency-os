@@ -5,7 +5,7 @@ import { handleApiError, ApiError } from "@/lib/api-errors";
 import { parsePagination, paginationMeta, DEFAULT_PAGE_SIZE } from "@/lib/pagination";
 import { logStatus } from "@/lib/audit";
 import { notifyMany } from "@/lib/notify";
-import { resolveRouting, notifyHeads } from "@/lib/task-routing";
+import { resolveRouting, notifyHeads, assignmentRequiresApproval } from "@/lib/task-routing";
 
 // GET /api/tasks — global tasks list with filters
 // Query params: projectId, clientId, status, priority, assigneeId, q (search), includeCompleted, page, pageSize
@@ -131,7 +131,8 @@ export async function POST(req: NextRequest) {
       if (count !== new Set(peopleIds).size) throw new ApiError("One or more users not found", 404);
     }
 
-    const routing = resolveRouting(user, preferredAssigneeId, assigneeIds);
+    const requireApproval = await assignmentRequiresApproval(user.organizationId);
+    const routing = resolveRouting(user, preferredAssigneeId, assigneeIds, requireApproval);
 
     const task = await prisma.task.create({
       data: {

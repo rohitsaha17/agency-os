@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, Component, type ReactNode } from "react";
+import { useState, useEffect, useCallback, useRef, Component, Fragment, type ReactNode } from "react";
 import {
   Building2, Users, Shield, Palette, Save, Plus,
   Trash2, Edit2, Check, X, Upload, RefreshCw, Eye,
   EyeOff, Mail, Phone, Globe, MapPin, DollarSign,
   Clock, FileText, ChevronDown, KeyRound, Loader2,
 } from "lucide-react";
-import type { CompanySettings, TeamUser } from "@/types";
+import type { CompanySettings, TeamUser, DesignationRole } from "@/types";
 import { useToast } from "@/components/ui/Toast";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 
@@ -16,28 +16,26 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
    ───────────────────────────────────────────────────────────── */
 type Tab = "company" | "letterhead" | "users" | "roles" | "creative-types" | "account";
 
-// v2: job labels (designation) — display/routing only, not permissions
-const DESIGNATION_OPTIONS: { value: string; label: string }[] = [
-  { value: "",               label: "No designation" },
-  { value: "SMM",            label: "Social Media Manager" },
-  { value: "DESIGNER",       label: "Designer" },
-  { value: "EDITOR",         label: "Editor" },
-  { value: "HEAD_OF_DESIGN", label: "Head of Design" },
-  { value: "PHOTOGRAPHER",   label: "Photographer" },
-  { value: "SME",            label: "SME" },
-  { value: "POC",            label: "POC" },
-  { value: "OTHER",          label: "Other" },
-];
+// v3: job labels come from the DesignationRole table — each agency creates
+// its own in the Designations section below, so there's no fixed list here.
 
 function initials(name: string) {
   return name.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase();
 }
 
+// v3: four permission tiers (docs/V3_CONTEXT.md §2). MEMBER is the retired
+// v2 tier, kept here so any un-migrated row still renders a sensible badge.
 const ROLE_LABELS: Record<string, { label: string; color: string; desc: string }> = {
+  OWNER:   { label: "Owner",   color: "text-purple-400 bg-purple-400/10 border-purple-400/20", desc: "The organization owner — full access, cannot be removed" },
   ADMIN:   { label: "Admin",   color: "text-red-400 bg-red-400/10 border-red-400/20",     desc: "Full system access — manage everything including users and settings" },
-  MANAGER: { label: "Manager", color: "text-amber-400 bg-amber-400/10 border-amber-400/20", desc: "Manage clients, projects, tasks and team assignments" },
-  MEMBER:  { label: "Member",  color: "text-sky-400 bg-sky-400/10 border-sky-400/20",     desc: "Work on assigned tasks and view relevant projects" },
+  MANAGER: { label: "Manager", color: "text-amber-400 bg-amber-400/10 border-amber-400/20", desc: "Clients, projects and money — everything except user management" },
+  SMM:     { label: "SMM",     color: "text-emerald-400 bg-emerald-400/10 border-emerald-400/20", desc: "Plans their own projects and reviews juniors' work — sees no money" },
+  TEAM:    { label: "Team",    color: "text-sky-400 bg-sky-400/10 border-sky-400/20",     desc: "Works assigned tasks and keeps their own reminders" },
+  MEMBER:  { label: "Member",  color: "text-gray-400 bg-gray-400/10 border-gray-400/20",  desc: "Retired v2 tier — migrated to Team" },
 };
+
+/** Roles that can be granted in the UI. OWNER is set at tenant creation. */
+const ASSIGNABLE_ROLES = ["ADMIN", "MANAGER", "SMM", "TEAM"] as const;
 
 const CURRENCIES = ["USD", "EUR", "GBP", "INR", "AUD", "CAD", "SGD", "AED", "JPY", "Other"];
 const TIMEZONES  = [
@@ -1062,10 +1060,11 @@ function UsersTab() {
   const toast = useToast();
   const confirm = useConfirm();
   const [users, setUsers]     = useState<TeamUser[]>([]);
+  const [designations, setDesignations] = useState<DesignationRole[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [editId, setEditId]   = useState<string | null>(null);
-  const [newForm, setNewForm] = useState({ name: "", email: "", role: "MEMBER", designation: "" });
+  const [newForm, setNewForm] = useState({ name: "", email: "", role: "TEAM", designationId: "" });
   const [saving, setSaving]   = useState(false);
   const [error, setError]     = useState("");
 
@@ -1075,7 +1074,12 @@ function UsersTab() {
     setLoading(false);
   }, []);
 
-  useEffect(() => { fetchUsers(); }, [fetchUsers]);
+  const fetchDesignations = useCallback(async () => {
+    const res = await fetch("/api/designations");
+    if (res.ok) setDesignations(await res.json());
+  }, []);
+
+  useEffect(() => { fetchUsers(); fetchDesignations(); }, [fetchUsers, fetchDesignations]);
 
   const handleAdd = async () => {
     if (!newForm.name.trim() || !newForm.email.trim()) { setError("Name and email are required"); return; }
@@ -1084,12 +1088,12 @@ function UsersTab() {
       const res = await fetch("/api/users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...newForm, designation: newForm.designation || null }),
+        body: JSON.stringify({ ...newForm, designationId: newForm.designationId || null }),
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error?.message ?? "Failed"); return; }
       setUsers((p) => [...p, data]);
-      setNewForm({ name: "", email: "", role: "MEMBER", designation: "" });
+      setNewForm({ name: "", email: "", role: "TEAM", designationId: "" });
       setShowAdd(false);
       toast.success(`${data.name} added to team`);
     } finally { setSaving(false); }
@@ -1110,11 +1114,11 @@ function UsersTab() {
     }
   };
 
-  const handleDesignationChange = async (userId: string, designation: string) => {
+  const handleDesignationChange = async (userId: string, designationId: string) => {
     const res = await fetch(`/api/users/${userId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ designation: designation || null }),
+      body: JSON.stringify({ designationId: designationId || null }),
     });
     if (res.ok) {
       const updated = await res.json();
@@ -1191,20 +1195,21 @@ function UsersTab() {
                   onChange={(e) => setNewForm((p) => ({ ...p, role: e.target.value }))}
                   className="w-full appearance-none px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
                 >
-                  <option value="ADMIN">Admin</option>
-                  <option value="MANAGER">Manager</option>
-                  <option value="MEMBER">Member</option>
+                  {ASSIGNABLE_ROLES.map((r) => (
+                    <option key={r} value={r}>{ROLE_LABELS[r].label}</option>
+                  ))}
                 </select>
                 <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
               </div>
               <div className="relative">
                 <select
-                  value={newForm.designation}
-                  onChange={(e) => setNewForm((p) => ({ ...p, designation: e.target.value }))}
+                  value={newForm.designationId}
+                  onChange={(e) => setNewForm((p) => ({ ...p, designationId: e.target.value }))}
                   className="w-full appearance-none px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
                 >
-                  {DESIGNATION_OPTIONS.map((d) => (
-                    <option key={d.value} value={d.value}>{d.label}</option>
+                  <option value="">No designation</option>
+                  {designations.filter((d) => d.isActive).map((d) => (
+                    <option key={d.id} value={d.id}>{d.name}</option>
                   ))}
                 </select>
                 <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
@@ -1239,6 +1244,7 @@ function UsersTab() {
               <UserRow
                 key={user.id}
                 user={user}
+                designations={designations}
                 onRoleChange={handleRoleChange}
                 onDesignationChange={handleDesignationChange}
                 onToggleActive={handleToggleActive}
@@ -1255,6 +1261,7 @@ function UsersTab() {
               <UserRow
                 key={user.id}
                 user={user}
+                designations={designations}
                 onRoleChange={handleRoleChange}
                 onDesignationChange={handleDesignationChange}
                 onToggleActive={handleToggleActive}
@@ -1263,19 +1270,151 @@ function UsersTab() {
           </div>
         </SectionCard>
       )}
+
+      {/* v3: job labels the agency defines for itself */}
+      <DesignationsSection
+        designations={designations}
+        onChanged={() => { fetchDesignations(); fetchUsers(); }}
+      />
     </div>
   );
 }
 
+/* ─────────────────────────────────────────────────────────────
+   v3: Designations — the agency's own job labels.
+   A designation is a JOB, never a permission (that's Role).
+   ───────────────────────────────────────────────────────────── */
+function DesignationsSection({
+  designations, onChanged,
+}: {
+  designations: DesignationRole[];
+  onChanged: () => void;
+}) {
+  const toast = useToast();
+  const confirm = useConfirm();
+  const [name, setName] = useState("");
+  const [assignable, setAssignable] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const add = async () => {
+    if (!name.trim()) return;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/designations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, canBeAssignedWork: assignable }),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast.error(data.error?.message ?? "Failed to add"); return; }
+      setName(""); setAssignable(true);
+      onChanged();
+      toast.success(`${data.name} added`);
+    } finally { setSaving(false); }
+  };
+
+  const patch = async (id: string, body: Record<string, unknown>) => {
+    const res = await fetch(`/api/designations/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (res.ok) onChanged();
+    else toast.error("Failed to update designation");
+  };
+
+  const remove = async (d: DesignationRole) => {
+    const holders = d._count?.users ?? 0;
+    const ok = await confirm({
+      title: `Remove "${d.name}"?`,
+      message: holders > 0
+        ? `${holders} ${holders === 1 ? "person holds" : "people hold"} this designation, so it will be deactivated rather than deleted — their job title stays intact.`
+        : "Nobody holds this designation, so it will be deleted.",
+      confirmLabel: holders > 0 ? "Deactivate" : "Delete",
+      variant: "warning",
+    });
+    if (!ok) return;
+    const res = await fetch(`/api/designations/${d.id}`, { method: "DELETE" });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok) { onChanged(); toast.success(data.message ?? "Designation removed"); }
+    else toast.error("Failed to remove designation");
+  };
+
+  return (
+    <SectionCard
+      title="Designations"
+      desc="The job titles your agency uses — Editor, Photographer, and so on. A designation decides who appears in assignment lists and reports; it never grants permissions. That's the Role."
+    >
+      <div className="flex flex-col sm:flex-row gap-2 mb-4">
+        <Input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") add(); }}
+          placeholder="e.g. Motion Designer"
+        />
+        <label className="flex items-center gap-2 text-xs text-gray-600 whitespace-nowrap px-1">
+          <input type="checkbox" checked={assignable}
+            onChange={(e) => setAssignable(e.target.checked)}
+            className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+          Can be assigned work
+        </label>
+        <button onClick={add} disabled={saving || !name.trim()}
+          className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-500 disabled:opacity-50 transition-colors whitespace-nowrap">
+          <Plus className="w-3.5 h-3.5" /> Add
+        </button>
+      </div>
+
+      {designations.length === 0 ? (
+        <p className="text-xs text-gray-400 py-4 text-center">No designations yet.</p>
+      ) : (
+        <div className="space-y-2">
+          {designations.map((d) => (
+            <div key={d.id}
+              className={`flex items-center gap-3 p-3 rounded-xl border border-gray-100 transition-colors ${d.isActive ? "hover:bg-gray-50" : "bg-gray-50 opacity-60"}`}>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-gray-800 truncate">{d.name}</p>
+                <p className="text-xs text-gray-400">
+                  {(d._count?.users ?? 0)} {(d._count?.users ?? 0) === 1 ? "person" : "people"}
+                  {!d.canBeAssignedWork && " · not assignable"}
+                </p>
+              </div>
+              <button
+                onClick={() => patch(d.id, { canBeAssignedWork: !d.canBeAssignedWork })}
+                title="Toggle whether work can be assigned to this designation"
+                className={`text-xs px-2.5 py-1 rounded-lg border transition-colors ${
+                  d.canBeAssignedWork
+                    ? "text-emerald-600 border-emerald-200 bg-emerald-50 hover:bg-emerald-100"
+                    : "text-gray-500 border-gray-200 hover:bg-gray-100"
+                }`}>
+                {d.canBeAssignedWork ? "Assignable" : "Advisory"}
+              </button>
+              <button
+                onClick={() => patch(d.id, { isActive: !d.isActive })}
+                className="text-xs px-2.5 py-1 rounded-lg border text-gray-500 border-gray-200 hover:bg-gray-100 transition-colors">
+                {d.isActive ? "Active" : "Inactive"}
+              </button>
+              <button onClick={() => remove(d)} title="Remove"
+                className="text-gray-300 hover:text-red-500 transition-colors">
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </SectionCard>
+  );
+}
+
 function UserRow({
-  user, onRoleChange, onDesignationChange, onToggleActive,
+  user, designations, onRoleChange, onDesignationChange, onToggleActive,
 }: {
   user: TeamUser;
+  designations: DesignationRole[];
   onRoleChange: (id: string, role: string) => void;
-  onDesignationChange: (id: string, designation: string) => void;
+  onDesignationChange: (id: string, designationId: string) => void;
   onToggleActive: (id: string, isActive: boolean) => void;
 }) {
-  const badge = ROLE_LABELS[user.role] ?? ROLE_LABELS.MEMBER;
+  const badge = ROLE_LABELS[user.role] ?? ROLE_LABELS.TEAM;
 
   return (
     <div className={`flex items-center gap-3 p-3 rounded-xl border transition-colors group ${
@@ -1296,14 +1435,15 @@ function UserRow({
       <div className="flex-shrink-0 hidden sm:block">
         <div className="relative">
           <select
-            value={user.designation ?? ""}
+            value={user.jobTitle?.id ?? ""}
             onChange={(e) => onDesignationChange(user.id, e.target.value)}
             disabled={!user.isActive}
             className="appearance-none text-xs font-medium px-2.5 py-1 rounded-full border cursor-pointer focus:outline-none focus:ring-1 focus:ring-indigo-500 pr-6 bg-gray-50 text-gray-600 border-gray-200"
             title="Designation"
           >
-            {DESIGNATION_OPTIONS.map((d) => (
-              <option key={d.value} value={d.value}>{d.label}</option>
+            <option value="">No designation</option>
+            {designations.filter((d) => d.isActive).map((d) => (
+              <option key={d.id} value={d.id}>{d.name}</option>
             ))}
           </select>
           <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 pointer-events-none opacity-60" />
@@ -1319,9 +1459,9 @@ function UserRow({
             disabled={!user.isActive}
             className={`appearance-none text-xs font-medium px-2.5 py-1 rounded-full border cursor-pointer focus:outline-none focus:ring-1 focus:ring-indigo-500 pr-6 ${badge.color}`}
           >
-            <option value="ADMIN">Admin</option>
-            <option value="MANAGER">Manager</option>
-            <option value="MEMBER">Member</option>
+            {ASSIGNABLE_ROLES.map((r) => (
+              <option key={r} value={r}>{ROLE_LABELS[r].label}</option>
+            ))}
           </select>
           <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 pointer-events-none opacity-60" />
         </div>
@@ -1342,71 +1482,178 @@ function UserRow({
 /* ─────────────────────────────────────────────────────────────
    Tab: Roles & Permissions
    ───────────────────────────────────────────────────────────── */
-const PERMISSIONS: { area: string; admin: boolean; manager: boolean; member: boolean }[] = [
-  { area: "View Dashboard",             admin: true,  manager: true,  member: true  },
-  { area: "View Clients",               admin: true,  manager: true,  member: true  },
-  { area: "Create / Edit Clients",      admin: true,  manager: true,  member: false },
-  { area: "Delete Clients",             admin: true,  manager: false, member: false },
-  { area: "View Projects",              admin: true,  manager: true,  member: true  },
-  { area: "Create / Edit Projects",     admin: true,  manager: true,  member: false },
-  { area: "Delete Projects",            admin: true,  manager: false, member: false },
-  { area: "View & Manage Tasks",        admin: true,  manager: true,  member: true  },
-  { area: "Create / Assign Tasks",      admin: true,  manager: true,  member: false },
-  { area: "View Invoices",              admin: true,  manager: true,  member: false },
-  { area: "Manage Expenses",            admin: true,  manager: true,  member: false },
-  { area: "Manage Contracts",           admin: true,  manager: true,  member: false },
-  { area: "Manage Vendors",             admin: true,  manager: true,  member: false },
-  { area: "View Files",                 admin: true,  manager: true,  member: true  },
-  { area: "Upload / Delete Files",      admin: true,  manager: true,  member: true  },
-  { area: "Manage Users",               admin: true,  manager: false, member: false },
-  { area: "Change Organization Settings", admin: true, manager: false, member: false },
-  { area: "View Messages / Channels",   admin: true,  manager: true,  member: true  },
-  { area: "Create Channels",            admin: true,  manager: true,  member: false },
-];
+/* ─────────────────────────────────────────────────────────────
+   Tab: Roles & Permissions
+
+   v3: rendered from /api/permissions/matrix, which serialises the very
+   table lib/permissions.ts enforces. The screen therefore cannot drift
+   from the code — change a capability there and this updates itself.
+   ───────────────────────────────────────────────────────────── */
+interface MatrixRow {
+  capability: string;
+  label: string;
+  group: string;
+  allowed: Record<string, boolean>;
+}
 
 function RolesTab() {
+  const [roles, setRoles] = useState<string[]>([]);
+  const [rows, setRows] = useState<MatrixRow[]>([]);
+  const [assignScope, setAssignScope] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/permissions/matrix")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d) { setRoles(d.roles); setRows(d.rows); setAssignScope(d.assignScope); }
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  const groups = rows.reduce<Record<string, MatrixRow[]>>((acc, r) => {
+    (acc[r.group] = acc[r.group] ?? []).push(r);
+    return acc;
+  }, {});
+
   return (
     <div className="space-y-6">
       <SectionCard
         title="Role Permissions"
-        desc="Reference guide for what each role can do across the platform. Roles are assigned per user in the Users tab."
+        desc="What each role can do. Generated from the permission layer the API enforces, so this table is always the truth rather than a description of it."
       >
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-200">
-                <th className="text-left text-xs font-semibold text-gray-500 py-2.5 pr-4 w-1/2">Permission Area</th>
-                {(["Admin", "Manager", "Member"] as const).map((role) => (
-                  <th key={role} className="text-center text-xs font-semibold py-2.5 px-4 w-1/6">
-                    <span className={`px-2.5 py-1 rounded-full border text-xs font-medium ${ROLE_LABELS[role.toUpperCase()].color}`}>
-                      {role}
-                    </span>
-                  </th>
+        {loading ? (
+          <div className="space-y-2">
+            {[1, 2, 3, 4, 5].map((i) => <div key={i} className="h-8 bg-gray-100 rounded animate-pulse" />)}
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-200">
+                  <th className="text-left text-xs font-semibold text-gray-500 py-2.5 pr-4">Capability</th>
+                  {roles.map((role) => (
+                    <th key={role} className="text-center text-xs font-semibold py-2.5 px-3">
+                      <span className={`px-2.5 py-1 rounded-full border text-xs font-medium whitespace-nowrap ${ROLE_LABELS[role]?.color ?? ""}`}>
+                        {ROLE_LABELS[role]?.label ?? role}
+                      </span>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(groups).map(([group, groupRows]) => (
+                  <Fragment key={group}>
+                    <tr className="bg-gray-50/70">
+                      <td colSpan={roles.length + 1}
+                        className="py-1.5 pr-4 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+                        {group}
+                      </td>
+                    </tr>
+                    {groupRows.map((row) => (
+                      <tr key={row.capability} className="border-b border-gray-100">
+                        <td className="py-2.5 pr-4 text-xs text-gray-700">
+                          {row.label}
+                          <span className="block text-[10px] text-gray-300 font-mono">{row.capability}</span>
+                        </td>
+                        {roles.map((role) => (
+                          <td key={role} className="text-center py-2.5 px-3">
+                            {row.allowed[role]
+                              ? <Check className="w-4 h-4 text-emerald-500 mx-auto" />
+                              : <X className="w-4 h-4 text-gray-200 mx-auto" />}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </Fragment>
                 ))}
-              </tr>
-            </thead>
-            <tbody>
-              {PERMISSIONS.map((row, i) => (
-                <tr key={i} className={`border-b border-gray-100 ${i % 2 === 0 ? "" : "bg-gray-50/50"}`}>
-                  <td className="py-2.5 pr-4 text-xs text-gray-700">{row.area}</td>
-                  {([row.admin, row.manager, row.member] as boolean[]).map((allowed, j) => (
-                    <td key={j} className="text-center py-2.5 px-4">
-                      {allowed
-                        ? <Check className="w-4 h-4 text-emerald-500 mx-auto" />
-                        : <X className="w-4 h-4 text-gray-300 mx-auto" />
-                      }
+                <tr className="bg-gray-50/70">
+                  <td colSpan={roles.length + 1}
+                    className="py-1.5 pr-4 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+                    Delegation
+                  </td>
+                </tr>
+                <tr>
+                  <td className="py-2.5 pr-4 text-xs text-gray-700">Can assign work to</td>
+                  {roles.map((role) => (
+                    <td key={role} className="text-center py-2.5 px-3 text-[11px] text-gray-500">
+                      {assignScope[role] ?? "—"}
                     </td>
                   ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </tbody>
+            </table>
+          </div>
+        )}
         <p className="text-[11px] text-gray-400 mt-4">
-          * Role enforcement is implemented at the API level. Custom role editing coming in a future update.
+          Enforced server-side in every API route. Hiding things in the interface is a second layer, never the only one.
         </p>
       </SectionCard>
+
+      <AssignmentApprovalCard />
     </div>
+  );
+}
+
+/* v3: the Head-of-Design gate. Off by default — assigning a task normally
+   reaches the assignee straight away, and the Approvals queue is reserved
+   for reviewing submitted work. */
+function AssignmentApprovalCard() {
+  const toast = useToast();
+  const [enabled, setEnabled] = useState<boolean | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/settings/company")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setEnabled(d ? !!d.requireAssignmentApproval : false))
+      .catch(() => setEnabled(false));
+  }, []);
+
+  const toggle = async () => {
+    const next = !enabled;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/settings/company", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requireAssignmentApproval: next }),
+      });
+      if (!res.ok) { toast.error("Failed to update setting"); return; }
+      setEnabled(next);
+      toast.success(next ? "Assignments now need approval" : "Assignments go straight to the assignee");
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <SectionCard
+      title="Assignment Approval"
+      desc="Whether a Head of Design signs off on who gets a task before it reaches them."
+    >
+      <div className="flex items-center justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-sm text-gray-800">Require Head-of-Design approval for assignments</p>
+          <p className="text-xs text-gray-400 mt-0.5">
+            {enabled
+              ? "On — naming an assignee sends the task to the Head of Design queue first."
+              : "Off — naming an assignee hands them the task immediately. Approvals stay for reviewing submitted work."}
+          </p>
+        </div>
+        <button
+          onClick={toggle}
+          disabled={enabled === null || saving}
+          role="switch"
+          aria-checked={!!enabled}
+          className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 disabled:opacity-50 ${
+            enabled ? "bg-indigo-600" : "bg-gray-300"
+          }`}
+        >
+          <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
+            enabled ? "translate-x-5" : ""
+          }`} />
+        </button>
+      </div>
+    </SectionCard>
   );
 }
 

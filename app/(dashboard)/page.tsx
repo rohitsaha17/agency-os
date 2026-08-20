@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useCurrentUser } from "@/lib/useCurrentUser";
+import { can } from "@/lib/permissions";
 import { formatMoney } from "@/lib/money";
 import {
   AlertCircle, Clock, CheckCircle2, Ban, FolderKanban,
@@ -22,7 +23,7 @@ interface DashboardStats {
   completionRate: number;
   monthCompletionRate: number;
   completedThisMonth: number;
-  expensesThisMonth: number | null; // null when the caller is a MEMBER (v2 strip)
+  expensesThisMonth?: number | null; // absent when the caller lacks financials.view
   expenseCount: number;
   pendingExpenses: number;
 }
@@ -508,8 +509,9 @@ function MetricRing({ value, label, color }: { value: number; label: string; col
 
 export default function DashboardPage() {
   const { user: currentUser } = useCurrentUser();
-  // v2: MEMBERs never see money — cards hidden here, values stripped server-side
-  const canSeeMoney = !!currentUser && currentUser.role !== "MEMBER";
+  // v3: money cards need financials.view. The API strips the values too, so
+  // hiding them here is the second layer, never the only one.
+  const canSeeMoney = can(currentUser, "financials.view");
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -760,7 +762,7 @@ export default function DashboardPage() {
             color={stats.filesInReview > 0 ? "bg-sky-50" : "bg-gray-50"}
             href="/files"
           />
-          {/* v2: money cards are hidden from MEMBERs (API also strips values) */}
+          {/* v3: money cards need financials.view (API also strips values) */}
           {canSeeMoney && (
             <StatCard
               icon={<Receipt className="w-5 h-5 text-amber-600" />}

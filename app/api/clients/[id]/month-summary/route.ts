@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
+import { jsonFor } from "@/lib/api-permissions";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 import { computeMonthSummary } from "@/lib/quota";
 import { canViewFinancials } from "@/lib/permissions";
@@ -27,7 +28,7 @@ export async function GET(req: NextRequest, { params }: Params) {
       summary.packages = summary.packages.map((p) => ({ ...p, billingAmount: null }));
       if (summary.package) summary.package = { ...summary.package, billingAmount: null };
     }
-    return NextResponse.json(summary);
+    return jsonFor(user, summary);
   } catch (error) {
     return handleApiError(error, "GET /api/clients/[id]/month-summary");
   }

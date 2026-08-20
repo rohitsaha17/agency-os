@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, requireRole } from "@/lib/auth";
+import { requireCapability } from "@/lib/api-permissions";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 
 const MONTH_NAMES = [
@@ -17,6 +18,7 @@ const MONTH_NAMES = [
 export async function GET(req: NextRequest) {
   try {
     const user = await requireAuth(req);
+    requireCapability(user, "invoices.manage");
     requireRole(user, ["ADMIN", "MANAGER"]);
     const sp = req.nextUrl.searchParams;
     const clientId = sp.get("clientId");

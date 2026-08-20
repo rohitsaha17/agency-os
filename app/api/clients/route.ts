@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
+import { jsonFor } from "@/lib/api-permissions";
 import { apiError, handleApiError, ApiError } from "@/lib/api-errors";
 import { parsePagination, paginationMeta } from "@/lib/pagination";
 import { checkRateLimit, WRITE_RATE_LIMITS } from "@/lib/rate-limit";
-import { canViewContacts } from "@/lib/permissions";
+import { canViewContacts, can } from "@/lib/permissions";
 
 // GET /api/clients — list all clients with optional search + status filter
 export async function GET(req: NextRequest) {
@@ -16,8 +17,16 @@ export async function GET(req: NextRequest) {
     const status = searchParams.get("status") ?? undefined;
     const pagination = parsePagination(searchParams);
 
+    // v3: a junior sees only the clients they actually have work on
+    // (docs/V3_CONTEXT.md §2 — "no Clients list access beyond what they're
+    // assigned to"). Everyone above TEAM sees the whole book.
+    const scopedToMyWork = !can(user, "clients.manage") && !can(user, "content.plan");
+
     const where = {
       organizationId: user.organizationId,
+      ...(scopedToMyWork && {
+        tasks: { some: { deletedAt: null, assignees: { some: { userId: user.id } } } },
+      }),
       ...(search && {
         OR: [
           { name: { contains: search, mode: "insensitive" as const } },
@@ -50,12 +59,12 @@ export async function GET(req: NextRequest) {
       : clients.map((c) => ({ ...c, contacts: [], email: null, phone: null }));
 
     if (pagination.paginated) {
-      return NextResponse.json({
+      return jsonFor(user, {
         data: visible,
         pagination: paginationMeta(pagination, total),
       });
     }
-    return NextResponse.json(visible);
+    return jsonFor(user, visible);
   } catch (error) {
     return handleApiError(error, "GET /api/clients");
   }
@@ -139,7 +148,7 @@ export async function POST(req: NextRequest) {
       });
     });
 
-    return NextResponse.json(client, { status: 201 });
+    return jsonFor(user, client, { status: 201 });
   } catch (error) {
     return handleApiError(error, "POST /api/clients");
   }

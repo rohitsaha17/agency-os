@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, requireRole } from "@/lib/auth";
+import { requireCapability } from "@/lib/api-permissions";
 import { apiError, handleApiError, ApiError } from "@/lib/api-errors";
 import { checkRateLimit, WRITE_RATE_LIMITS } from "@/lib/rate-limit";
 
@@ -15,6 +16,7 @@ const INCLUDE = {
 export async function GET(req: NextRequest, { params }: Params) {
   try {
     const user = await requireAuth(req);
+    requireCapability(user, "invoices.manage");
     const { id } = await params;
 
     const invoice = await prisma.invoice.findFirst({
@@ -33,6 +35,7 @@ export async function GET(req: NextRequest, { params }: Params) {
 export async function PATCH(req: NextRequest, { params }: Params) {
   try {
     const user = await requireAuth(req);
+    requireCapability(user, "invoices.manage");
 
     const rl = checkRateLimit(req, `invoices:update:${user.id}`, WRITE_RATE_LIMITS.light);
     if (!rl.allowed) return apiError("Too many requests, please slow down", 429);
@@ -94,6 +97,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 export async function DELETE(req: NextRequest, { params }: Params) {
   try {
     const user = await requireAuth(req);
+    requireCapability(user, "invoices.manage");
     requireRole(user, ["ADMIN", "MANAGER"]);
     const { id } = await params;
 

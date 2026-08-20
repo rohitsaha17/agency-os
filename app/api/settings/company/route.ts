@@ -33,6 +33,7 @@ export async function PATCH(req: NextRequest) {
       letterheadLogoUrl, letterheadHeader, letterheadFooter,
       letterheadAddress, letterheadPhone, letterheadEmail,
       letterheadWebsite, letterheadColor, letterheadTemplate, letterheadConfig,
+      requireAssignmentApproval,
     } = body;
 
     const settings = await prisma.organization.update({
@@ -59,6 +60,10 @@ export async function PATCH(req: NextRequest) {
         ...(letterheadColor    !== undefined && { letterheadColor }),
         ...(letterheadTemplate !== undefined && { letterheadTemplate }),
         ...(letterheadConfig   !== undefined && { letterheadConfig }),
+        // v3: the Head-of-Design assignment gate, off by default
+        ...(requireAssignmentApproval !== undefined && {
+          requireAssignmentApproval: !!requireAssignmentApproval,
+        }),
       },
     });
 

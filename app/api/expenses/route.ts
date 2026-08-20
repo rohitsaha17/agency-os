@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
+import { jsonFor, requireCapability } from "@/lib/api-permissions";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 import { canViewFinancials } from "@/lib/permissions";
 
@@ -13,6 +14,8 @@ const expenseInclude = {
 export async function GET(req: NextRequest) {
   try {
     const user = await requireAuth(req);
+    // v3: juniors have neither expenses.create nor financials.view
+    requireCapability(user, "expenses.create");
     const { searchParams } = new URL(req.url);
     const projectId     = searchParams.get("projectId");
     const clientId      = searchParams.get("clientId");
@@ -51,10 +54,10 @@ export async function GET(req: NextRequest) {
 
     // v2: amounts never reach MEMBER clients (server-side strip)
     if (!canViewFinancials(user)) {
-      return NextResponse.json(expenses.map((e) => ({ ...e, amount: null })));
+      return jsonFor(user, expenses.map((e) => ({ ...e, amount: null })));
     }
 
-    return NextResponse.json(expenses);
+    return jsonFor(user, expenses);
   } catch (error) {
     return handleApiError(error, "GET /api/expenses");
   }
@@ -63,6 +66,8 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const user = await requireAuth(req);
+    // v3: juniors have neither expenses.create nor financials.view
+    requireCapability(user, "expenses.create");
     const body = await req.json();
     const {
       title, description, category, amount, currency,
@@ -108,7 +113,7 @@ export async function POST(req: NextRequest) {
       },
       include: expenseInclude,
     });
-    return NextResponse.json(expense, { status: 201 });
+    return jsonFor(user, expense, { status: 201 });
   } catch (error) {
     return handleApiError(error, "POST /api/expenses");
   }

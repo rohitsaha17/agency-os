@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
+import { requireCapability } from "@/lib/api-permissions";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 
 type Params = { params: Promise<{ id: string }> };
@@ -13,6 +14,7 @@ const receiptInclude = {
 export async function GET(req: NextRequest, { params }: Params) {
   try {
     const user = await requireAuth(req);
+    requireCapability(user, "invoices.manage");
     const { id } = await params;
     const receipt = await prisma.receipt.findFirst({
       where: { id, organizationId: user.organizationId },
@@ -28,6 +30,7 @@ export async function GET(req: NextRequest, { params }: Params) {
 export async function PATCH(req: NextRequest, { params }: Params) {
   try {
     const user = await requireAuth(req);
+    requireCapability(user, "invoices.manage");
     const { id } = await params;
 
     const existing = await prisma.receipt.findFirst({
@@ -74,6 +77,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 export async function DELETE(req: NextRequest, { params }: Params) {
   try {
     const user = await requireAuth(req);
+    requireCapability(user, "invoices.manage");
     const { id } = await params;
 
     const existing = await prisma.receipt.findFirst({

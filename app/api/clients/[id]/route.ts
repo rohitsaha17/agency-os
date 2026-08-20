@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
+import { jsonFor } from "@/lib/api-permissions";
 import { apiError, handleApiError, ApiError } from "@/lib/api-errors";
 import { canViewContacts } from "@/lib/permissions";
 
@@ -34,7 +35,7 @@ export async function GET(req: NextRequest, { params }: Params) {
 
     // v2: MEMBERs never receive client contact people or contact fields.
     if (!canViewContacts(user)) {
-      return NextResponse.json({
+      return jsonFor(user, {
         ...client,
         contacts: [],
         email: null,
@@ -42,7 +43,7 @@ export async function GET(req: NextRequest, { params }: Params) {
       });
     }
 
-    return NextResponse.json(client);
+    return jsonFor(user, client);
   } catch (error) {
     return handleApiError(error, "GET /api/clients/[id]");
   }
@@ -158,7 +159,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       });
     });
 
-    return NextResponse.json(result);
+    return jsonFor(user, result);
   } catch (error: unknown) {
     if ((error as { code?: string }).code === "P2025") {
       return apiError("Client not found", 404);
@@ -185,7 +186,7 @@ export async function DELETE(req: NextRequest, { params }: Params) {
       where: { id },
       data: { status: "ARCHIVED" },
     });
-    return NextResponse.json({ success: true });
+    return jsonFor(user, { success: true });
   } catch (error: unknown) {
     if ((error as { code?: string }).code === "P2025") {
       return apiError("Client not found", 404);

@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import type { CalendarEvent, ContentStatus, Task } from "@/types";
 import { useCurrentUser } from "@/lib/useCurrentUser";
+import { can } from "@/lib/permissions";
 import { Button } from "@/components/ui/Button";
 import { TaskModal } from "@/components/tasks/TaskModal";
 import { MonthGrid, MONTH_NAMES, isSameDay } from "@/components/calendar/MonthGrid";
@@ -316,7 +317,7 @@ export default function CalendarPage() {
               {items.length} item{items.length !== 1 ? "s" : ""}
               {activeClientName ? ` · ${activeClientName}` : " · all clients"}
               {activeFilterCount > 0 && ` · ${activeFilterCount} filter${activeFilterCount !== 1 ? "s" : ""}`}
-              {currentUser?.role === "MEMBER" && " · your linked work"}
+              {!can(currentUser, "clients.manage") && " · your linked work"}
             </p>
           </div>
 

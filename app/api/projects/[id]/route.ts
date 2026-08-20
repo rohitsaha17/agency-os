@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, requireRole } from "@/lib/auth";
+import { jsonFor } from "@/lib/api-permissions";
 import { apiError, handleApiError, ApiError } from "@/lib/api-errors";
 import { checkRateLimit, WRITE_RATE_LIMITS } from "@/lib/rate-limit";
 import { logStatus } from "@/lib/audit";
@@ -31,7 +32,7 @@ export async function GET(req: NextRequest, { params }: Params) {
 
     // v2: money never reaches MEMBER clients
     const showFinancials = canViewFinancials(user);
-    return NextResponse.json({
+    return jsonFor(user, {
       ...project,
       budget: showFinancials ? project.budget : null,
       progress: total > 0 ? Math.round((done / total) * 100) : 0,
@@ -117,7 +118,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       prisma.task.count({ where: { projectId: id, status: "DONE", deletedAt: null } }),
     ]);
 
-    return NextResponse.json({
+    return jsonFor(user, {
       ...project,
       progress: total > 0 ? Math.round((done / total) * 100) : 0,
     });
@@ -151,7 +152,7 @@ export async function DELETE(req: NextRequest, { params }: Params) {
       where: { id },
       data: { status: "CANCELLED" },
     });
-    return NextResponse.json({ success: true });
+    return jsonFor(user, { success: true });
   } catch (error: unknown) {
     if ((error as { code?: string }).code === "P2025") {
       return apiError("Project not found", 404);

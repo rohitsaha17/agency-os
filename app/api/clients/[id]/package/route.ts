@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, requireRole } from "@/lib/auth";
+import { jsonFor } from "@/lib/api-permissions";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 import { canViewFinancials } from "@/lib/permissions";
 
@@ -31,7 +32,7 @@ export async function GET(req: NextRequest, { params }: Params) {
     });
     const showMoney = canViewFinancials(user);
     const actives = packages.filter((p) => p.isActive);
-    return NextResponse.json({
+    return jsonFor(user, {
       actives: actives.map((p) => strip(p, showMoney)),
       // legacy shape kept for any older callers
       active: strip(actives[0] ?? null, showMoney),
@@ -91,7 +92,7 @@ export async function POST(req: NextRequest, { params }: Params) {
         include: { quotas: { include: { creativeType: { select: { id: true, name: true, icon: true } } } } },
       });
     });
-    return NextResponse.json(created, { status: 201 });
+    return jsonFor(user, created, { status: 201 });
   } catch (error) {
     return handleApiError(error, "POST /api/clients/[id]/package");
   }
@@ -117,7 +118,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       data: { isActive: !!isActive },
       include: { quotas: { include: { creativeType: { select: { id: true, name: true, icon: true } } } } },
     });
-    return NextResponse.json(strip(updated, canViewFinancials(user)));
+    return jsonFor(user, strip(updated, canViewFinancials(user)));
   } catch (error) {
     return handleApiError(error, "PATCH /api/clients/[id]/package");
   }

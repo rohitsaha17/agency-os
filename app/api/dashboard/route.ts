@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
+import { jsonFor } from "@/lib/api-permissions";
 import { handleApiError } from "@/lib/api-errors";
 import { canViewFinancials } from "@/lib/permissions";
 
@@ -373,7 +374,7 @@ export async function GET(req: NextRequest) {
 
     // ── Response ──────────────────────────────────────────────
 
-    return NextResponse.json({
+    return jsonFor(user, {
       generatedAt: now.toISOString(),
       currency: orgSettings?.currency ?? "USD",
 

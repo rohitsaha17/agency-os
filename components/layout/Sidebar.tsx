@@ -15,36 +15,43 @@ import { BrandLogo } from "@/components/ui/BrandLogo";
 import { useTheme } from "@/components/providers/ThemeProvider";
 import { GlobalSearch } from "@/components/ui/GlobalSearch";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
+import { can, type Capability } from "@/lib/permissions";
 
 /* ─────────────────────────────────────────────────────────────
    Nav structure
    ───────────────────────────────────────────────────────────── */
-const navItems = [
+// v3: every entry names the capability that reveals it, so the nav can't
+// drift from what the API actually allows (docs/V3_CONTEXT.md §2). `need:
+// null` means "anyone signed in". The server is still the real gate.
+const navItems: {
+  group: string;
+  links: { href: string; label: string; icon: typeof Users; need: Capability | null }[];
+}[] = [
   {
     group: "Main",
     links: [
-      { href: "/",          label: "Dashboard",    icon: LayoutDashboard },
-      { href: "/clients",   label: "Clients",      icon: Users           },
-      { href: "/projects",  label: "Projects",     icon: FolderKanban    },
+      { href: "/",          label: "Dashboard",    icon: LayoutDashboard, need: null              },
+      { href: "/clients",   label: "Clients",      icon: Users,           need: "clients.manage"  },
+      { href: "/projects",  label: "Projects",     icon: FolderKanban,    need: "content.plan"    },
     ],
   },
   {
     group: "Work",
     links: [
-      { href: "/tasks",        label: "Tasks",        icon: CheckSquare   },
-      { href: "/my-calendar",  label: "My Calendar",  icon: CalendarClock },
-      { href: "/messages",     label: "Messages",     icon: MessageSquare },
-      { href: "/calendar",     label: "Calendar",     icon: Calendar      },
-      { href: "/files",        label: "Files",        icon: HardDrive     },
-      { href: "/reports",      label: "Reports",      icon: BarChart3     },
+      { href: "/tasks",        label: "Tasks",        icon: CheckSquare,   need: null                },
+      { href: "/my-calendar",  label: "My Calendar",  icon: CalendarClock, need: null                },
+      { href: "/messages",     label: "Messages",     icon: MessageSquare, need: null                },
+      { href: "/calendar",     label: "Calendar",     icon: Calendar,      need: "content.plan"      },
+      { href: "/files",        label: "Files",        icon: HardDrive,     need: null                },
+      { href: "/reports",      label: "Reports",      icon: BarChart3,     need: "reports.delivery"  },
     ],
   },
   {
     group: "Finance",
     links: [
-      { href: "/expenses",  label: "Expenses",  icon: TrendingDown                      },
-      { href: "/contracts", label: "Contracts", icon: Scroll                             },
-      { href: "/invoices",  label: "Invoices",  icon: Receipt },
+      { href: "/expenses",  label: "Expenses",  icon: TrendingDown, need: "expenses.create"  },
+      { href: "/contracts", label: "Contracts", icon: Scroll,       need: "financials.view"  },
+      { href: "/invoices",  label: "Invoices",  icon: Receipt,      need: "invoices.manage"  },
     ],
   },
 ];
@@ -154,16 +161,30 @@ function NavContent({
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
 
-  // v2 visibility rule: MEMBERs never see the Finance section, and Reports
-  // is managers/admins only. (Server-side enforcement is the real gate.)
-  const isMember = appUser?.role === "MEMBER";
+  // v3: show a link only if the user holds its capability, and drop a whole
+  // section once nothing in it survives — so an SMM sees no Finance heading
+  // and a junior sees neither Finance nor Clients/Projects.
+  //
+  // Expenses is the one link that crosses the line: an SMM may record one
+  // (expenses.create) but may not see money (financials.view). Filing an
+  // expense under a FINANCE heading for someone with no financial access
+  // reads wrong, so for them it moves up into Work instead.
+  const seesMoney = can(appUser, "financials.view");
   const visibleNavItems = navItems
-    .filter((section) => !(isMember && section.group === "Finance"))
-    .map((section) =>
-      section.group === "Work" && isMember
-        ? { ...section, links: section.links.filter((l) => l.href !== "/reports") }
-        : section,
-    );
+    .map((section) => {
+      let links = section.links.filter((l) => l.need === null || can(appUser, l.need));
+      if (!seesMoney) {
+        if (section.group === "Finance") links = [];
+        if (section.group === "Work" && can(appUser, "expenses.create")) {
+          const expenses = navItems
+            .find((s) => s.group === "Finance")!
+            .links.find((l) => l.href === "/expenses")!;
+          links = [...links, expenses];
+        }
+      }
+      return { ...section, links };
+    })
+    .filter((section) => section.links.length > 0);
 
   return (
     <div className="flex flex-col flex-1 min-h-0">

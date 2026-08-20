@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
+import { requireCapability } from "@/lib/api-permissions";
 import { apiError, handleApiError, ApiError } from "@/lib/api-errors";
 import { parsePagination, paginationMeta } from "@/lib/pagination";
 import { checkRateLimit, WRITE_RATE_LIMITS } from "@/lib/rate-limit";
@@ -16,6 +17,7 @@ const INCLUDE = {
 export async function GET(req: NextRequest) {
   try {
     const user = await requireAuth(req);
+    requireCapability(user, "invoices.manage");
 
     const { searchParams } = new URL(req.url);
     const clientId   = searchParams.get("clientId");
@@ -88,6 +90,7 @@ async function nextInvoiceNumber(
 export async function POST(req: NextRequest) {
   try {
     const user = await requireAuth(req);
+    requireCapability(user, "invoices.manage");
 
     const rl = checkRateLimit(req, `invoices:create:${user.id}`, WRITE_RATE_LIMITS.light);
     if (!rl.allowed) {

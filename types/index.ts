@@ -69,7 +69,20 @@ export interface TaxRegistration {
 
 // ── Users ────────────────────────────────────────────────────
 
-export type UserRole = "OWNER" | "ADMIN" | "MANAGER" | "MEMBER";
+// v3: four permission tiers. MEMBER is the retired v2 tier, kept so rows
+// created before the migration still typecheck.
+export type UserRole = "OWNER" | "ADMIN" | "MANAGER" | "SMM" | "TEAM" | "MEMBER";
+
+/** v3: a job label an agency defines for itself — never a permission. */
+export interface DesignationRole {
+  id: string;
+  name: string;
+  slug: string;
+  isActive: boolean;
+  canBeAssignedWork: boolean;
+  sortOrder: number;
+  _count?: { users: number };
+}
 
 export interface User {
   id: string;
@@ -853,8 +866,10 @@ export interface TeamUser {
   email: string;
   avatarUrl: string | null;
   role: UserRole;
-  /** v2: job label — routing & reports only, not a permission */
+  /** v2 enum, deprecated — read only for pre-v3 rows */
   designation?: Designation | null;
+  /** v3: the job label row this person holds */
+  jobTitle?: Pick<DesignationRole, "id" | "name" | "slug" | "canBeAssignedWork"> | null;
   isActive: boolean;
   createdAt: string;
 }

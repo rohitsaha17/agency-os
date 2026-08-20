@@ -15,11 +15,15 @@ datasource db {
 // ENUMS
 // ============================================================
 
+// v3: the permission tier. A role answers "what may this person do",
+// never "what is their job" — that's Designation (docs/V3_CONTEXT.md §2).
 enum UserRole {
   OWNER // Organization owner — super admin, cannot be removed
   ADMIN // Full system access within the organization
-  MANAGER // Can manage clients, projects and tasks
-  MEMBER // Can only work on assigned tasks
+  MANAGER // Clients, projects, money — everything but user management
+  SMM // Plans their own projects, reviews juniors' work, sees NO money
+  TEAM // Junior: works assigned tasks, self-reminders only
+  MEMBER // Deprecated v2 tier — migrated to TEAM, kept so old rows still read
 }
 
 enum ClientStatus {
@@ -38,6 +42,9 @@ enum ClientImportance {
 
 // v2: job label for team members — routing & report targeting only,
 // NOT a permission level (that stays UserRole).
+//
+// v3 DEPRECATED: superseded by the Designation *model*, which agencies
+// create themselves in Settings. Kept (unused) so existing rows still read.
 enum Designation {
   SMM
   DESIGNER
@@ -201,9 +208,11 @@ model User {
   email          String
   name           String
   avatarUrl      String?
-  role           UserRole  @default(MEMBER)
-  // v2: job label (SMM, designer, …) — display/routing only, not a permission
+  role           UserRole  @default(TEAM)
+  // v2 enum, deprecated — read only for rows created before v3
   designation    Designation?
+  // v3: the job label, created dynamically per organization
+  designationId  String?
   isActive       Boolean   @default(true)
   // Login password. Nullable so users created before passwords existed (and
   // freshly-invited teammates) are prompted to set one on first sign-in.
@@ -213,6 +222,7 @@ model User {
   updatedAt      DateTime  @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  jobTitle     DesignationRole? @relation(fields: [designationId], references: [id], onDelete: SetNull)
 
   // Relations
   managedTasks       Task[]          @relation("TaskManager")
@@ -325,6 +335,32 @@ model Client {
 
   @@index([organizationId])
   @@map("clients")
+}
+
+// v3: the job label an agency defines for itself (Editor, Photographer,
+// Videographer…). Drives assignment pickers, filtering and reporting —
+// NEVER permissions, which are UserRole + lib/permissions.ts capabilities.
+//
+// Named DesignationRole because the deprecated v2 `Designation` enum still
+// occupies that name in the generated client.
+model DesignationRole {
+  id                String   @id @default(cuid())
+  organizationId    String
+  name              String
+  slug              String
+  isActive          Boolean  @default(true)
+  /// Can work be assigned to people with this job? (An SME or POC usually can't.)
+  canBeAssignedWork Boolean  @default(true)
+  sortOrder         Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  users        User[]
+
+  @@unique([organizationId, slug])
+  @@index([organizationId])
+  @@map("designations")
 }
 
 model ClientContact {
@@ -1144,11 +1180,17 @@ model Organization {
   // Total upload storage allowed for the WHOLE organization, in MB.
   uploadLimitMb Int       @default(200)
 
+  // v3: when false (the default), assigning a task sends it straight to the
+  // assignee. When true, the Head of Design approves assignments first —
+  // the v2 behaviour, now opt-in (docs/V3_CONTEXT.md §4).
+  requireAssignmentApproval Boolean @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   // Reverse relations — every tenant-scoped entity points back here
   users         User[]
+  designations  DesignationRole[]
   clients       Client[]
   projects      Project[]
   tasks         Task[]

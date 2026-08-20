@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
+import { jsonFor } from "@/lib/api-permissions";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 import { canViewFinancials } from "@/lib/permissions";
 
@@ -37,7 +38,7 @@ export async function GET(req: NextRequest, { params }: Params) {
 
     // v2: amounts never reach MEMBER clients (server-side strip)
     if (!canViewFinancials(user)) {
-      return NextResponse.json({
+      return jsonFor(user, {
         expenses: expenses.map((e) => ({ ...e, amount: null })),
         summary: {
           total: null,
@@ -49,7 +50,7 @@ export async function GET(req: NextRequest, { params }: Params) {
       });
     }
 
-    return NextResponse.json({
+    return jsonFor(user, {
       expenses,
       summary: {
         total: totalSpent,

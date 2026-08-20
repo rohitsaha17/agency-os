@@ -26,6 +26,7 @@ import { ProjectForm } from "@/components/projects/ProjectForm";
 import { useToast } from "@/components/ui/Toast";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useCurrentUser } from "@/lib/useCurrentUser";
+import { can, canViewContacts } from "@/lib/permissions";
 import { Client, ContactFormData, ClientContact, ProjectStatus, ProjectType, AssetFile, ContractType, ContractPartyType, User, Invoice, InvoiceStatus, Channel, ChatMessage, Expense, ExpenseCategory, ExpenseStatus, Receipt, ReceiptMethod } from "@/types";
 import { calcInvoiceTotal } from "@/lib/format";
 import { formatMoney, resolveClientCurrency } from "@/lib/money";
@@ -221,8 +222,10 @@ export default function ClientDetailPage() {
   const toast   = useToast();
   const confirm = useConfirm();
   const { user: currentUser } = useCurrentUser();
-  const canManageChannels = currentUser?.role === "ADMIN" || currentUser?.role === "MANAGER";
-  const isMember = currentUser?.role === "MEMBER";
+  const canManageChannels = can(currentUser, "clients.manage");
+  // v3: capability-driven, not role-driven. The API strips the same fields.
+  const seesMoney = can(currentUser, "financials.view");
+  const seesContacts = canViewContacts(currentUser);
   const [client, setClient] = useState<Client | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -794,13 +797,16 @@ export default function ClientDetailPage() {
     { id: "content",     label: "Content Calendar" },
     { id: "package",     label: "Package" },
     { id: "overview",    label: "Overview" },
-    // v2: MEMBERs never see client contacts (API strips them too)
-    ...(isMember ? [] : [{ id: "contacts" as Tab, label: `Contacts (${client.contacts.length})` }]),
+    // v3: juniors never see client contacts (API strips them too)
+    ...(seesContacts ? [{ id: "contacts" as Tab, label: `Contacts (${client.contacts.length})` }] : []),
     { id: "brand",       label: `Brand (${brandColors.length + brandAssets.length})` },
-    { id: "tax",         label: "Tax & Billing" },
+    ...(seesMoney ? [{ id: "tax" as Tab, label: "Tax & Billing" }] : []),
     { id: "projects",    label: `Projects (${client.projects.length})` },
-    { id: "invoices",    label: "Invoices" },
-    { id: "receipts",    label: "Receipts" },
+    // v3: the money tabs need financials.view; the API refuses them anyway
+    ...(seesMoney ? [
+      { id: "invoices" as Tab, label: "Invoices" },
+      { id: "receipts" as Tab, label: "Receipts" },
+    ] : []),
     { id: "expenses",    label: "Expenses" },
     { id: "files",       label: "Files" },
     { id: "chat",        label: "Chat" },
@@ -929,8 +935,8 @@ export default function ClientDetailPage() {
             {/* v2 Phase 8: POC/SME follow-ups */}
             <FollowUpsCard clientId={id} />
 
-            {/* Financial Summary — hidden from MEMBERs (v2; API strips values too) */}
-            {!isMember && (
+            {/* Financial summary — needs financials.view (API strips it too) */}
+            {seesMoney && (
             <div className="bg-white border border-gray-200 rounded-xl p-5">
               <div className="flex items-center gap-2 mb-4">
                 <DollarSign className="w-4 h-4 text-gray-400" />

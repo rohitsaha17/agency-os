@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
+import { jsonFor } from "@/lib/api-permissions";
 import { apiError, handleApiError, ApiError } from "@/lib/api-errors";
 import { parsePagination, paginationMeta } from "@/lib/pagination";
 import { checkRateLimit, WRITE_RATE_LIMITS } from "@/lib/rate-limit";
-import { canViewFinancials } from "@/lib/permissions";
+import { canViewFinancials, can } from "@/lib/permissions";
 
 // GET /api/projects — list all projects with optional filters
 export async function GET(req: NextRequest) {
@@ -20,8 +21,16 @@ export async function GET(req: NextRequest) {
 
     // status supports a comma-separated list, e.g. ?status=ACTIVE,DRAFT
     const statuses = status?.split(",").map((s) => s.trim()).filter(Boolean);
+
+    // v3: a junior sees only the projects they hold a task on
+    // (docs/V3_CONTEXT.md §2). SMM and above see the whole list.
+    const scopedToMyWork = !can(user, "content.plan");
+
     const where = {
       organizationId: user.organizationId,
+      ...(scopedToMyWork && {
+        tasks: { some: { deletedAt: null, assignees: { some: { userId: user.id } } } },
+      }),
       ...(clientId && { clientId }),
       ...(statuses?.length === 1 && { status: statuses[0] as never }),
       ...(statuses && statuses.length > 1 && { status: { in: statuses as never[] } }),
@@ -82,12 +91,12 @@ export async function GET(req: NextRequest) {
     });
 
     if (pagination.paginated) {
-      return NextResponse.json({
+      return jsonFor(user, {
         data: result,
         pagination: paginationMeta(pagination, total),
       });
     }
-    return NextResponse.json(result);
+    return jsonFor(user, result);
   } catch (error) {
     return handleApiError(error, "GET /api/projects");
   }
@@ -182,7 +191,7 @@ export async function POST(req: NextRequest) {
       return created;
     });
 
-    return NextResponse.json({ ...project, progress: 0 }, { status: 201 });
+    return jsonFor(user, { ...project, progress: 0 }, { status: 201 });
   } catch (error) {
     return handleApiError(error, "POST /api/projects");
   }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
+import { jsonFor } from "@/lib/api-permissions";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 
 type Params = { params: Promise<{ id: string }> };
@@ -25,7 +26,7 @@ export async function GET(req: NextRequest, { params }: Params) {
       include: CONTRACT_INCLUDE,
     });
     if (!contract) throw new ApiError("Not found", 404);
-    return NextResponse.json(contract);
+    return jsonFor(user, contract);
   } catch (error) {
     return handleApiError(error, "GET /api/contracts/[id]");
   }
@@ -78,7 +79,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       },
       include: CONTRACT_INCLUDE,
     });
-    return NextResponse.json(contract);
+    return jsonFor(user, contract);
   } catch (error) {
     return handleApiError(error, "PATCH /api/contracts/[id]");
   }
@@ -95,7 +96,7 @@ export async function DELETE(req: NextRequest, { params }: Params) {
     if (!existing) throw new ApiError("Not found", 404);
 
     await prisma.contract.delete({ where: { id } });
-    return NextResponse.json({ success: true });
+    return jsonFor(user, { success: true });
   } catch (error) {
     return handleApiError(error, "DELETE /api/contracts/[id]");
   }

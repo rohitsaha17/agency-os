@@ -1,15 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAuth, requireRole } from "@/lib/auth";
+import { requireAuth } from "@/lib/auth";
+import { requireCapability } from "@/lib/api-permissions";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 
-const ASSIGNABLE_ROLES = ["ADMIN", "MANAGER", "MEMBER"] as const;
+// v3: MEMBER is retired from the assignable set; TEAM replaces it.
+const ASSIGNABLE_ROLES = ["ADMIN", "MANAGER", "SMM", "TEAM"] as const;
 
-// v2 job labels — routing & report targeting, not permissions.
-const DESIGNATIONS = [
-  "SMM", "DESIGNER", "EDITOR", "HEAD_OF_DESIGN",
-  "PHOTOGRAPHER", "SME", "POC", "OTHER",
-] as const;
+const USER_FIELDS = {
+  id: true, name: true, email: true, avatarUrl: true,
+  role: true, isActive: true, createdAt: true,
+  jobTitle: { select: { id: true, name: true, slug: true, canBeAssignedWork: true } },
+} as const;
 
 // PATCH /api/users/[id] — update name, role, isActive
 export async function PATCH(
@@ -27,16 +29,20 @@ export async function PATCH(
     });
     if (!existing) throw new ApiError("User not found", 404);
 
-    const { name, email, role, isActive, avatarUrl, designation } = await req.json();
+    const { name, email, role, isActive, avatarUrl, designationId } = await req.json();
 
     // Profile fields (name/avatar/email) can be edited by the user themself
-    // or an admin; role, designation, and active status are admin-only.
+    // or an admin; role, designation, and active status need users.manage.
     const isSelf = caller.id === id;
-    if (!isSelf || role !== undefined || isActive !== undefined || designation !== undefined) {
-      requireRole(caller, ["ADMIN"]);
+    if (!isSelf || role !== undefined || isActive !== undefined || designationId !== undefined) {
+      requireCapability(caller, "users.manage");
     }
-    if (designation !== undefined && designation !== null && !DESIGNATIONS.includes(designation)) {
-      throw new ApiError("Invalid designation", 400);
+    if (designationId) {
+      const ok = await prisma.designationRole.findFirst({
+        where: { id: designationId, organizationId: caller.organizationId },
+        select: { id: true },
+      });
+      if (!ok) throw new ApiError("Invalid designation", 400);
     }
     if (role !== undefined) {
       if (existing.role === "OWNER") {
@@ -69,12 +75,9 @@ export async function PATCH(
         ...(role      !== undefined && { role }),
         ...(isActive  !== undefined && { isActive }),
         ...(avatarUrl !== undefined && { avatarUrl }),
-        ...(designation !== undefined && { designation }),
+        ...(designationId !== undefined && { designationId: designationId || null }),
       },
-      select: {
-        id: true, name: true, email: true, avatarUrl: true,
-        role: true, designation: true, isActive: true, createdAt: true,
-      },
+      select: USER_FIELDS,
     });
 
     return NextResponse.json(user);
@@ -91,7 +94,7 @@ export async function DELETE(
   const { id } = await params;
   try {
     const caller = await requireAuth(req);
-    requireRole(caller, ["ADMIN"]);
+    requireCapability(caller, "users.manage");
 
     const existing = await prisma.user.findFirst({
       where: { id, organizationId: caller.organizationId },

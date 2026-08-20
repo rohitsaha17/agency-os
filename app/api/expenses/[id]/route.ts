@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
+import { jsonFor, requireCapability } from "@/lib/api-permissions";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 
 type Params = { params: Promise<{ id: string }> };
@@ -9,6 +10,8 @@ export async function GET(req: NextRequest, { params }: Params) {
   const { id } = await params;
   try {
     const user = await requireAuth(req);
+    // v3: juniors have neither expenses.create nor financials.view
+    requireCapability(user, "expenses.create");
     const expense = await prisma.expense.findFirst({
       where: { id, organizationId: user.organizationId },
       include: {
@@ -17,7 +20,7 @@ export async function GET(req: NextRequest, { params }: Params) {
       },
     });
     if (!expense) throw new ApiError("Not found", 404);
-    return NextResponse.json(expense);
+    return jsonFor(user, expense);
   } catch (error) {
     return handleApiError(error, "GET /api/expenses/[id]");
   }
@@ -27,6 +30,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const { id } = await params;
   try {
     const user = await requireAuth(req);
+    // v3: juniors have neither expenses.create nor financials.view
+    requireCapability(user, "expenses.create");
     const existing = await prisma.expense.findFirst({
       where: { id, organizationId: user.organizationId },
       select: { id: true },
@@ -61,7 +66,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         user: { select: { id: true, name: true } },
       },
     });
-    return NextResponse.json(expense);
+    return jsonFor(user, expense);
   } catch (error) {
     return handleApiError(error, "PATCH /api/expenses/[id]");
   }
@@ -71,6 +76,8 @@ export async function DELETE(req: NextRequest, { params }: Params) {
   const { id } = await params;
   try {
     const user = await requireAuth(req);
+    // v3: juniors have neither expenses.create nor financials.view
+    requireCapability(user, "expenses.create");
     const existing = await prisma.expense.findFirst({
       where: { id, organizationId: user.organizationId },
       select: { id: true },
@@ -78,7 +85,7 @@ export async function DELETE(req: NextRequest, { params }: Params) {
     if (!existing) throw new ApiError("Not found", 404);
 
     await prisma.expense.delete({ where: { id } });
-    return NextResponse.json({ success: true });
+    return jsonFor(user, { success: true });
   } catch (error) {
     return handleApiError(error, "DELETE /api/expenses/[id]");
   }

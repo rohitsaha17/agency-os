@@ -1,11 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAuth, requireRole } from "@/lib/auth";
+import { requireAuth } from "@/lib/auth";
+import { requireCapability, taskVisibilityScope } from "@/lib/api-permissions";
 import { apiError, handleApiError, ApiError } from "@/lib/api-errors";
 import { logStatus } from "@/lib/audit";
 import { notify, notifyMany } from "@/lib/notify";
+import { can } from "@/lib/permissions";
 
 type Params = { params: Promise<{ id: string }> };
+
+/**
+ * What an assignee may change on a task they were handed: how far along it is,
+ * and nothing else. The brief — what the work is, when it's due, how urgent,
+ * who it's for, whether the client sees it — was set by whoever planned it and
+ * stays theirs. Hiding these inputs in the panel is a courtesy; this is the
+ * actual rule.
+ */
+const PROGRESS_FIELDS = new Set(["status", "cascadeToChildren"]);
 
 const TASK_INCLUDE = {
   manager: { select: { id: true, name: true } },
@@ -26,8 +37,13 @@ export async function GET(req: NextRequest, { params }: Params) {
     const user = await requireAuth(req);
     const { id } = await params;
 
+    // Same scope as the list — a task you can't see in the list shouldn't
+    // open just because you have its id.
     const task = await prisma.task.findFirst({
-      where: { id, deletedAt: null, organizationId: user.organizationId },
+      where: {
+        id, deletedAt: null, organizationId: user.organizationId,
+        AND: [taskVisibilityScope(user)],
+      },
       include: TASK_INCLUDE,
     });
     if (!task) throw new ApiError("Task not found", 404);
@@ -63,6 +79,17 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       topic, content, referenceUrl, referenceFileId, extraNote,
       clientId, preferredAssigneeId, isAdHoc, sortOrder, reassignNote,
     } = body;
+
+    if (!can(user, "content.plan")) {
+      const planned = Object.keys(body).filter((k) => !PROGRESS_FIELDS.has(k));
+      if (planned.length > 0) {
+        throw new ApiError(
+          "You can move this task along, but its brief is set by whoever planned it. "
+          + `Ask them to change: ${planned.join(", ")}.`,
+          403,
+        );
+      }
+    }
 
     // A new parent must be a different task in the same project (same org).
     if (parentId) {
@@ -211,7 +238,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 export async function DELETE(req: NextRequest, { params }: Params) {
   try {
     const user = await requireAuth(req);
-    requireRole(user, ["ADMIN", "MANAGER"]);
+    // Deleting is a planning act, so it matches who may plan — an SMM can
+    // remove work they scheduled; the person doing that work cannot.
+    requireCapability(user, "content.plan");
     const { id } = await params;
 
     // Verify org ownership before deleting.

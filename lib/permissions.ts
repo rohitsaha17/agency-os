@@ -21,6 +21,7 @@ export interface HasRole {
 
 export type Capability =
   | "users.manage"
+  | "settings.manage"
   | "clients.manage"
   | "projects.manage"
   | "projects.pricing"
@@ -57,14 +58,14 @@ function normalizeRole(role: string | null | undefined): Exclude<Role, "MEMBER">
  */
 const MATRIX: Record<Exclude<Role, "MEMBER">, Record<Capability, boolean>> = {
   OWNER: {
-    "users.manage": true, "clients.manage": true, "projects.manage": true,
+    "users.manage": true, "settings.manage": true, "clients.manage": true, "projects.manage": true,
     "projects.pricing": true, "projects.assignSmm": true, "content.plan": true,
     "tasks.assign": true, "tasks.review": true, "cycles.close": true,
     "billing.flag": true, "financials.view": true, "expenses.create": true,
     "invoices.manage": true, "reports.all": true, "reports.delivery": true,
   },
   ADMIN: {
-    "users.manage": true, "clients.manage": true, "projects.manage": true,
+    "users.manage": true, "settings.manage": true, "clients.manage": true, "projects.manage": true,
     "projects.pricing": true, "projects.assignSmm": true, "content.plan": true,
     "tasks.assign": true, "tasks.review": true, "cycles.close": true,
     "billing.flag": true, "financials.view": true, "expenses.create": true,
@@ -72,6 +73,9 @@ const MATRIX: Record<Exclude<Role, "MEMBER">, Record<Capability, boolean>> = {
   },
   MANAGER: {
     "users.manage": false, // read-only on Settings ▸ Users
+    // The org profile, letterhead and creative types are a manager's to run;
+    // only granting access isn't.
+    "settings.manage": true,
     "clients.manage": true, "projects.manage": true,
     "projects.pricing": true, "projects.assignSmm": true, "content.plan": true,
     "tasks.assign": true, "tasks.review": true, "cycles.close": true,
@@ -81,7 +85,7 @@ const MATRIX: Record<Exclude<Role, "MEMBER">, Record<Capability, boolean>> = {
     "reports.delivery": true,
   },
   SMM: {
-    "users.manage": false, "clients.manage": false, "projects.manage": false,
+    "users.manage": false, "settings.manage": false, "clients.manage": false, "projects.manage": false,
     "projects.pricing": false, "projects.assignSmm": false,
     "content.plan": true, // own projects — scope checked by the caller
     "tasks.assign": true, // juniors only — see assignScope()
@@ -91,11 +95,15 @@ const MATRIX: Record<Exclude<Role, "MEMBER">, Record<Capability, boolean>> = {
     "reports.all": false, "reports.delivery": true, // own projects only
   },
   TEAM: {
-    "users.manage": false, "clients.manage": false, "projects.manage": false,
+    "users.manage": false, "settings.manage": false, "clients.manage": false, "projects.manage": false,
     "projects.pricing": false, "projects.assignSmm": false, "content.plan": false,
     "tasks.assign": false, // self-reminders only — see assignScope()
     "tasks.review": false, "cycles.close": false, "billing.flag": false,
-    "financials.view": false, "expenses.create": false, "invoices.manage": false,
+    "financials.view": false,
+    // They can file what they spent out of pocket — and see only their own.
+    // Scoping lives in the expenses routes, not here.
+    "expenses.create": true,
+    "invoices.manage": false,
     "reports.all": false, "reports.delivery": false, // own tasks only
   },
 };

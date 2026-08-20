@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
+import { taskVisibilityScope } from "@/lib/api-permissions";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 import { notifyMany } from "@/lib/notify";
 import { logStatus } from "@/lib/audit";
@@ -106,8 +107,16 @@ export async function GET(req: NextRequest, { params }: Params) {
     const user = await requireAuth(req);
     await assertProjectInOrg(id, user.organizationId);
 
+    // The project board shows what this person is responsible for. Admin and
+    // manager get the whole thing; an SMM gets the projects they plan; below
+    // that you see your own work, not a roster of everyone else's.
+    // buildTree() re-roots any task whose parent is filtered out, so a subtask
+    // still appears even when its parent isn't yours.
     const tasks = await prisma.task.findMany({
-      where: { projectId: id, deletedAt: null, organizationId: user.organizationId },
+      where: {
+        projectId: id, deletedAt: null, organizationId: user.organizationId,
+        AND: [taskVisibilityScope(user)],
+      },
       include: {
         manager: { select: { id: true, name: true } },
         assignees: {

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
-import { jsonFor, requireCapability } from "@/lib/api-permissions";
+import { requireCapability } from "@/lib/api-permissions";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 import { canViewFinancials } from "@/lib/permissions";
 
@@ -14,8 +14,8 @@ const expenseInclude = {
 export async function GET(req: NextRequest) {
   try {
     const user = await requireAuth(req);
-    // v3: juniors have neither expenses.create nor financials.view
     requireCapability(user, "expenses.create");
+    const seesAll = canViewFinancials(user);
     const { searchParams } = new URL(req.url);
     const projectId     = searchParams.get("projectId");
     const clientId      = searchParams.get("clientId");
@@ -33,6 +33,10 @@ export async function GET(req: NextRequest) {
       ...(category ? { category: category as never } : {}),
       ...(status   ? { status:   status   as never } : {}),
       ...(search   ? { title: { contains: search, mode: "insensitive" } } : {}),
+      // The agency's spend is admin/manager business. Everyone else sees the
+      // expenses they filed themselves and nothing else — not a stripped
+      // version of someone else's row, no row at all.
+      ...(seesAll ? {} : { userId: user.id }),
     };
 
     if (clientId) {
@@ -52,12 +56,9 @@ export async function GET(req: NextRequest) {
       include: expenseInclude,
     });
 
-    // v2: amounts never reach MEMBER clients (server-side strip)
-    if (!canViewFinancials(user)) {
-      return jsonFor(user, expenses.map((e) => ({ ...e, amount: null })));
-    }
-
-    return jsonFor(user, expenses);
+    // Their own amounts stay visible — they are the ones who spent the money.
+    // jsonFor() would otherwise blank them out along with everyone else's.
+    return NextResponse.json(expenses);
   } catch (error) {
     return handleApiError(error, "GET /api/expenses");
   }
@@ -66,7 +67,6 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const user = await requireAuth(req);
-    // v3: juniors have neither expenses.create nor financials.view
     requireCapability(user, "expenses.create");
     const body = await req.json();
     const {
@@ -106,14 +106,16 @@ export async function POST(req: NextRequest) {
         status:         status || "PENDING",
         projectId:      projectId      || null,
         clientId:       clientId       || null,
-        userId:         userId         || null,
+        // Filing on someone else's behalf is an admin/manager act; anyone
+        // else's expense is always their own, whatever the body claims.
+        userId:         canViewFinancials(user) ? (userId || null) : user.id,
         isReimbursable: !!isReimbursable,
         receiptUrl:     receiptUrl?.trim() || null,
         notes:          notes?.trim()  || null,
       },
       include: expenseInclude,
     });
-    return jsonFor(user, expense, { status: 201 });
+    return NextResponse.json(expense, { status: 201 });
   } catch (error) {
     return handleApiError(error, "POST /api/expenses");
   }

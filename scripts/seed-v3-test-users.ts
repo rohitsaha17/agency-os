@@ -19,7 +19,9 @@ const TEST_USERS = [
   // touching the real owner's password.
   { email: "admin@vibrnd.test",   name: "Riya Kapoor",  role: "ADMIN" as const,   designation: null },
   { email: "manager@vibrnd.test", name: "Priya Menon",  role: "MANAGER" as const, designation: null },
-  { email: "smm@vibrnd.test",     name: "Kabir Shah",   role: "SMM" as const,     designation: "smm" },
+  // No designation: planning is what the SMM ROLE means. A job label
+  // would only repeat it (see the fix-smm-designation migration).
+  { email: "smm@vibrnd.test",     name: "Kabir Shah",   role: "SMM" as const,     designation: null },
   { email: "editor@vibrnd.test",  name: "Ananya Das",   role: "TEAM" as const,    designation: "editor" },
   { email: "shooter@vibrnd.test", name: "Vikram Iyer",  role: "TEAM" as const,    designation: "photographer" },
 ];

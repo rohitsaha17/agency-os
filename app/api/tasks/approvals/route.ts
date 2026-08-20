@@ -46,7 +46,7 @@ export async function GET(req: NextRequest) {
           contentItem: {
             select: {
               id: true, topic: true, date: true,
-              creativeType: { select: { name: true, icon: true } },
+              creativeType: { select: { name: true, icon: true, color: true } },
             },
           },
           // The proof, so the reviewer can judge without leaving the inbox

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { usePathname } from "next/navigation";
 import { X, ArrowRight, ArrowLeft } from "lucide-react";
 import { useCurrentUser } from "@/lib/useCurrentUser";
 import { BrandLogo } from "@/components/ui/BrandLogo";
@@ -28,7 +29,7 @@ interface TourStep {
 const STEPS: TourStep[] = [
   {
     anchor: null,
-    title: "Welcome to Vibrnd Studio Flow 👋",
+    title: "Welcome to Vibrnd Studio Flow",
     body: "Your agency's clients, projects, money and files — all connected in one place. Here's a 60-second tour of where everything lives.",
   },
   {
@@ -77,6 +78,7 @@ interface Rect { top: number; left: number; width: number; height: number; }
 
 export function AppTour() {
   const { user } = useCurrentUser();
+  const pathname = usePathname();
   const [active, setActive] = useState(false);
   const [step, setStep] = useState(0);
   const [anchorRect, setAnchorRect] = useState<Rect | null>(null);
@@ -86,15 +88,29 @@ export function AppTour() {
     [user]
   );
 
-  // Activate once per user, shortly after login/first load.
+  /**
+   * Activate once per user, shortly after login — but only when the tour
+   * can't get in anyone's way.
+   *
+   * It used to start 800ms after ANY page loaded, so someone deep in a
+   * project could be part-way through typing a brief when an overlay
+   * appeared on top and swallowed their keystrokes. A product tour is a
+   * "here's where things live" thing: it belongs on the dashboard, on
+   * arrival, with nothing else open.
+   */
   useEffect(() => {
     if (!storageKey) return;
+    if (pathname !== "/") return;
     try {
       if (localStorage.getItem(storageKey)) return;
     } catch { return; }
-    const t = setTimeout(() => setActive(true), 800);
+    const t = setTimeout(() => {
+      // A dialog open means they're mid-task — don't interrupt.
+      if (document.querySelector("[data-modal-open]")) return;
+      setActive(true);
+    }, 800);
     return () => clearTimeout(t);
-  }, [storageKey]);
+  }, [storageKey, pathname]);
 
   const finish = useCallback(() => {
     setActive(false);
@@ -147,6 +163,14 @@ export function AppTour() {
   useEffect(() => {
     if (!active) return;
     const onKey = (e: KeyboardEvent) => {
+      // Never act on a keystroke meant for a field. A global listener that
+      // doesn't check this will happily eat someone's typing.
+      const el = e.target as HTMLElement | null;
+      if (el && (
+        el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT"
+        || el.isContentEditable
+      )) return;
+
       if (e.key === "Escape") finish();
       if (e.key === "ArrowRight") setStep((s) => Math.min(s + 1, STEPS.length - 1));
       if (e.key === "ArrowLeft") setStep((s) => Math.max(s - 1, 0));

@@ -36,6 +36,12 @@ interface Probe {
   allow: string[];
   /** True when a 200 carrying money is expected for the allowed roles. */
   money?: boolean;
+  /**
+   * True when the payload is the caller's OWN money and is therefore expected
+   * to carry amounts for every allowed role. An expense you filed yourself is
+   * the case that exists: blanking it would hide your own receipt from you.
+   */
+  selfMoney?: boolean;
   note?: string;
 }
 
@@ -44,8 +50,8 @@ const PROBES: Probe[] = [
   { path: "/api/invoices",                  allow: ["ADMIN", "MANAGER"], money: true },
   { path: "/api/receipts",                  allow: ["ADMIN", "MANAGER"], money: true },
   { path: "/api/billable-items",            allow: ["ADMIN", "MANAGER"], money: true },
-  { path: "/api/expenses",                  allow: ["ADMIN", "MANAGER", "SMM"], money: true,
-    note: "SMM may file an expense but sees no amounts — stripped, not refused" },
+  { path: "/api/expenses",                  allow: ["ADMIN", "MANAGER", "SMM", "TEAM"], money: true, selfMoney: true,
+    note: "everyone may file what they spent; below manager the list is scoped to your own rows, amounts included" },
 
   // ── Clients & projects ──
   { path: "/api/clients",                   allow: ["ADMIN", "MANAGER", "SMM", "TEAM"],
@@ -62,6 +68,8 @@ const PROBES: Probe[] = [
   { path: "/api/master-calendar?year=2026&month=8", allow: ["ADMIN", "MANAGER", "SMM", "TEAM"] },
 
   // ── Administration ──
+  { path: "/api/settings/company",          allow: ["ADMIN", "MANAGER", "SMM", "TEAM"],
+    note: "readable by all — the app chrome needs the org name; only settings.manage may PATCH" },
   { path: "/api/users",                     allow: ["ADMIN", "MANAGER", "SMM", "TEAM"],
     note: "readable by all — assignment pickers need it; only ADMIN may write" },
   { path: "/api/designations",              allow: ["ADMIN", "MANAGER", "SMM", "TEAM"] },
@@ -120,7 +128,7 @@ async function main() {
 
       let verdict: Result["verdict"] = "ok";
       // The one thing that must never happen.
-      if (moneyKeys.length > 0 && !seesMoney) { verdict = "LEAK"; leaks++; }
+      if (moneyKeys.length > 0 && !seesMoney && !probe.selfMoney) { verdict = "LEAK"; leaks++; }
       else if (allowed && res.status >= 400) verdict = "unexpected";
       else if (!allowed && res.ok) verdict = "unexpected";
 
@@ -162,7 +170,7 @@ async function main() {
     const cell = (role: string) => {
       const r = rows.find((x) => x.role === role);
       if (!r) return "—";
-      const flag = r.verdict === "LEAK" ? " 🚨" : r.verdict === "unexpected" ? " ⚠️" : "";
+      const flag = r.verdict === "LEAK" ? " **LEAK**" : r.verdict === "unexpected" ? " (!)" : "";
       return `${r.status}${flag}`;
     };
     lines.push(

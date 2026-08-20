@@ -7,6 +7,7 @@ import { formatMoney } from "@/lib/money";
 import { useCurrentUser } from "@/lib/useCurrentUser";
 import { toast } from "@/lib/toast";
 import type { CreativeType } from "@/types";
+import { CreativeTypeDot } from "@/components/content/CreativeTypeDot";
 
 const CURRENCIES = ["USD", "EUR", "GBP", "INR", "AUD", "CAD", "SGD", "AED"];
 
@@ -19,7 +20,7 @@ interface Pkg {
   currency: string | null;
   notes: string | null;
   isActive: boolean;
-  quotas: { id: string; creativeTypeId: string; monthlyQty: number; creativeType: { id: string; name: string; icon: string | null } }[];
+  quotas: { id: string; creativeTypeId: string; monthlyQty: number; creativeType: { id: string; name: string; icon: string | null; color: string | null } }[];
 }
 
 export function PackageTab({ clientId, clientCurrency }: { clientId: string; clientCurrency?: string | null }) {
@@ -164,7 +165,7 @@ export function PackageTab({ clientId, clientCurrency }: { clientId: string; cli
               <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-2">
                 {pkg.quotas.map((q) => (
                   <div key={q.id} className="bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 flex items-center gap-2">
-                    <span className="text-sm">{q.creativeType.icon ?? "✨"}</span>
+                    <CreativeTypeDot color={q.creativeType.color} />
                     <span className="text-xs text-gray-600 flex-1">{q.creativeType.name}</span>
                     <span className="text-sm font-bold text-gray-900">{q.monthlyQty}<span className="text-[10px] font-normal text-gray-400">/mo</span></span>
                   </div>
@@ -241,7 +242,7 @@ export function PackageTab({ clientId, clientCurrency }: { clientId: string; cli
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {types.map((t) => (
                 <div key={t.id} className="flex items-center gap-2 border border-gray-200 rounded-lg px-2.5 py-1.5">
-                  <span className="text-sm">{t.icon ?? "✨"}</span>
+                  <CreativeTypeDot color={t.color} />
                   <span className="text-xs text-gray-600 flex-1 truncate">{t.name}</span>
                   <input type="number" min="0" value={form.quotas[t.id] ?? ""}
                     onChange={(e) => setForm((f) => ({ ...f, quotas: { ...f.quotas, [t.id]: e.target.value } }))}

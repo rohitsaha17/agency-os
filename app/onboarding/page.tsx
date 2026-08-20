@@ -110,7 +110,7 @@ export default function OnboardingPage() {
         </div>
 
         <h1 className="text-3xl font-bold tracking-tight">
-          {me ? `Welcome, ${me.name.split(" ")[0]} 👋` : "Welcome 👋"}
+          {me ? `Welcome, ${me.name.split(" ")[0]}` : "Welcome"}
         </h1>
         <p className="mt-2 text-slate-400">
           Let&rsquo;s set up your agency. These details appear across the app and

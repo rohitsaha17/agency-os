@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
+import { taskVisibilityScope } from "@/lib/api-permissions";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 import { parsePagination, paginationMeta, DEFAULT_PAGE_SIZE } from "@/lib/pagination";
 import { logStatus } from "@/lib/audit";
@@ -40,6 +41,9 @@ export async function GET(req: NextRequest) {
       // v2: a task may be linked to a client directly OR through its project
       ...(clientId && { OR: [{ clientId }, { project: { clientId } }] }),
       ...(assigneeId && { assignees: { some: { userId: assigneeId } } }),
+      // Nested under AND because the scope carries its own OR, and the
+      // clientId filter above may already have spent the top-level one.
+      AND: [taskVisibilityScope(user)],
     };
 
     // Take cap: default page size when no pagination flag,

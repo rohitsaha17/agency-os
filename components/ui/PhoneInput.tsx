@@ -5,51 +5,51 @@ import { ChevronDown, Search } from "lucide-react";
 
 // ── Country codes ─────────────────────────────────────────────
 export const COUNTRY_CODES = [
-  { code: "+91",  country: "India",                flag: "🇮🇳" },
-  { code: "+1",   country: "United States",         flag: "🇺🇸" },
-  { code: "+1",   country: "Canada",                flag: "🇨🇦" },
-  { code: "+44",  country: "United Kingdom",        flag: "🇬🇧" },
-  { code: "+61",  country: "Australia",             flag: "🇦🇺" },
-  { code: "+64",  country: "New Zealand",           flag: "🇳🇿" },
-  { code: "+65",  country: "Singapore",             flag: "🇸🇬" },
-  { code: "+971", country: "UAE",                   flag: "🇦🇪" },
-  { code: "+966", country: "Saudi Arabia",          flag: "🇸🇦" },
-  { code: "+974", country: "Qatar",                 flag: "🇶🇦" },
-  { code: "+973", country: "Bahrain",               flag: "🇧🇭" },
-  { code: "+968", country: "Oman",                  flag: "🇴🇲" },
-  { code: "+965", country: "Kuwait",                flag: "🇰🇼" },
-  { code: "+49",  country: "Germany",               flag: "🇩🇪" },
-  { code: "+33",  country: "France",                flag: "🇫🇷" },
-  { code: "+39",  country: "Italy",                 flag: "🇮🇹" },
-  { code: "+34",  country: "Spain",                 flag: "🇪🇸" },
-  { code: "+31",  country: "Netherlands",           flag: "🇳🇱" },
-  { code: "+46",  country: "Sweden",                flag: "🇸🇪" },
-  { code: "+47",  country: "Norway",                flag: "🇳🇴" },
-  { code: "+45",  country: "Denmark",               flag: "🇩🇰" },
-  { code: "+41",  country: "Switzerland",           flag: "🇨🇭" },
-  { code: "+32",  country: "Belgium",               flag: "🇧🇪" },
-  { code: "+48",  country: "Poland",                flag: "🇵🇱" },
-  { code: "+7",   country: "Russia",                flag: "🇷🇺" },
-  { code: "+86",  country: "China",                 flag: "🇨🇳" },
-  { code: "+81",  country: "Japan",                 flag: "🇯🇵" },
-  { code: "+82",  country: "South Korea",           flag: "🇰🇷" },
-  { code: "+60",  country: "Malaysia",              flag: "🇲🇾" },
-  { code: "+66",  country: "Thailand",              flag: "🇹🇭" },
-  { code: "+63",  country: "Philippines",           flag: "🇵🇭" },
-  { code: "+62",  country: "Indonesia",             flag: "🇮🇩" },
-  { code: "+84",  country: "Vietnam",               flag: "🇻🇳" },
-  { code: "+880", country: "Bangladesh",            flag: "🇧🇩" },
-  { code: "+92",  country: "Pakistan",              flag: "🇵🇰" },
-  { code: "+94",  country: "Sri Lanka",             flag: "🇱🇰" },
-  { code: "+977", country: "Nepal",                 flag: "🇳🇵" },
-  { code: "+27",  country: "South Africa",          flag: "🇿🇦" },
-  { code: "+234", country: "Nigeria",               flag: "🇳🇬" },
-  { code: "+254", country: "Kenya",                 flag: "🇰🇪" },
-  { code: "+20",  country: "Egypt",                 flag: "🇪🇬" },
-  { code: "+55",  country: "Brazil",                flag: "🇧🇷" },
-  { code: "+52",  country: "Mexico",                flag: "🇲🇽" },
-  { code: "+54",  country: "Argentina",             flag: "🇦🇷" },
-  { code: "+57",  country: "Colombia",              flag: "🇨🇴" },
+  { code: "+91",  country: "India",                iso: "IN" },
+  { code: "+1",   country: "United States",         iso: "US" },
+  { code: "+1",   country: "Canada",                iso: "CA" },
+  { code: "+44",  country: "United Kingdom",        iso: "GB" },
+  { code: "+61",  country: "Australia",             iso: "AU" },
+  { code: "+64",  country: "New Zealand",           iso: "NZ" },
+  { code: "+65",  country: "Singapore",             iso: "SG" },
+  { code: "+971", country: "UAE",                   iso: "AE" },
+  { code: "+966", country: "Saudi Arabia",          iso: "SA" },
+  { code: "+974", country: "Qatar",                 iso: "QA" },
+  { code: "+973", country: "Bahrain",               iso: "BH" },
+  { code: "+968", country: "Oman",                  iso: "OM" },
+  { code: "+965", country: "Kuwait",                iso: "KW" },
+  { code: "+49",  country: "Germany",               iso: "DE" },
+  { code: "+33",  country: "France",                iso: "FR" },
+  { code: "+39",  country: "Italy",                 iso: "IT" },
+  { code: "+34",  country: "Spain",                 iso: "ES" },
+  { code: "+31",  country: "Netherlands",           iso: "NL" },
+  { code: "+46",  country: "Sweden",                iso: "SE" },
+  { code: "+47",  country: "Norway",                iso: "NO" },
+  { code: "+45",  country: "Denmark",               iso: "DK" },
+  { code: "+41",  country: "Switzerland",           iso: "CH" },
+  { code: "+32",  country: "Belgium",               iso: "BE" },
+  { code: "+48",  country: "Poland",                iso: "PL" },
+  { code: "+7",   country: "Russia",                iso: "RU" },
+  { code: "+86",  country: "China",                 iso: "CN" },
+  { code: "+81",  country: "Japan",                 iso: "JP" },
+  { code: "+82",  country: "South Korea",           iso: "KR" },
+  { code: "+60",  country: "Malaysia",              iso: "MY" },
+  { code: "+66",  country: "Thailand",              iso: "TH" },
+  { code: "+63",  country: "Philippines",           iso: "PH" },
+  { code: "+62",  country: "Indonesia",             iso: "ID" },
+  { code: "+84",  country: "Vietnam",               iso: "VN" },
+  { code: "+880", country: "Bangladesh",            iso: "BD" },
+  { code: "+92",  country: "Pakistan",              iso: "PK" },
+  { code: "+94",  country: "Sri Lanka",             iso: "LK" },
+  { code: "+977", country: "Nepal",                 iso: "NP" },
+  { code: "+27",  country: "South Africa",          iso: "ZA" },
+  { code: "+234", country: "Nigeria",               iso: "NG" },
+  { code: "+254", country: "Kenya",                 iso: "KE" },
+  { code: "+20",  country: "Egypt",                 iso: "EG" },
+  { code: "+55",  country: "Brazil",                iso: "BR" },
+  { code: "+52",  country: "Mexico",                iso: "MX" },
+  { code: "+54",  country: "Argentina",             iso: "AR" },
+  { code: "+57",  country: "Colombia",              iso: "CO" },
 ];
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -137,7 +137,7 @@ export function PhoneInput({ value, onChange, placeholder = "Phone number", clas
         onClick={() => { setOpen((o) => !o); setSearch(""); }}
         className="flex items-center gap-1.5 px-3 py-2 text-sm border border-r-0 border-gray-200 dark:border-slate-700 rounded-l-lg bg-gray-50 dark:bg-slate-800 hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors focus:outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500 whitespace-nowrap flex-shrink-0"
       >
-        <span className="text-base leading-none">{selected.flag}</span>
+        <span className="text-[10px] font-semibold tracking-wide text-gray-500 dark:text-slate-400">{selected.iso}</span>
         <span className="text-gray-700 dark:text-slate-300 font-medium text-xs">{dialCode}</span>
         <ChevronDown className={`w-3 h-3 text-gray-400 dark:text-slate-500 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
@@ -186,7 +186,7 @@ export function PhoneInput({ value, onChange, placeholder = "Phone number", clas
                       : "text-gray-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-white/[0.04]"
                   }`}
                 >
-                  <span className="text-base leading-none w-5 text-center flex-shrink-0">{c.flag}</span>
+                  <span className="text-[10px] font-semibold tracking-wide w-6 text-center flex-shrink-0 text-gray-400 dark:text-slate-500">{c.iso}</span>
                   <span className="flex-1 truncate text-xs">{c.country}</span>
                   <span className="text-xs text-gray-400 dark:text-slate-500 font-mono flex-shrink-0">{c.code}</span>
                 </button>

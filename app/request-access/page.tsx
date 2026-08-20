@@ -59,7 +59,7 @@ export default function RequestAccessPage() {
         {done ? (
           <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/[0.06] p-8 text-center">
             <CheckCircle2 className="w-12 h-12 text-emerald-400 mx-auto mb-4" />
-            <h1 className="text-2xl font-bold tracking-tight">Request received 🎉</h1>
+            <h1 className="text-2xl font-bold tracking-tight">Request received</h1>
             <p className="mt-3 text-sm text-slate-400 leading-relaxed">
               Thanks, {form.contactName.split(" ")[0] || "there"}. The Vibrnd team will review your
               details and reach out at <span className="text-slate-200">{form.email}</span> to set up

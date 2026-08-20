@@ -178,7 +178,7 @@ async function main() {
     ],
   });
 
-  console.log("\n✅ Demo workspace seeded");
+  console.log("\nDemo workspace seeded");
   console.log("   Org:      Vibrnd Studio (", org.id, ")");
   console.log("   Owner:   ", OWNER_NAME, "<" + OWNER_EMAIL + ">");
   console.log("   Password:", PASSWORD);

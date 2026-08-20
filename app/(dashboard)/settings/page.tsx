@@ -9,7 +9,10 @@ import {
 } from "lucide-react";
 import type { CompanySettings, TeamUser, DesignationRole } from "@/types";
 import { useToast } from "@/components/ui/Toast";
+import { useCurrentUser } from "@/lib/useCurrentUser";
+import { can } from "@/lib/permissions";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { CreativeTypeDot } from "@/components/content/CreativeTypeDot";
 
 /* ─────────────────────────────────────────────────────────────
    Helpers
@@ -1833,7 +1836,7 @@ function CreativeTypesTab() {
         <div className="space-y-1.5">
           {types.map((t) => (
             <div key={t.id} className={`flex items-center gap-3 px-3 py-2.5 border rounded-xl ${t.isActive ? "border-gray-100" : "border-gray-100 bg-gray-50 opacity-60"}`}>
-              <span className="text-base w-6 text-center">{t.icon ?? "✨"}</span>
+              <span className="w-6 flex justify-center"><CreativeTypeDot color={t.color} size="md" /></span>
               <input
                 type="color"
                 value={t.color ?? "#64748b"}
@@ -1913,13 +1916,19 @@ function RunScanCard() {
   );
 }
 
-const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
-  { id: "company",        label: "Organization",   icon: Building2 },
-  { id: "letterhead",     label: "Letterhead",     icon: FileText  },
-  { id: "users",          label: "Users",          icon: Users     },
-  { id: "roles",          label: "Roles",          icon: Shield    },
-  { id: "creative-types", label: "Creative Types", icon: Palette   },
-  { id: "account",        label: "Account",        icon: KeyRound  },
+/**
+ * `org: true` means the tab configures the agency, not the person looking at
+ * it. Those belong to admin and manager only — an SMM has no business
+ * renaming the company or handing out roles. Account is everyone's: it is
+ * where you change your own password, so it is never gated.
+ */
+const TABS: { id: Tab; label: string; icon: React.ElementType; org: boolean }[] = [
+  { id: "company",        label: "Organization",   icon: Building2, org: true  },
+  { id: "letterhead",     label: "Letterhead",     icon: FileText,  org: true  },
+  { id: "users",          label: "Users",          icon: Users,     org: true  },
+  { id: "roles",          label: "Roles",          icon: Shield,    org: true  },
+  { id: "creative-types", label: "Creative Types", icon: Palette,   org: true  },
+  { id: "account",        label: "Account",        icon: KeyRound,  org: false },
 ];
 
 const DEFAULT_SETTINGS: CompanySettings = {
@@ -1935,12 +1944,22 @@ const DEFAULT_SETTINGS: CompanySettings = {
 };
 
 export default function SettingsPage() {
+  const { user: me } = useCurrentUser();
+  const managesOrg = can(me, "settings.manage");
+  const visibleTabs = TABS.filter((t) => t.org === false || managesOrg);
+
   const [tab, setTab]             = useState<Tab>("company");
   const [settings, setSettings]   = useState<CompanySettings>(DEFAULT_SETTINGS);
   const [settingsLoading, setSettingsLoading] = useState(true);
   const [settingsError, setSettingsError]     = useState("");
 
+  // Someone without org rights lands on the only tab that is theirs.
   useEffect(() => {
+    if (!managesOrg && tab !== "account") setTab("account");
+  }, [managesOrg, tab]);
+
+  useEffect(() => {
+    if (!managesOrg) return;
     fetch("/api/settings/company")
       .then(async (r) => {
         const d = await r.json();
@@ -1949,20 +1968,24 @@ export default function SettingsPage() {
       })
       .catch(() => setSettingsError("Could not reach the settings API"))
       .finally(() => setSettingsLoading(false));
-  }, []);
+  }, [managesOrg]);
 
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Page header */}
       <div className="bg-white border-b border-gray-200 px-6 lg:px-8 py-5">
-        <h1 className="text-xl font-bold text-gray-900">Settings</h1>
-        <p className="text-sm text-gray-500 mt-0.5">Manage your agency profile, team and PDF templates</p>
+        <h1 className="text-xl font-bold text-gray-900">{managesOrg ? "Settings" : "My Account"}</h1>
+        <p className="text-sm text-gray-500 mt-0.5">
+          {managesOrg
+            ? "Manage your agency profile, team and PDF templates"
+            : "Your sign-in details. Agency settings are managed by an admin."}
+        </p>
       </div>
 
       <div className="px-6 lg:px-8 py-6 max-w-5xl">
         {/* Tab bar */}
         <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit mb-6">
-          {TABS.map(({ id, label, icon: Icon }) => (
+          {visibleTabs.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
               onClick={() => setTab(id)}
@@ -1981,7 +2004,7 @@ export default function SettingsPage() {
         {/* Settings load error banner — only shown after load completes with an error */}
         {!settingsLoading && settingsError && (
           <div className="mb-4 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-800">
-            ⚠️ {settingsError} — showing defaults. Changes will still be saved.
+            {settingsError} — showing defaults. Changes will still be saved.
           </div>
         )}
 

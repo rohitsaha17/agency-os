@@ -12,6 +12,7 @@ import { MonthGrid, MONTH_NAMES, isSameDay } from "@/components/calendar/MonthGr
 import { useCurrentUser } from "@/lib/useCurrentUser";
 import { toast } from "@/lib/toast";
 import type { ContentItem, ContentStatus, CreativeType, Task } from "@/types";
+import { CreativeTypeDot } from "@/components/content/CreativeTypeDot";
 
 // ── Status styling ───────────────────────────────────────────
 
@@ -26,6 +27,36 @@ export const CONTENT_STATUS_META: Record<ContentStatus, { label: string; chip: s
   POSTED:          { label: "Posted",          chip: "bg-indigo-50 text-indigo-700 border-indigo-200",   dot: "bg-indigo-600" },
   MISSED:          { label: "Missed",          chip: "bg-red-50 text-red-600 border-red-200",            dot: "bg-red-500" },
 };
+
+/**
+ * What the chip on a content item should say.
+ *
+ * Reserving twelve Reel slots for a month and actually planning twelve Reels
+ * are different acts, and PLANNED covered both — a freshly bulk-created slot
+ * read "Planned" when nothing had been planned about it beyond the date and
+ * the format. A slot carries a placeholder topic ("Reel 1") and no brief until
+ * an SMM writes one, so an empty brief is what separates the two.
+ *
+ * The word is "Reserved", not "Scheduled": SCHEDULED is already a later stage
+ * in the same pipeline (client-approved, queued to go out), and two things
+ * called scheduled at opposite ends of the flow would be worse than the
+ * problem being fixed.
+ */
+export function contentStatusChip(item: { status: ContentStatus; description: string | null }) {
+  const meta = CONTENT_STATUS_META[item.status];
+  // `description` is the ContentItem's brief. Required (not optional) in the
+  // signature on purpose: an optional field would silently be `undefined` at
+  // any call site that forgot to select it, and every planned item would then
+  // read "Reserved".
+  if (item.status === "PLANNED" && !item.description?.trim()) {
+    return {
+      ...meta,
+      label: "Reserved",
+      chip: "bg-slate-50 text-slate-500 border-slate-200 border-dashed",
+    };
+  }
+  return meta;
+}
 
 const PIPELINE: ContentStatus[] = [
   "PLANNED", "ASSIGNED", "IN_PROGRESS", "IN_REVIEW",
@@ -261,7 +292,7 @@ function ItemPanel({
   const [busy, setBusy] = useState(false);
   const [reviewPrompt, setReviewPrompt] = useState(false);
 
-  const meta = CONTENT_STATUS_META[item.status];
+  const meta = contentStatusChip(item);
   const isAdmin = currentUser?.role === "ADMIN" || currentUser?.role === "OWNER";
   const canTeamApprove = isAdmin || currentUser?.role === "MANAGER" || currentUser?.designation === "HEAD_OF_DESIGN";
   const canClientApprove = isAdmin || currentUser?.designation === "SMM" || currentUser?.designation === "POC";
@@ -338,7 +369,7 @@ function ItemPanel({
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-lg">{item.creativeType.icon ?? "✨"}</span>
+                <CreativeTypeDot color={item.creativeType.color} size="md" />
                 <span className={`text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full border ${meta.chip}`}>
                   {meta.label}
                 </span>
@@ -361,7 +392,7 @@ function ItemPanel({
           {/* Review prompt */}
           {reviewPrompt && (
             <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl">
-              <p className="text-xs font-semibold text-amber-800">All linked tasks are done 🎉</p>
+              <p className="text-xs font-semibold text-amber-800">All linked tasks are done</p>
               <p className="text-xs text-amber-600 mt-0.5">Move this item to In Review?</p>
               <div className="flex gap-2 mt-2">
                 <button onClick={() => setStatus("IN_REVIEW", "all linked tasks completed")}
@@ -599,7 +630,7 @@ export function ContentCalendarTab({ clientId, readOnly = false }: { clientId: s
 
   const monthKey = `${year}-${String(month + 1).padStart(2, "0")}`;
   const [summary, setSummary] = useState<{
-    perType: { creativeType: { id: string; name: string; icon: string | null }; quota: number; planned: number; posted: number; extra: number; carriedIn: number; carriedOut: number }[];
+    perType: { creativeType: { id: string; name: string; icon: string | null; color: string | null }; quota: number; planned: number; posted: number; extra: number; carriedIn: number; carriedOut: number }[];
     totals: { extra: number; carriedIn: number; carriedOut: number };
   } | null>(null);
 
@@ -749,7 +780,7 @@ export function ContentCalendarTab({ clientId, readOnly = false }: { clientId: s
             const over = used > r.quota;
             return (
               <div key={r.creativeType.id} className="flex items-center gap-1.5" title={`${r.creativeType.name}: ${used}/${r.quota} used this month`}>
-                <span className="text-xs">{r.creativeType.icon ?? "✨"}</span>
+                <CreativeTypeDot color={r.creativeType.color} />
                 <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
                   <div className={`h-full rounded-full ${over ? "bg-fuchsia-500" : pct >= 100 ? "bg-emerald-500" : "bg-indigo-500"}`}
                     style={{ width: `${pct}%` }} />
@@ -797,7 +828,7 @@ export function ContentCalendarTab({ clientId, readOnly = false }: { clientId: s
                 return (
                   <>
                     {dayList.slice(0, 3).map((i) => {
-                      const meta = CONTENT_STATUS_META[i.status];
+                      const meta = contentStatusChip(i);
                       return (
                         <button
                           key={i.id}
@@ -811,7 +842,7 @@ export function ContentCalendarTab({ clientId, readOnly = false }: { clientId: s
                             <span className="w-0.5 h-3 rounded-full flex-shrink-0"
                               style={{ background: projectColor(i) }} />
                           )}
-                          <span className="text-[10px] flex-shrink-0">{i.creativeType.icon ?? "✨"}</span>
+                          <CreativeTypeDot color={i.creativeType.color} />
                           <span className="text-[10px] truncate leading-tight flex-1">{i.topic}</span>
                           {i.isExtra && <span className="text-[8px] font-bold text-fuchsia-500">E</span>}
                           {i.isAdHoc && <Zap className="w-2 h-2 text-amber-500 flex-shrink-0" />}
@@ -837,13 +868,13 @@ export function ContentCalendarTab({ clientId, readOnly = false }: { clientId: s
             ) : (
               <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
                 {items.map((i, idx) => {
-                  const meta = CONTENT_STATUS_META[i.status];
+                  const meta = contentStatusChip(i);
                   return (
                     <button key={i.id} onClick={() => setPanelItemId(i.id)}
                       className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 ${idx > 0 ? "border-t border-gray-100" : ""}`}>
                       <span className={`w-2 h-2 rounded-full flex-shrink-0 ${meta.dot}`} />
                       <span className="text-xs text-gray-400 w-14 flex-shrink-0">{fmtDay(i.date)}</span>
-                      <span className="text-sm flex-shrink-0">{i.creativeType.icon ?? "✨"}</span>
+                      <CreativeTypeDot color={i.creativeType.color} />
                       <span className="text-sm text-gray-800 truncate flex-1">{i.topic}</span>
                       {i.isExtra && <span className="text-[10px] font-semibold text-fuchsia-600">EXTRA</span>}
                       {i.isAdHoc && <Zap className="w-3 h-3 text-amber-500" />}
@@ -870,12 +901,12 @@ export function ContentCalendarTab({ clientId, readOnly = false }: { clientId: s
             ) : (
               <ul className="space-y-1.5 mb-3">
                 {dayItems.map((i) => {
-                  const meta = CONTENT_STATUS_META[i.status];
+                  const meta = contentStatusChip(i);
                   return (
                     <li key={i.id}>
                       <button onClick={() => setPanelItemId(i.id)}
                         className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-lg border text-left ${meta.chip}`}>
-                        <span className="text-sm">{i.creativeType.icon ?? "✨"}</span>
+                        <CreativeTypeDot color={i.creativeType.color} />
                         <span className="text-xs truncate flex-1">{i.topic}</span>
                         <span className="text-[9px] font-medium uppercase">{meta.label}</span>
                       </button>

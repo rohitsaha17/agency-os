@@ -41,3 +41,35 @@ export function jsonFor<T>(
 ): NextResponse {
   return NextResponse.json(stripFinancials(data, user), init);
 }
+
+/**
+ * A Prisma `where` fragment limiting a task list to what this person should
+ * see — the org chart expressed as a query.
+ *
+ * Admin and manager see the whole board; that's the job. An SMM sees the
+ * projects they plan and anything routed to them. Everyone else sees the work
+ * they were actually given, and not a list of what their colleagues are up to.
+ *
+ * Returns `{}` for the unrestricted case so it can be spread unconditionally.
+ * Combine with AND, never by spreading into a `where` that already has an OR.
+ */
+export function taskVisibilityScope(user: { id: string; role?: string | null }) {
+  if (can(user, "projects.manage")) return {};
+
+  const mine = [
+    { assignees: { some: { userId: user.id } } },
+    { managerId: user.id },
+  ];
+
+  if (can(user, "content.plan")) {
+    return {
+      OR: [
+        ...mine,
+        { approverId: user.id },
+        { project: { members: { some: { userId: user.id, role: "SMM" as const } } } },
+      ],
+    };
+  }
+
+  return { OR: mine };
+}

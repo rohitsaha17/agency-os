@@ -18,7 +18,7 @@ Run against `http://localhost:3000` on 2026-08-20.
 | `/api/invoices` | 200 | 200 | 403 | 403 |  |
 | `/api/receipts` | 200 | 200 | 403 | 403 |  |
 | `/api/billable-items` | 200 | 200 | 403 | 403 |  |
-| `/api/expenses` | 200 | 200 | 200 | 403 | SMM may file an expense but sees no amounts — stripped, not refused |
+| `/api/expenses` | 200 | 200 | 200 | 200 | everyone may file what they spent; below manager the list is scoped to your own rows, amounts included |
 | `/api/clients` | 200 | 200 | 200 | 200 | TEAM is scoped to clients they hold work on |
 | `/api/projects` | 200 | 200 | 200 | 200 | TEAM is scoped to projects they hold work on |
 | `/api/contracts` | 200 | 200 | 403 | 403 |  |
@@ -26,6 +26,7 @@ Run against `http://localhost:3000` on 2026-08-20.
 | `/api/tasks/approvals` | 200 | 200 | 200 | 403 |  |
 | `/api/my-calendar?from=2026-08-01T00:00:00.000Z&to=2026-09-01T00:00:00.000Z` | 200 | 200 | 200 | 200 |  |
 | `/api/master-calendar?year=2026&month=8` | 200 | 200 | 200 | 200 |  |
+| `/api/settings/company` | 200 | 200 | 200 | 200 | readable by all — the app chrome needs the org name; only settings.manage may PATCH |
 | `/api/users` | 200 | 200 | 200 | 200 | readable by all — assignment pickers need it; only ADMIN may write |
 | `/api/designations` | 200 | 200 | 200 | 200 |  |
 | `/api/permissions/matrix` | 200 | 200 | 200 | 200 |  |

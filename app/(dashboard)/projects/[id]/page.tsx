@@ -29,6 +29,7 @@ import type {
 } from "@/types";
 import { SERVICE_TYPES, RECURRING_FREQUENCIES } from "@/components/projects/ProjectForm";
 import { useCurrentUser } from "@/lib/useCurrentUser";
+import { can } from "@/lib/permissions";
 import { formatMoney } from "@/lib/money";
 import { useToast } from "@/components/ui/Toast";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
@@ -138,6 +139,11 @@ export default function ProjectDetailPage() {
   const confirmDialog = useConfirm();
   const { user: currentUser } = useCurrentUser();
   const canManageChannels = currentUser?.role === "ADMIN" || currentUser?.role === "MANAGER";
+  // What the money side of a project looks like depends on who's looking.
+  // Contracts, invoices and tax are the agency's commercial business — admin
+  // and manager only. Planning is the SMM's. Everyone else gets the work.
+  const seesMoney = can(currentUser, "financials.view");
+  const canPlanProject = can(currentUser, "content.plan");
 
   const [pdfLoading, setPdfLoading] = useState(false);
 
@@ -170,6 +176,16 @@ export default function ProjectDetailPage() {
     const valid: PageTab[] = ["plan", "tasks", "files", "expenses", "contracts", "chat", "invoices", "tax"];
     if (requested && valid.includes(requested as PageTab)) setPageTab(requested as PageTab);
   }, []);
+
+  // A tab that isn't theirs — whether from a stale deep-link or the default —
+  // resolves to the first one that is, rather than rendering an empty shell.
+  useEffect(() => {
+    if (!currentUser) return;
+    const denied =
+      (!canPlanProject && pageTab === "plan") ||
+      (!seesMoney && (pageTab === "contracts" || pageTab === "invoices" || pageTab === "tax"));
+    if (denied) setPageTab("tasks");
+  }, [currentUser, canPlanProject, seesMoney, pageTab]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [expenseSummary, setExpenseSummary] = useState<{ total: number; budget: number | null; remaining: number | null; reimbursable: number; currency: string } | null>(null);
   const [contracts, setContracts] = useState<Contract[]>([]);
@@ -792,14 +808,16 @@ export default function ProjectDetailPage() {
         <div className="flex items-center gap-1 whitespace-nowrap">
           {([
             // v3: Plan is the FIRST tab — it's where the work is created
-            { id: "plan", label: "Plan", icon: <CalIcon className="w-3.5 h-3.5" /> },
-            { id: "tasks", label: "Tasks", icon: <CheckSquare className="w-3.5 h-3.5" /> },
+            ...(canPlanProject ? [{ id: "plan", label: "Plan", icon: <CalIcon className="w-3.5 h-3.5" /> }] : []),
+            { id: "tasks", label: canPlanProject ? "Tasks" : "My Tasks", icon: <CheckSquare className="w-3.5 h-3.5" /> },
             { id: "files", label: `Files${projectFiles.length > 0 ? ` (${projectFiles.length})` : ""}`, icon: <Paperclip className="w-3.5 h-3.5" /> },
             { id: "expenses", label: `Expenses${expenses.length > 0 ? ` (${expenses.length})` : ""}`, icon: <TrendingDown className="w-3.5 h-3.5" /> },
-            { id: "contracts", label: `Contracts${contracts.length > 0 ? ` (${contracts.length})` : ""}`, icon: <Scroll className="w-3.5 h-3.5" /> },
+            ...(seesMoney ? [{ id: "contracts", label: `Contracts${contracts.length > 0 ? ` (${contracts.length})` : ""}`, icon: <Scroll className="w-3.5 h-3.5" /> }] : []),
             { id: "chat", label: `Chat${channels.length > 0 ? ` (${channels.length})` : ""}`, icon: <MessageSquare className="w-3.5 h-3.5" /> },
-            { id: "invoices", label: `Invoices${invoices.length > 0 ? ` (${invoices.length})` : ""}`, icon: <Receipt className="w-3.5 h-3.5" /> },
-            { id: "tax", label: "Tax & Billing", icon: <DollarSign className="w-3.5 h-3.5" /> },
+            ...(seesMoney ? [
+              { id: "invoices", label: `Invoices${invoices.length > 0 ? ` (${invoices.length})` : ""}`, icon: <Receipt className="w-3.5 h-3.5" /> },
+              { id: "tax", label: "Tax & Billing", icon: <DollarSign className="w-3.5 h-3.5" /> },
+            ] : []),
           ] as { id: PageTab; label: string; icon: React.ReactNode }[]).map((tab) => (
             <button
               key={tab.id} onClick={() => setPageTab(tab.id)}

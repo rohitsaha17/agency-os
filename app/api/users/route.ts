@@ -9,6 +9,18 @@ import { handleApiError, ApiError } from "@/lib/api-errors";
 // v3: MEMBER is gone from this list; TEAM replaces it.
 const ASSIGNABLE_ROLES = ["ADMIN", "MANAGER", "SMM", "TEAM"] as const;
 
+/**
+ * Granting ADMIN is how someone gets the keys to everything, so it stays
+ * with people who already hold them. users.manage is ADMIN/OWNER only today,
+ * but this is checked explicitly rather than relying on that staying true.
+ */
+function assertMayGrant(caller: { role: string }, role: string | undefined) {
+  if (role !== "ADMIN") return;
+  if (caller.role !== "ADMIN" && caller.role !== "OWNER") {
+    throw new ApiError("Only an admin can make someone else an admin", 403);
+  }
+}
+
 const USER_FIELDS = {
   id: true, name: true, email: true, avatarUrl: true,
   role: true, isActive: true, createdAt: true,
@@ -53,6 +65,7 @@ export async function POST(req: NextRequest) {
     if (role !== undefined && !ASSIGNABLE_ROLES.includes(role)) {
       throw new ApiError("Invalid role", 400);
     }
+    assertMayGrant(user, role);
     if (designationId) {
       const ok = await prisma.designationRole.findFirst({
         where: { id: designationId, organizationId: user.organizationId },

@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   ChevronLeft, ChevronRight, Plus, X, CheckCircle2, Circle,
-  AlertCircle, ChevronDown, Check, CalendarDays, Users, Zap,
+  AlertCircle, ChevronDown, Check, CalendarDays, Users, Zap, PartyPopper,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { DeliveryDialog } from "@/components/tasks/DeliveryDialog";
@@ -15,6 +15,7 @@ import { useWheelPeriod } from "@/components/calendar/useWheelPeriod";
 import { useCurrentUser } from "@/lib/useCurrentUser";
 import { broadcastChange, useLiveRefresh } from "@/lib/live";
 import { toast } from "@/lib/toast";
+import { CreativeTypeDot } from "@/components/content/CreativeTypeDot";
 
 type View = "day" | "week" | "month" | "year" | "schedule";
 
@@ -237,8 +238,8 @@ export default function MyCalendarPage() {
             {done ? <CheckCircle2 className="w-3 h-3" /> : <Circle className="w-3 h-3 opacity-60" />}
           </button>
         )}
-        {e.kind === "content" && <span className="text-[10px] flex-shrink-0">{e.creativeType?.icon ?? "✨"}</span>}
-        {e.kind === "event" && <span className="text-[10px] flex-shrink-0">🎉</span>}
+        {e.kind === "content" && <CreativeTypeDot color={e.creativeType?.color} />}
+        {e.kind === "event" && <PartyPopper className="w-2.5 h-2.5 flex-shrink-0 text-amber-500" />}
         {e.time && <span className="text-[9px] font-semibold flex-shrink-0">{e.time}</span>}
         {e.link ? (
           <a href={e.link} onClick={(ev) => ev.stopPropagation()}

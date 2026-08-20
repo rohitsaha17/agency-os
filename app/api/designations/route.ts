@@ -15,6 +15,9 @@ function slugify(name: string) {
   return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
+/** Role names, which a designation may not reuse. */
+const ROLE_SLUGS = new Set(["owner", "admin", "manager", "smm", "team", "member"]);
+
 // GET /api/designations?activeOnly=1&assignableOnly=1
 // Readable by anyone signed in — assignment pickers need it.
 export async function GET(req: NextRequest) {
@@ -48,6 +51,17 @@ export async function POST(req: NextRequest) {
 
     const slug = slugify(name);
     if (!slug) throw new ApiError("Name must contain letters or numbers", 400);
+
+    // A designation must never share a name with a role. "Admin / SMM" reads
+    // as a contradiction when one column means what you MAY do and the other
+    // means what you DO (docs/V3_CONTEXT.md §2).
+    if (ROLE_SLUGS.has(slug)) {
+      throw new ApiError(
+        `"${name.trim()}" is a role, not a job title. Set it under Role instead — `
+        + "a designation describes the craft (Editor, Photographer), not the access level.",
+        400,
+      );
+    }
 
     const clash = await prisma.designationRole.findFirst({
       where: { organizationId: user.organizationId, slug },

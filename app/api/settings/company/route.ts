@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
+import { requireCapability } from "@/lib/api-permissions";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 
 // The CompanySettings model was removed in the multi-tenant migration.
@@ -26,6 +27,9 @@ export async function GET(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     const user = await requireAuth(req);
+    // This had no gate at all — anyone signed in could rewrite the agency's
+    // name, letterhead and currency. Settings belongs to admin and manager.
+    requireCapability(user, "settings.manage");
     const body = await req.json();
     const {
       name, email, phone, website, address, city, country,

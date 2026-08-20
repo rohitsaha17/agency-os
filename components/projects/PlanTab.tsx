@@ -15,12 +15,13 @@ import {
   Layers, Lock, Unlock, AlertTriangle,
 } from "lucide-react";
 import { MonthGrid, MONTH_NAMES } from "@/components/calendar/MonthGrid";
-import { CONTENT_STATUS_META } from "@/components/content/ContentCalendarTab";
+import { CONTENT_STATUS_META, contentStatusChip } from "@/components/content/ContentCalendarTab";
 import { Button } from "@/components/ui/Button";
 import { toast } from "@/lib/toast";
 import { CloseCycleWizard } from "@/components/projects/CloseCycleWizard";
 import { broadcastChange } from "@/lib/live";
 import type { ContentStatus } from "@/types";
+import { CreativeTypeDot } from "@/components/content/CreativeTypeDot";
 
 // ── shapes the plan endpoint returns ──
 
@@ -301,14 +302,14 @@ export function PlanTab({ projectId }: { projectId: string }) {
             renderCell={(day) => (
               <>
                 {itemsOn(day).slice(0, 3).map((i) => {
-                  const meta = CONTENT_STATUS_META[i.status];
+                  const meta = contentStatusChip(i);
                   const assignee = i.tasks[0]?.assignees[0]?.user.name;
                   return (
                     <button key={i.id} type="button"
                       onClick={(e) => { e.stopPropagation(); setEditItem(i); }}
                       title={`${i.creativeType.name}: ${i.topic}${assignee ? ` — ${assignee}` : ""}`}
                       className={`w-full text-left flex items-center gap-1 mb-0.5 px-1 py-0.5 rounded border ${meta?.chip ?? "bg-gray-100 border-gray-200"} ${i.isExtra ? "border-dashed" : ""}`}>
-                      <span className="text-[10px] flex-shrink-0">{i.creativeType.icon ?? "✨"}</span>
+                      <CreativeTypeDot color={i.creativeType.color} />
                       <span className="text-[10px] truncate leading-tight flex-1">{i.topic}</span>
                       {assignee && (
                         <span className="w-3.5 h-3.5 rounded-full bg-white/70 text-[7px] font-bold flex items-center justify-center flex-shrink-0">
@@ -330,7 +331,7 @@ export function PlanTab({ projectId }: { projectId: string }) {
           {data.items.length === 0 ? (
             <p className="text-sm text-gray-400 text-center py-10">Nothing planned in this cycle yet.</p>
           ) : data.items.map((i) => {
-            const meta = CONTENT_STATUS_META[i.status];
+            const meta = contentStatusChip(i);
             const assignee = i.tasks[0]?.assignees[0]?.user.name;
             return (
               <button key={i.id} type="button" onClick={() => setEditItem(i)}
@@ -338,7 +339,7 @@ export function PlanTab({ projectId }: { projectId: string }) {
                 <span className="text-xs text-gray-400 w-14 flex-shrink-0 tabular-nums">
                   {new Date(i.date).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })}
                 </span>
-                <span className="flex-shrink-0">{i.creativeType.icon ?? "✨"}</span>
+                <CreativeTypeDot color={i.creativeType.color} />
                 <span className="text-sm text-gray-800 flex-1 truncate">{i.topic}</span>
                 {i.isExtra && (
                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 font-medium flex-shrink-0">

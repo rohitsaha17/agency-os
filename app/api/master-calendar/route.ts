@@ -54,6 +54,7 @@ export async function GET(req: NextRequest) {
         },
         select: {
           id: true, clientId: true, projectId: true, date: true, topic: true,
+          description: true, // drives the Reserved/Planned distinction on the chip
           status: true, isExtra: true, isAdHoc: true, carriedFromId: true,
           client: { select: { id: true, name: true } },
           // v3: chips name the project too, so a client with several

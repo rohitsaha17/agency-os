@@ -24,7 +24,8 @@ export function Modal({ open, onClose, title, children, width = "max-w-lg" }: Mo
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    // data-modal-open lets the onboarding tour know not to interrupt
+    <div data-modal-open className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/40 backdrop-blur-sm"

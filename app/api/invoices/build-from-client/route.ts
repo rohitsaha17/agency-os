@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
         project: { select: { id: true, name: true } },
         cycle: { select: { id: true, label: true, startDate: true } },
         contentItem: {
-          select: { id: true, topic: true, date: true, creativeType: { select: { name: true, icon: true } } },
+          select: { id: true, topic: true, date: true, creativeType: { select: { name: true, icon: true, color: true } } },
         },
         flaggedBy: { select: { id: true, name: true } },
       },

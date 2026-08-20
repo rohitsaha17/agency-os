@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   ChevronRight, Plus, Calendar, AlertCircle, Timer,
-  GripVertical, UserPlus, Eye, GitBranch,
+  GripVertical, UserPlus, Eye, GitBranch, Check,
 } from "lucide-react";
 import { PriorityBadge } from "./PriorityBadge";
 import type { Task, TaskStatus } from "@/types";
@@ -26,8 +26,7 @@ const STATUS_ROW_LEFT: Record<TaskStatus, string> = {
   BLOCKED:     "border-l-red-400",
 };
 
-const STATUS_CYCLE: TaskStatus[] = ["TODO", "IN_PROGRESS", "IN_REVIEW", "DONE", "BLOCKED"];
-function nextStatus(s: TaskStatus) { return STATUS_CYCLE[(STATUS_CYCLE.indexOf(s) + 1) % STATUS_CYCLE.length]; }
+const STATUS_ORDER: TaskStatus[] = ["TODO", "IN_PROGRESS", "IN_REVIEW", "DONE", "BLOCKED"];
 
 function formatDate(d: string | null) {
   if (!d) return null;
@@ -39,14 +38,64 @@ function initials(name: string) {
   return name.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase();
 }
 
-function StatusDot({ status, onCycle }: { status: TaskStatus; onCycle: () => void }) {
+/**
+ * The status control.
+ *
+ * This used to advance blindly to the next status in a fixed cycle: one click
+ * moved To Do → In Progress with nothing on screen naming where it landed, and
+ * five clicks wrapped you back to where you started. You had to know the cycle
+ * by heart to use it.
+ *
+ * Now it opens a list, so the status you're choosing is written down before
+ * you pick it. The row's left border recolours from the same map the moment
+ * the choice is made.
+ */
+function StatusDot({ status, onPick }: { status: TaskStatus; onPick: (s: TaskStatus) => void }) {
   const { dot, label, ring } = STATUS_DOT[status];
+  const [open, setOpen] = useState(false);
+  const wrap = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: MouseEvent) => {
+      if (wrap.current && !wrap.current.contains(e.target as Node)) setOpen(false);
+    };
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", away);
+    document.addEventListener("keydown", esc);
+    return () => {
+      document.removeEventListener("mousedown", away);
+      document.removeEventListener("keydown", esc);
+    };
+  }, [open]);
+
   return (
-    <button
-      onClick={(e) => { e.stopPropagation(); onCycle(); }}
-      title={`Status: ${label} — click to advance`}
-      className={`w-3.5 h-3.5 rounded-full flex-shrink-0 ring-2 ${ring} ${dot} hover:scale-125 transition-transform`}
-    />
+    <div ref={wrap} className="relative flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        title={`${label} — click to change`}
+        aria-label={`Status: ${label}`}
+        className={`w-3.5 h-3.5 rounded-full ring-2 ${ring} ${dot} hover:scale-125 transition-transform`}
+      />
+      {open && (
+        <div className="absolute left-0 top-6 z-30 w-44 py-1 rounded-xl bg-white dark:bg-slate-800 border border-gray-200/80 dark:border-slate-700 shadow-lg shadow-black/[0.08] dark:shadow-black/40">
+          <p className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+            Move to
+          </p>
+          {STATUS_ORDER.map((s) => (
+            <button
+              key={s}
+              onClick={() => { setOpen(false); if (s !== status) onPick(s); }}
+              className="w-full flex items-center gap-2.5 px-3 py-1.5 text-sm text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-700/70 transition-colors"
+            >
+              <span className={`w-2 h-2 rounded-full flex-shrink-0 ${STATUS_DOT[s].dot}`} />
+              <span className="flex-1 text-left">{STATUS_DOT[s].label}</span>
+              {s === status && <Check className="w-3.5 h-3.5 text-indigo-500 flex-shrink-0" />}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -145,7 +194,7 @@ function TaskRow({ task, depth, onOpen, onStatusChange, onAddSubtask, draggingId
         </div>
 
         {/* Status dot */}
-        <StatusDot status={task.status} onCycle={() => onStatusChange(task.id, nextStatus(task.status))} />
+        <StatusDot status={task.status} onPick={(s) => onStatusChange(task.id, s)} />
 
         {/* Title + subtask progress */}
         <div className="flex-1 min-w-0">

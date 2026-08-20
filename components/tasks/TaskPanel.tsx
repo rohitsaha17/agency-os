@@ -15,6 +15,8 @@ import { RoundHistory } from "@/components/tasks/RoundHistory";
 import { TaskUpdates } from "./TaskUpdates";
 import { TaskFiles } from "./TaskFiles";
 import { DeliveryDialog } from "./DeliveryDialog";
+import { useCurrentUser } from "@/lib/useCurrentUser";
+import { can } from "@/lib/permissions";
 import type {
   Task, TaskStatus, Priority, User,
   TaskHistoryEntry, TaskDeliveryRecord,
@@ -113,7 +115,20 @@ interface TaskPanelProps {
   onDeleted: (taskId: string) => void;
 }
 
+/** A field a junior may see but not set. Same shape as the editable one. */
+function ReadOnlyField({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <label className="block text-xs font-medium text-gray-500 mb-1">{label}</label>
+      <p className="w-full px-2.5 py-1.5 text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-lg truncate">
+        {value}
+      </p>
+    </div>
+  );
+}
+
 export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDeleted }: TaskPanelProps) {
+  const { user: me } = useCurrentUser();
   const [tab, setTab] = useState<Tab>("details");
   const [users, setUsers] = useState<User[]>([]);
   const [title, setTitle] = useState(task.title);
@@ -162,6 +177,25 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
   }, [onClose]);
 
   const markDirty = useCallback(() => setDirty(true), []);
+
+  /**
+   * Who owns what on a task.
+   *
+   * The brief — title, description, priority, due date, assignees, whether the
+   * client sees it — belongs to whoever planned the work. An editor moves the
+   * task along; they don't rewrite what they were asked to do, or quietly push
+   * their own deadline back. So `content.plan` gates every one of those fields
+   * and the delete button with them.
+   *
+   * "Request changes" is a review verdict, not a progress update. It's the
+   * reviewer's word on submitted work, so it sits behind `tasks.review` — an
+   * assignee can't raise a change request against their own task.
+   *
+   * What a junior keeps: status, Send for Review, files, discussion, time.
+   * That's the whole of their job and none of anyone else's.
+   */
+  const canPlan   = can(me, "content.plan");
+  const canReview = can(me, "tasks.review");
 
   const hasChildren = (task.children?.length ?? 0) > 0;
 
@@ -284,7 +318,8 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
               </div>
             </div>
 
-            <input value={title} onChange={(e) => { setTitle(e.target.value); markDirty(); }}
+            <input value={title} readOnly={!canPlan}
+              onChange={(e) => { if (!canPlan) return; setTitle(e.target.value); markDirty(); }}
               className="flex-1 text-base font-semibold text-gray-900 border-none outline-none bg-transparent focus:ring-0 p-0 placeholder:text-gray-400"
               placeholder="Task title" />
 
@@ -308,11 +343,14 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
               </span>
             )}
             <button
-              onClick={() => { setIsClientVisible((v) => !v); markDirty(); }}
+              disabled={!canPlan}
+              onClick={() => { if (!canPlan) return; setIsClientVisible((v) => !v); markDirty(); }}
               className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium border transition-all ${
-                isClientVisible ? "bg-sky-50 text-sky-600 border-sky-200" : "bg-gray-50 text-gray-400 border-gray-200 hover:border-gray-300"
-              }`}
-              title={isClientVisible ? "Visible to client — click to hide" : "Hidden from client — click to show"}
+                isClientVisible ? "bg-sky-50 text-sky-600 border-sky-200" : "bg-gray-50 text-gray-400 border-gray-200"
+              } ${canPlan ? "hover:border-gray-300" : "cursor-default"}`}
+              title={canPlan
+                ? (isClientVisible ? "Visible to client — click to hide" : "Hidden from client — click to show")
+                : (isClientVisible ? "Visible to client" : "Hidden from client")}
             >
               {isClientVisible ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
               {isClientVisible ? "Client visible" : "Hidden"}
@@ -327,7 +365,7 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
                 Send for Review
               </button>
             )}
-            {status !== "DONE" && (
+            {status !== "DONE" && canReview && (
               <button onClick={() => setShowChangeReq(true)}
                 className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors">
                 <AlertCircle className="w-3 h-3" />
@@ -446,9 +484,15 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
 
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">Description</label>
-                <textarea value={description} onChange={(e) => { setDescription(e.target.value); markDirty(); }}
-                  rows={4} placeholder="Add a description, requirements, or notes…"
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none" />
+                {canPlan ? (
+                  <textarea value={description} onChange={(e) => { setDescription(e.target.value); markDirty(); }}
+                    rows={4} placeholder="Add a description, requirements, or notes…"
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none" />
+                ) : (
+                  <p className="w-full px-3 py-2 text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-lg whitespace-pre-wrap min-h-[3rem]">
+                    {description || <span className="text-gray-400">No description.</span>}
+                  </p>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -462,30 +506,57 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
                     <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
                   </div>
                 </div>
-                <SelectField label="Priority" value={priority} onChange={(v) => { setPriority(v as Priority); markDirty(); }} options={PRIORITY_OPTIONS} />
+                {canPlan ? (
+                  <SelectField label="Priority" value={priority} onChange={(v) => { setPriority(v as Priority); markDirty(); }} options={PRIORITY_OPTIONS} />
+                ) : (
+                  <ReadOnlyField label="Priority" value={PRIORITY_OPTIONS.find((o) => o.value === priority)?.label ?? priority} />
+                )}
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Due Date</label>
-                <input type="date" value={dueDate} onChange={(e) => { setDueDate(e.target.value); markDirty(); }}
-                  className="w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                {canPlan ? (
+                  <>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">Due Date</label>
+                    <input type="date" value={dueDate} onChange={(e) => { setDueDate(e.target.value); markDirty(); }}
+                      className="w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  </>
+                ) : (
+                  <ReadOnlyField label="Due Date" value={dueDate
+                    ? new Date(`${dueDate}T00:00:00`).toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" })
+                    : "No due date"} />
+                )}
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Estimated Hours</label>
-                <input type="number" step="0.5" min="0" value={estimated}
-                  onChange={(e) => { setEstimated(e.target.value); markDirty(); }}
-                  placeholder="e.g. 4"
-                  className="w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                {canPlan ? (
+                  <>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">Estimated Hours</label>
+                    <input type="number" step="0.5" min="0" value={estimated}
+                      onChange={(e) => { setEstimated(e.target.value); markDirty(); }}
+                      placeholder="e.g. 4"
+                      className="w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  </>
+                ) : (
+                  <ReadOnlyField label="Estimated Hours" value={estimated ? `${estimated}h` : "Not estimated"} />
+                )}
               </div>
 
-              <div className="grid grid-cols-1 gap-3">
-                <AssigneePicker users={users} assigneeIds={assigneeIds} managerId={managerId}
-                  onChangeAssignees={(ids) => { setAssigneeIds(ids); markDirty(); }}
-                  onChangeManager={(id) => { setManagerId(id); markDirty(); }} />
-              </div>
+              {canPlan ? (
+                <div className="grid grid-cols-1 gap-3">
+                  <AssigneePicker users={users} assigneeIds={assigneeIds} managerId={managerId}
+                    onChangeAssignees={(ids) => { setAssigneeIds(ids); markDirty(); }}
+                    onChangeManager={(id) => { setManagerId(id); markDirty(); }} />
+                </div>
+              ) : (
+                <ReadOnlyField
+                  label="Assigned to"
+                  value={assigneeIds.map((id) => users.find((u) => u.id === id)?.name).filter(Boolean).join(", ") || "Nobody yet"}
+                />
+              )}
 
-              {/* Client visibility */}
+              {/* Client visibility — planners only; the pill above shows the
+                  current state to everyone else. */}
+              {canPlan && (
               <div className="border border-gray-200 rounded-xl p-3 space-y-2.5">
                 <div className="flex items-center gap-2">
                   <Users className="w-3.5 h-3.5 text-gray-400" />
@@ -508,6 +579,7 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
                   </label>
                 )}
               </div>
+              )}
 
               {task.parentId && (
                 <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-xs text-gray-500 flex items-center gap-2">
@@ -575,12 +647,14 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
 
         {/* Footer */}
         <div className="flex-shrink-0 border-t border-gray-200 px-5 py-4 flex items-center justify-between">
-          <button onClick={handleDelete} disabled={deleting}
-            className={`flex items-center gap-1.5 text-xs transition-colors ${confirmDelete ? "text-red-600 font-semibold" : "text-gray-400 hover:text-red-500"}`}>
-            <Trash2 className="w-3.5 h-3.5" />
-            {confirmDelete ? "Confirm delete?" : "Delete task"}
-          </button>
-          {confirmDelete && (
+          {canPlan && (
+            <button onClick={handleDelete} disabled={deleting}
+              className={`flex items-center gap-1.5 text-xs transition-colors ${confirmDelete ? "text-red-600 font-semibold" : "text-gray-400 hover:text-red-500"}`}>
+              <Trash2 className="w-3.5 h-3.5" />
+              {confirmDelete ? "Confirm delete?" : "Delete task"}
+            </button>
+          )}
+          {confirmDelete && canPlan && (
             <button onClick={() => setConfirmDelete(false)} className="text-xs text-gray-400 hover:text-gray-600 ml-3">Cancel</button>
           )}
           {dirty && (

@@ -13,7 +13,8 @@ import { Button } from "@/components/ui/Button";
 import { TaskModal } from "@/components/tasks/TaskModal";
 import { MonthGrid, MONTH_NAMES, isSameDay } from "@/components/calendar/MonthGrid";
 import { useWheelPeriod } from "@/components/calendar/useWheelPeriod";
-import { CONTENT_STATUS_META } from "@/components/content/ContentCalendarTab";
+import { CONTENT_STATUS_META, contentStatusChip } from "@/components/content/ContentCalendarTab";
+import { CreativeTypeDot } from "@/components/content/CreativeTypeDot";
 
 // ── Constants (legacy task/project layers) ───────────────────
 
@@ -65,6 +66,8 @@ interface MasterItem {
   clientId: string;
   date: string;
   topic: string;
+  /** The brief. Empty means the slot is reserved, not yet planned. */
+  description: string | null;
   status: ContentStatus;
   isExtra: boolean;
   isAdHoc: boolean;
@@ -222,7 +225,7 @@ export default function CalendarPage() {
   const chipClass = (i: MasterItem): string => {
     if (colorBy === "client") return colorMaps.client.get(i.clientId) ?? CLIENT_COLORS[0];
     if (colorBy === "type") return colorMaps.type.get(i.creativeType.id) ?? CLIENT_COLORS[0];
-    return CONTENT_STATUS_META[i.status].chip;
+    return contentStatusChip(i).chip;
   };
 
   /* Legend entries follow whatever the chips are coloured by. */
@@ -235,7 +238,7 @@ export default function CalendarPage() {
     if (colorBy === "type") {
       const seen = new Map<string, string>();
       items.forEach((i) => seen.set(
-        `${i.creativeType.icon ?? "✨"} ${i.creativeType.name}`,
+        `${i.creativeType.name}`,
         colorMaps.type.get(i.creativeType.id) ?? CLIENT_COLORS[0],
       ));
       return [...seen.entries()].map(([label, cls]) => ({ label, cls }));
@@ -464,8 +467,8 @@ export default function CalendarPage() {
                     <div key={e.id}
                       title={e.title + (e.client ? ` (${e.client.name})` : "")}
                       className={`px-1.5 py-0.5 text-[9px] font-semibold truncate border-y ${EVENT_KIND_STYLE[e.kind]} ${e.isAdHoc ? "border-dashed" : ""}`}>
-                      {e.kind === "FESTIVAL" && "🎉 "}
-                      {e.isAdHoc && "⚡ "}
+                      {e.kind === "FESTIVAL" && <PartyPopper className="w-3 h-3 inline mr-1" />}
+                      {e.isAdHoc && <Zap className="w-3 h-3 inline mr-1" />}
                       {e.title}
                     </div>
                   ))}
@@ -490,7 +493,7 @@ export default function CalendarPage() {
 
                   {/* Content chips */}
                   {dayItems.slice(0, maxShow).map((i) => {
-                    const meta = CONTENT_STATUS_META[i.status];
+                    const meta = contentStatusChip(i);
                     return (
                       <button key={i.id} type="button"
                         onClick={(e) => { e.stopPropagation(); setSelected(day); setSelectedItem(i); }}
@@ -500,7 +503,7 @@ export default function CalendarPage() {
                         <span className="w-3.5 h-3.5 rounded-full bg-white/70 text-[7px] font-bold flex items-center justify-center flex-shrink-0">
                           {initials(i.client.name)}
                         </span>
-                        <span className="text-[10px] flex-shrink-0">{i.creativeType.icon ?? "✨"}</span>
+                        <CreativeTypeDot color={i.creativeType.color} />
                         <span className="text-[10px] truncate leading-tight flex-1">{i.topic}</span>
                         <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${meta.dot}`} />
                         {i.isAdHoc && <Zap className="w-2 h-2 text-amber-500 flex-shrink-0" />}
@@ -564,10 +567,10 @@ export default function CalendarPage() {
                   </button>
                 </div>
 
-                <div className={`border rounded-xl p-3 mb-4 ${CONTENT_STATUS_META[selectedItem.status].chip} ${selectedItem.isAdHoc ? "border-dashed" : ""}`}>
+                <div className={`border rounded-xl p-3 mb-4 ${contentStatusChip(selectedItem).chip} ${selectedItem.isAdHoc ? "border-dashed" : ""}`}>
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="text-xs">
-                      {selectedItem.creativeType.icon ?? "✨"} {selectedItem.creativeType.name}
+                      <CreativeTypeDot color={selectedItem.creativeType.color} /> {selectedItem.creativeType.name}
                     </span>
                     <span className="text-[10px] font-semibold uppercase">
                       {CONTENT_STATUS_META[selectedItem.status].label}
@@ -640,7 +643,7 @@ export default function CalendarPage() {
                   {selectedEvents.map((e) => (
                     <div key={e.id} className={`border rounded-xl p-3 mb-2 ${EVENT_KIND_STYLE[e.kind]} ${e.isAdHoc ? "border-dashed" : ""}`}>
                       <p className="text-sm font-medium flex items-center gap-1.5">
-                        {e.kind === "FESTIVAL" && "🎉"} {e.isAdHoc && <Zap className="w-3 h-3" />} {e.title}
+                        {e.kind === "FESTIVAL" && <PartyPopper className="w-3 h-3" />} {e.isAdHoc && <Zap className="w-3 h-3" />} {e.title}
                       </p>
                       {e.client && <p className="text-xs opacity-70 mt-0.5">{e.client.name}</p>}
                       {e.notes && <p className="text-xs opacity-70 mt-1">{e.notes}</p>}
@@ -669,13 +672,13 @@ export default function CalendarPage() {
                     <div key={clientName}>
                       <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-2">{clientName}</p>
                       {clientItems.map((i) => {
-                        const meta = CONTENT_STATUS_META[i.status];
+                        const meta = contentStatusChip(i);
                         return (
                           <button key={i.id} type="button" onClick={() => setSelectedItem(i)}
                             className="block w-full text-left mb-2">
                             <div className={`border rounded-xl p-3 hover:shadow-sm transition-all ${meta.chip} ${i.isAdHoc ? "border-dashed" : ""}`}>
                               <div className="flex items-center justify-between mb-1">
-                                <span className="text-xs">{i.creativeType.icon ?? "✨"} {i.creativeType.name}</span>
+                                <span className="text-xs inline-flex items-center gap-1.5"><CreativeTypeDot color={i.creativeType.color} />{i.creativeType.name}</span>
                                 <span className="text-[10px] font-semibold uppercase">{meta.label}</span>
                               </div>
                               <p className="text-sm font-medium">{i.topic}</p>

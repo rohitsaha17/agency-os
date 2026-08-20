@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
+import { requireCapability } from "@/lib/api-permissions";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 import { logStatus } from "@/lib/audit";
 import { notifyMany } from "@/lib/notify";
@@ -34,6 +35,10 @@ export async function GET(req: NextRequest, { params }: Params) {
 export async function POST(req: NextRequest, { params }: Params) {
   try {
     const user = await requireAuth(req);
+    // Sending work back is a review verdict, not a progress update. It belongs
+    // to whoever reviews the task — an assignee doesn't raise a change request
+    // against their own work, they just do it.
+    requireCapability(user, "tasks.review");
     const { id } = await params;
     const { note } = await req.json();
     if (!note?.trim()) throw new ApiError("A note describing the changes is required", 400);

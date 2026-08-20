@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, Plus, X } from "lucide-react";
+import { ChevronDown, Plus, X, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { useCurrentUser } from "@/lib/useCurrentUser";
 import { can } from "@/lib/permissions";
@@ -51,6 +51,11 @@ export const SERVICE_TYPES: { value: string; label: string; defaultType: Project
   { value: "pr",                label: "PR & Communications",        defaultType: "RETAINER" },
   { value: "other",             label: "Other",                      defaultType: "ONE_TIME" },
 ];
+
+/** Role shown under a name when they hold no job title. */
+const ROLE_LABEL: Record<string, string> = {
+  OWNER: "Owner", ADMIN: "Admin", MANAGER: "Manager", SMM: "SMM", TEAM: "Team",
+};
 
 const EMPTY: ProjectFormData = {
   clientId: "", name: "", description: "", type: "ONE_TIME", serviceType: "",
@@ -162,14 +167,37 @@ export function ProjectForm({ initialData, projectId, defaultClientId, onSuccess
   const [team, setTeam] = useState<TeamOption[]>([]);
 
   const isEdit = Boolean(projectId);
+
+  /**
+   * Opened from a client's page, or editing an existing project — either way
+   * the client is settled and the field becomes a label rather than a choice.
+   */
+  const clientLocked = Boolean(defaultClientId) || isEdit;
+  const lockedClient = clients.find((c) => c.id === form.clientId);
+  const lockedClientName = lockedClient
+    ? (lockedClient.companyName ? `${lockedClient.companyName} (${lockedClient.name})` : lockedClient.name)
+    : null;
   const set = <K extends keyof ProjectFormData>(field: K, value: ProjectFormData[K]) =>
     setForm((prev) => ({ ...prev, [field]: value }));
 
   useEffect(() => {
+    // The picker only offers ACTIVE clients, but a project can be created
+    // from a prospect's page — so fetch the locked one by id too, or its
+    // name would never resolve.
     fetch("/api/clients?status=ACTIVE")
       .then((r) => r.json())
       .then((d) => { if (Array.isArray(d)) setClients(d); })
       .catch(() => {});
+    const lockedId = defaultClientId || initialData?.clientId;
+    if (lockedId) {
+      fetch(`/api/clients/${lockedId}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((c) => {
+          if (!c?.id) return;
+          setClients((prev) => (prev.some((x) => x.id === c.id) ? prev : [...prev, c]));
+        })
+        .catch(() => {});
+    }
     fetch("/api/creative-types")
       .then((r) => r.json())
       .then((d) => { if (Array.isArray(d)) setCreativeTypes(d); })
@@ -178,7 +206,7 @@ export function ProjectForm({ initialData, projectId, defaultClientId, onSuccess
       .then((r) => r.json())
       .then((d) => { if (Array.isArray(d)) setTeam(d); })
       .catch(() => {});
-  }, []);
+  }, [defaultClientId, initialData?.clientId]);
 
   // ── deliverable rows ──
   const setDeliverable = (i: number, patch: Partial<DeliverableRow>) =>
@@ -198,6 +226,15 @@ export function ProjectForm({ initialData, projectId, defaultClientId, onSuccess
     });
   const memberRole = (userId: string) => members.find((m) => m.userId === userId)?.role ?? null;
 
+  /**
+   * Who can plan a project: someone with the SMM role, or an admin/manager
+   * covering (docs/V3_CONTEXT.md §2). A junior can't — they don't hold
+   * content.plan — so offering them here would only lead to a 403 later.
+   */
+  const smmCandidates = team.filter((u) =>
+    ["SMM", "ADMIN", "MANAGER", "OWNER"].includes(u.role),
+  );
+
   const validate = () => {
     const errs: Record<string, string> = {};
     if (!form.clientId) errs.clientId = "Please select a client";
@@ -205,8 +242,10 @@ export function ProjectForm({ initialData, projectId, defaultClientId, onSuccess
     if (form.startDate && form.endDate && form.startDate > form.endDate) {
       errs.endDate = "End date must be after start date";
     }
-    if (form.budget && isNaN(parseFloat(form.budget))) {
-      errs.budget = "Budget must be a valid number";
+    // v3: the only amount the form collects is the cycle amount, and it's
+    // a number input — nothing left to validate as free text.
+    if (cycleAmount && isNaN(parseFloat(cycleAmount))) {
+      errs.cycleAmount = "That doesn't look like a number";
     }
     setFieldErrors(errs);
     return Object.keys(errs).length === 0;
@@ -338,23 +377,35 @@ export function ProjectForm({ initialData, projectId, defaultClientId, onSuccess
 
       {/* Core fields */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {/* The client is only a question when it isn't already answered.
+            Opened from a client's page (or an edit), it's decided — showing
+            a picker there just invites picking the wrong one. */}
         <div className="col-span-2">
           <FormField label="Client" required error={fieldErrors.clientId}>
-            <div className="relative">
-              <select
-                value={form.clientId}
-                onChange={(e) => set("clientId", e.target.value)}
-                className="w-full appearance-none px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-              >
-                <option value="">Select client</option>
-                {clients.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.companyName ? `${c.companyName} (${c.name})` : c.name}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-            </div>
+            {clientLocked ? (
+              <div className="flex items-center gap-2.5 px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg">
+                <Building2 className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                <span className="text-gray-800 truncate">
+                  {lockedClientName ?? "Loading…"}
+                </span>
+              </div>
+            ) : (
+              <div className="relative">
+                <select
+                  value={form.clientId}
+                  onChange={(e) => set("clientId", e.target.value)}
+                  className="w-full appearance-none px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                >
+                  <option value="">Select client</option>
+                  {clients.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.companyName ? `${c.companyName} (${c.name})` : c.name}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+              </div>
+            )}
           </FormField>
         </div>
 
@@ -446,23 +497,10 @@ export function ProjectForm({ initialData, projectId, defaultClientId, onSuccess
           </>
         )}
 
-        {canPrice && (
-          <div className="col-span-2">
-            <FormField label="Budget (internal)" error={fieldErrors.budget}>
-              <div className="flex items-center gap-2">
-                <span className="px-3 py-2 text-sm border border-gray-300 rounded-lg bg-gray-50 text-gray-500 select-none">
-                  {form.currency}
-                </span>
-                <input
-                  type="number" min="0" step="0.01" value={form.budget}
-                  onChange={(e) => set("budget", e.target.value)}
-                  placeholder="0.00"
-                  className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-              </div>
-            </FormField>
-          </div>
-        )}
+        {/* Budget used to live here. v3 has one number that matters — the
+            cycle amount in Commercials — and asking for two invited the
+            question of which one is real. The column stays for existing
+            projects; the form no longer sets it. */}
       </div>
 
       {/* ── Deliverables — what the client is owed ── */}
@@ -522,7 +560,10 @@ export function ProjectForm({ initialData, projectId, defaultClientId, onSuccess
       >
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {canPrice && (
-            <FormField label={form.type === "RETAINER" ? "Amount per cycle" : "Total amount"}>
+            <FormField
+              label={form.type === "RETAINER" ? "Amount per cycle" : "Total amount"}
+              error={fieldErrors.cycleAmount}
+            >
               <div className="flex items-center gap-2">
                 <span className="px-3 py-2 text-sm border border-gray-300 rounded-lg bg-gray-50 text-gray-500 select-none">
                   {form.currency}
@@ -564,41 +605,60 @@ export function ProjectForm({ initialData, projectId, defaultClientId, onSuccess
         </div>
       </Step>
 
-      {/* ── Team — assigning an SMM is what starts the flow ── */}
+      {/* ── Team ──
+          Only the SMM is chosen here. They plan the cycle, and planning is
+          what decides who does each piece — so naming contributors up front
+          would be guessing at work that doesn't exist yet. They're added on
+          the project once there's something to hand out. */}
       <Step
         n={5}
-        title="Team"
-        hint="The SMM plans this project's cycles. Adding one creates their planning task straight away."
+        title="Who plans this project?"
+        hint="The SMM lays out each cycle and reviews the work that comes back. Choosing one creates their planning task straight away."
       >
         {team.length === 0 ? (
           <p className="text-xs text-gray-400">Loading team…</p>
+        ) : smmCandidates.length === 0 ? (
+          <p className="text-xs text-gray-500">
+            Nobody has the SMM role yet. Add one in Settings ▸ Users, or pick an
+            admin or manager to plan it for now.
+          </p>
         ) : (
           <div className="space-y-1.5 max-h-64 overflow-y-auto">
-            {team.map((u) => {
-              const role = memberRole(u.id);
+            {smmCandidates.map((u) => {
+              const chosen = memberRole(u.id) === "SMM";
               return (
-                <div key={u.id} className="flex items-center gap-3 px-3 py-2 rounded-lg border border-gray-100">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-gray-800 truncate">{u.name}</p>
-                    <p className="text-[11px] text-gray-400">
-                      {u.jobTitle?.name ?? u.role}
-                    </p>
-                  </div>
-                  <div className="flex rounded-lg border border-gray-200 overflow-hidden text-[11px] flex-shrink-0">
-                    <button type="button" onClick={() => toggleMember(u.id, "SMM")}
-                      className={`px-2.5 py-1 ${role === "SMM" ? "bg-indigo-600 text-white font-medium" : "text-gray-500 hover:bg-gray-50"}`}>
-                      SMM
-                    </button>
-                    <button type="button" onClick={() => toggleMember(u.id, "CONTRIBUTOR")}
-                      className={`px-2.5 py-1 border-l border-gray-200 ${role === "CONTRIBUTOR" ? "bg-indigo-600 text-white font-medium" : "text-gray-500 hover:bg-gray-50"}`}>
-                      Contributor
-                    </button>
-                  </div>
-                </div>
+                <button key={u.id} type="button"
+                  onClick={() => toggleMember(u.id, "SMM")}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg border text-left transition-colors ${
+                    chosen
+                      ? "border-indigo-400 bg-indigo-50"
+                      : "border-gray-100 hover:bg-gray-50"
+                  }`}>
+                  <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${
+                    chosen ? "bg-indigo-600 text-white" : "bg-gray-100 text-gray-500"
+                  }`}>
+                    {u.name.split(" ").map((w) => w[0]).slice(0, 2).join("")}
+                  </span>
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-sm text-gray-800 truncate">{u.name}</span>
+                    <span className="block text-[11px] text-gray-400">
+                      {u.jobTitle?.name ?? ROLE_LABEL[u.role] ?? u.role}
+                    </span>
+                  </span>
+                  {chosen && (
+                    <span className="text-[11px] font-medium text-indigo-600 flex-shrink-0">
+                      Planning this
+                    </span>
+                  )}
+                </button>
               );
             })}
           </div>
         )}
+        <p className="text-[11px] text-gray-400 mt-3">
+          Editors, photographers and the rest are assigned per item while planning —
+          nothing to decide here.
+        </p>
       </Step>
 
       <div className="flex items-center justify-end gap-3 pt-2">

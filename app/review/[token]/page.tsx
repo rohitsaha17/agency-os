@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
 import { CheckCircle2, Link2, MessageSquare, ShieldAlert } from "lucide-react";
+import { CreativeTypeDot } from "@/components/content/CreativeTypeDot";
 
 interface ReviewItem {
   id: string;
@@ -136,7 +137,7 @@ export default function PublicReviewPage() {
                 <div className="flex items-start justify-between gap-3 flex-wrap">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="text-base">{item.creativeType.icon ?? "✨"}</span>
+                      <CreativeTypeDot color={item.creativeType.color} size="md" />
                       <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
                         {item.creativeType.name} · {new Date(item.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                       </span>

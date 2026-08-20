@@ -27,7 +27,7 @@ export async function GET(req: NextRequest, { params }: Params) {
 
     const packages = await prisma.clientPackage.findMany({
       where: { clientId, organizationId: user.organizationId },
-      include: { quotas: { include: { creativeType: { select: { id: true, name: true, icon: true } } } } },
+      include: { quotas: { include: { creativeType: { select: { id: true, name: true, icon: true, color: true } } } } },
       orderBy: { createdAt: "desc" },
     });
     const showMoney = canViewFinancials(user);
@@ -89,7 +89,7 @@ export async function POST(req: NextRequest, { params }: Params) {
           notes: notes?.trim() || null,
           quotas: { create: quotaRows },
         },
-        include: { quotas: { include: { creativeType: { select: { id: true, name: true, icon: true } } } } },
+        include: { quotas: { include: { creativeType: { select: { id: true, name: true, icon: true, color: true } } } } },
       });
     });
     return jsonFor(user, created, { status: 201 });
@@ -116,7 +116,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const updated = await prisma.clientPackage.update({
       where: { id: packageId },
       data: { isActive: !!isActive },
-      include: { quotas: { include: { creativeType: { select: { id: true, name: true, icon: true } } } } },
+      include: { quotas: { include: { creativeType: { select: { id: true, name: true, icon: true, color: true } } } } },
     });
     return jsonFor(user, strip(updated, canViewFinancials(user)));
   } catch (error) {

@@ -30,7 +30,6 @@ CROSS JOIN (VALUES
   ('Videographer', 'videographer', TRUE,  2),
   ('Copywriter',   'copywriter',   TRUE,  3),
   ('Designer',     'designer',     TRUE,  4),
-  ('SMM',          'smm',          TRUE,  5),
   ('Head of Design','head-of-design', TRUE, 6),
   ('SME',          'sme',          FALSE, 7),
   ('POC',          'poc',          FALSE, 8)
@@ -40,6 +39,10 @@ ON CONFLICT ("organizationId", "slug") DO NOTHING;
 -- ─────────────────────────────────────────────────────────────
 -- 3. Carry each user's old enum designation onto the new FK, so
 --    nobody loses their job label in the move.
+--
+--    v2's enum had an SMM value, but v3 makes SMM a ROLE — planning
+--    is an access tier, not a craft — so it has no designation to
+--    map onto and is deliberately absent below.
 -- ─────────────────────────────────────────────────────────────
 UPDATE users u
    SET "designationId" = d.id
@@ -48,7 +51,6 @@ UPDATE users u
    AND u."designationId" IS NULL
    AND u.designation IS NOT NULL
    AND d.slug = CASE u.designation::text
-                  WHEN 'SMM'            THEN 'smm'
                   WHEN 'DESIGNER'       THEN 'designer'
                   WHEN 'EDITOR'         THEN 'editor'
                   WHEN 'HEAD_OF_DESIGN' THEN 'head-of-design'

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { jsonFor, requireCapability } from "@/lib/api-permissions";
+import { canViewFinancials } from "@/lib/permissions";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 
 type Params = { params: Promise<{ id: string }> };
@@ -13,7 +14,13 @@ export async function GET(req: NextRequest, { params }: Params) {
     // v3: juniors have neither expenses.create nor financials.view
     requireCapability(user, "expenses.create");
     const expense = await prisma.expense.findFirst({
-      where: { id, organizationId: user.organizationId },
+      where: {
+        id,
+        organizationId: user.organizationId,
+        // Without financials.view you only ever reach your own expense —
+        // a direct id shouldn't get past what the list already hides.
+        ...(canViewFinancials(user) ? {} : { userId: user.id }),
+      },
       include: {
         project: { select: { id: true, name: true } },
         user: { select: { id: true, name: true } },
@@ -33,7 +40,13 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     // v3: juniors have neither expenses.create nor financials.view
     requireCapability(user, "expenses.create");
     const existing = await prisma.expense.findFirst({
-      where: { id, organizationId: user.organizationId },
+      where: {
+        id,
+        organizationId: user.organizationId,
+        // Without financials.view you only ever reach your own expense —
+        // a direct id shouldn't get past what the list already hides.
+        ...(canViewFinancials(user) ? {} : { userId: user.id }),
+      },
       select: { id: true },
     });
     if (!existing) throw new ApiError("Not found", 404);
@@ -79,7 +92,13 @@ export async function DELETE(req: NextRequest, { params }: Params) {
     // v3: juniors have neither expenses.create nor financials.view
     requireCapability(user, "expenses.create");
     const existing = await prisma.expense.findFirst({
-      where: { id, organizationId: user.organizationId },
+      where: {
+        id,
+        organizationId: user.organizationId,
+        // Without financials.view you only ever reach your own expense —
+        // a direct id shouldn't get past what the list already hides.
+        ...(canViewFinancials(user) ? {} : { userId: user.id }),
+      },
       select: { id: true },
     });
     if (!existing) throw new ApiError("Not found", 404);

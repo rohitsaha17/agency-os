@@ -170,6 +170,11 @@ function NavContent({
   // expense under a FINANCE heading for someone with no financial access
   // reads wrong, so for them it moves up into Work instead.
   const seesMoney = can(appUser, "financials.view");
+  // Only admin and manager run the agency's settings. Everyone else still
+  // needs a way to their own password, so the same link becomes "My Account".
+  const managesOrg = can(appUser, "settings.manage");
+  const settingsHref = managesOrg ? "/settings" : "/settings?tab=account";
+  const settingsLabel = managesOrg ? "Settings" : "My Account";
   const visibleNavItems = navItems
     .map((section) => {
       let links = section.links.filter((l) => l.need === null || can(appUser, l.need));
@@ -241,9 +246,9 @@ function NavContent({
               <ThemeToggleIcon />
             </div>
             <Link
-              href="/settings"
+              href={settingsHref}
               onClick={onClose}
-              title="Settings"
+              title={settingsLabel}
               data-tour="settings"
               className="flex items-center justify-center py-2.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-white/[0.05] transition-all duration-150"
             >
@@ -276,15 +281,15 @@ function NavContent({
               <ThemeToggle />
             </div>
 
-            {/* Settings */}
+            {/* Settings — org settings for admin/manager, own account otherwise */}
             <Link
-              href="/settings"
+              href={settingsHref}
               onClick={onClose}
               data-tour="settings"
               className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-400 hover:text-slate-100 hover:bg-white/[0.05] transition-all duration-150"
             >
               <Settings className="w-4 h-4 text-slate-500" />
-              Settings
+              {settingsLabel}
             </Link>
 
             {/* User row */}

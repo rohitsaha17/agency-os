@@ -7,6 +7,18 @@ import { handleApiError, ApiError } from "@/lib/api-errors";
 // v3: MEMBER is retired from the assignable set; TEAM replaces it.
 const ASSIGNABLE_ROLES = ["ADMIN", "MANAGER", "SMM", "TEAM"] as const;
 
+/**
+ * Granting ADMIN is how someone gets the keys to everything, so it stays
+ * with people who already hold them. users.manage is ADMIN/OWNER only today,
+ * but this is checked explicitly rather than relying on that staying true.
+ */
+function assertMayGrant(caller: { role: string }, role: string | undefined) {
+  if (role !== "ADMIN") return;
+  if (caller.role !== "ADMIN" && caller.role !== "OWNER") {
+    throw new ApiError("Only an admin can make someone else an admin", 403);
+  }
+}
+
 const USER_FIELDS = {
   id: true, name: true, email: true, avatarUrl: true,
   role: true, isActive: true, createdAt: true,
@@ -49,6 +61,7 @@ export async function PATCH(
         throw new ApiError("The organization owner's role cannot be changed", 403);
       }
       if (!ASSIGNABLE_ROLES.includes(role)) throw new ApiError("Invalid role", 400);
+      assertMayGrant(caller, role);
     }
     if (isActive === false && existing.role === "OWNER") {
       throw new ApiError("The organization owner cannot be deactivated", 403);

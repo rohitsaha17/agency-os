@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { PhoneCall, Plus, Check, Clock } from "lucide-react";
 import { toast } from "@/lib/toast";
+import { Select } from "@/components/ui/Select";
 
 interface FollowUpRow {
   id: string;
@@ -80,12 +81,12 @@ export function FollowUpsCard({ clientId }: { clientId: string }) {
             <input type="date" value={form.dueAt}
               onChange={(e) => setForm((f) => ({ ...f, dueAt: e.target.value }))}
               className="px-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-white" />
-            <select value={form.assignedToId}
-              onChange={(e) => setForm((f) => ({ ...f, assignedToId: e.target.value }))}
-              className="flex-1 px-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-white">
-              <option value="">Default (POC)</option>
-              {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-            </select>
+            <Select
+              value={form.assignedToId}
+              onChange={(v) => setForm((f) => ({ ...f, assignedToId: v }))}
+              options={[{ value: "", label: "Default (POC)" }, ...users.map((u) => ({ value: u.id, label: `${u.name}` }))]}
+              size="sm"
+            />
             <button onClick={add} disabled={saving}
               className="px-3 py-1.5 text-xs font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 disabled:opacity-50">
               Add

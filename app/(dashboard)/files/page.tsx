@@ -37,6 +37,7 @@ import { FileCard } from "@/components/files/FileCard";
 import { FileUploadZone } from "@/components/files/FileUploadZone";
 import { FileReviewModal } from "@/components/files/FileReviewModal";
 import { toast } from "@/lib/toast";
+import { Select } from "@/components/ui/Select";
 
 // ── types ──────────────────────────────────────────────────────
 
@@ -1127,33 +1128,21 @@ export default function FilesPage() {
               className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-9 pr-4 py-2 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-indigo-500"
             />
           </div>
-          <select
+          <Select
             value={filterClientId}
-            onChange={(e) => {
-              setFilterClientId(e.target.value);
-              setFilterProjectId("");
+            onChange={(v) => {
+            setFilterClientId(v);
+            setFilterProjectId("");
             }}
-            className="px-3 py-1.5 rounded-lg text-sm bg-slate-800 border border-slate-700 text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          >
-            <option value="">All Clients</option>
-            {clients.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.companyName ? `${c.companyName} (${c.name})` : c.name}
-              </option>
-            ))}
-          </select>
-          <select
+            options={[{ value: "", label: "All Clients" }, ...clients.map((c) => ({ value: c.id, label: String(c.companyName ? `${c.companyName} (${c.name})` : c.name) }))]}
+            size="sm"
+          />
+          <Select
             value={filterProjectId}
-            onChange={(e) => setFilterProjectId(e.target.value)}
-            className="px-3 py-1.5 rounded-lg text-sm bg-slate-800 border border-slate-700 text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          >
-            <option value="">All Projects</option>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
+            onChange={(v) => setFilterProjectId(v)}
+            options={[{ value: "", label: "All Projects" }, ...projects.map((p) => ({ value: p.id, label: String(p.name) }))]}
+            size="sm"
+          />
           <div className="flex bg-slate-800 border border-slate-700 rounded-lg p-0.5">
             <button
               onClick={() => setView("grid")}

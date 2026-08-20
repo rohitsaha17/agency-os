@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Plus, X, ArrowRight, AlertTriangle, CheckCircle2 } from "lucide-react";
 import type { Task, TaskStatus } from "@/types";
+import { Select } from "@/components/ui/Select";
 
 interface Dep {
   taskId: string;
@@ -130,16 +131,12 @@ export function DependencyList({ taskId, allTasks }: DependencyListProps) {
         {adding && (
           <div className="mt-2 flex gap-2">
             {error && <p className="text-xs text-red-500 mb-1">{error}</p>}
-            <select
+            <Select
               value={selectedId}
-              onChange={(e) => setSelectedId(e.target.value)}
-              className="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-            >
-              <option value="">Select task…</option>
-              {availableTasks.map((t) => (
-                <option key={t.id} value={t.id}>{t.title}</option>
-              ))}
-            </select>
+              onChange={(v) => setSelectedId(v)}
+              options={[{ value: "", label: "Select task…" }, ...availableTasks.map((t) => ({ value: t.id, label: String(t.title) }))]}
+              size="sm"
+            />
             <button
               onClick={handleAdd}
               disabled={!selectedId || saving}

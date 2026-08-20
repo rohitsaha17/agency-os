@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { ArrowRight, ArrowLeft, Loader2, CheckCircle2 } from "lucide-react";
 import { BrandLogo } from "@/components/ui/BrandLogo";
+import { Select } from "@/components/ui/Select";
 
 const TEAM_SIZES = ["1-5", "6-10", "11-25", "26-50", "50+"];
 
@@ -115,10 +116,11 @@ export default function RequestAccessPage() {
                 </div>
                 <div>
                   <label className={labelCls}>Team size</label>
-                  <select className={inputCls} value={form.teamSize} onChange={(e) => set("teamSize", e.target.value)}>
-                    <option value="">Select…</option>
-                    {TEAM_SIZES.map((s) => <option key={s} value={s}>{s} people</option>)}
-                  </select>
+                  <Select
+                    value={form.teamSize}
+                    onChange={(v) => set("teamSize", v)}
+                    options={[{ value: "", label: "Select…" }, ...TEAM_SIZES.map((s) => ({ value: s, label: String(`${s} people`) }))]}
+                  />
                 </div>
               </div>
 

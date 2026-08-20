@@ -22,6 +22,7 @@ import { CloseCycleWizard } from "@/components/projects/CloseCycleWizard";
 import { broadcastChange } from "@/lib/live";
 import type { ContentStatus } from "@/types";
 import { CreativeTypeDot } from "@/components/content/CreativeTypeDot";
+import { Select } from "@/components/ui/Select";
 
 // ── shapes the plan endpoint returns ──
 
@@ -496,14 +497,11 @@ function PlanItemDialog({
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1.5">Creative type *</label>
-              <select value={form.creativeTypeId}
-                onChange={(e) => setForm((f) => ({ ...f, creativeTypeId: e.target.value }))}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
-                <option value="">Pick a type…</option>
-                {types.map((t) => (
-                  <option key={t.id} value={t.id}>{t.icon ? `${t.icon} ` : ""}{t.name}</option>
-                ))}
-              </select>
+              <Select
+                value={form.creativeTypeId}
+                onChange={(v) => setForm((f) => ({ ...f, creativeTypeId: v }))}
+                options={[{ value: "", label: "Pick a type…" }, ...types.map((t) => ({ value: t.id, label: String(`${t.icon ? `${t.icon} ` : ""}${t.name}`) }))]}
+              />
             </div>
           </div>
 
@@ -536,16 +534,11 @@ function PlanItemDialog({
             <label className="block text-xs font-medium text-gray-700 mb-1.5">
               Assign to <span className="font-normal text-gray-400">— optional, can be done later</span>
             </label>
-            <select value={form.assigneeId}
-              onChange={(e) => setForm((f) => ({ ...f, assigneeId: e.target.value }))}
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
-              <option value="">Nobody yet</option>
-              {juniors.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.name}{u.jobTitle?.name ? ` — ${u.jobTitle.name}` : ""}
-                </option>
-              ))}
-            </select>
+            <Select
+              value={form.assigneeId}
+              onChange={(v) => setForm((f) => ({ ...f, assigneeId: v }))}
+              options={[{ value: "", label: "Nobody yet" }, ...juniors.map((u) => ({ value: u.id, label: String(`${u.name}${u.jobTitle?.name ? ` — ${u.jobTitle.name}` : ""}`) }))]}
+            />
           </div>
 
           {error && <p className="text-xs text-red-600">{error}</p>}
@@ -618,13 +611,11 @@ function BulkPlanDialog({
         <div className="p-5 space-y-4">
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1.5">Creative type</label>
-            <select value={form.creativeTypeId}
-              onChange={(e) => setForm((f) => ({ ...f, creativeTypeId: e.target.value }))}
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
-              {types.map((t) => (
-                <option key={t.id} value={t.id}>{t.icon ? `${t.icon} ` : ""}{t.name}</option>
-              ))}
-            </select>
+            <Select
+              value={form.creativeTypeId}
+              onChange={(v) => setForm((f) => ({ ...f, creativeTypeId: v }))}
+              options={[...types.map((t) => ({ value: t.id, label: String(`${t.icon ? `${t.icon} ` : ""}${t.name}`) }))]}
+            />
           </div>
           <div className="grid grid-cols-3 gap-3">
             <div>

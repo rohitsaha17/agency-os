@@ -33,6 +33,7 @@ import { can } from "@/lib/permissions";
 import { formatMoney } from "@/lib/money";
 import { useToast } from "@/components/ui/Toast";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { Select } from "@/components/ui/Select";
 
 type PageTab = "plan" | "tasks" | "files" | "expenses" | "contracts" | "chat" | "invoices" | "tax";
 type ViewMode = "kanban" | "list";
@@ -1319,15 +1320,12 @@ export default function ProjectDetailPage() {
                         autoFocus
                         onKeyDown={(e) => e.key === "Enter" && handleCreateChannel()}
                       />
-                      <select
+                      <Select
                         value={newChannelType}
-                        onChange={(e) => setNewChannelType(e.target.value as "PROJECT_INTERNAL" | "PROJECT_CLIENT" | "GENERAL")}
-                        className="px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg bg-white text-gray-600"
-                      >
-                        <option value="PROJECT_INTERNAL">Team Only</option>
-                        <option value="PROJECT_CLIENT">With Client</option>
-                        <option value="GENERAL">General</option>
-                      </select>
+                        onChange={(v) => setNewChannelType(v as "PROJECT_INTERNAL" | "PROJECT_CLIENT" | "GENERAL")}
+                        options={[{ value: "PROJECT_INTERNAL", label: "Team Only" }, { value: "PROJECT_CLIENT", label: "With Client" }, { value: "GENERAL", label: "General" }]}
+                        size="sm"
+                      />
                       <button onClick={handleCreateChannel} disabled={!newChannelName.trim()} className="px-3 py-1.5 text-xs font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50">
                         Create
                       </button>
@@ -1791,23 +1789,21 @@ export default function ProjectDetailPage() {
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">Currency</label>
-              <select value={expenseForm.currency} onChange={(e) => setExpenseForm((f) => ({ ...f, currency: e.target.value }))}
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              >
-                {CURRENCIES.map((c) => <option key={c}>{c}</option>)}
-              </select>
+              <Select
+                value={expenseForm.currency}
+                onChange={(v) => setExpenseForm((f) => ({ ...f, currency: v }))}
+                options={CURRENCIES.map((c) => ({ value: c, label: c }))}
+              />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">Category</label>
-              <select value={expenseForm.category} onChange={(e) => setExpenseForm((f) => ({ ...f, category: e.target.value as ExpenseCategory }))}
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              >
-                {(Object.entries(CATEGORY_LABELS) as [ExpenseCategory, string][]).map(([v, l]) => (
-                  <option key={v} value={v}>{l}</option>
-                ))}
-              </select>
+              <Select
+                value={expenseForm.category}
+                onChange={(v) => setExpenseForm((f) => ({ ...f, category: v as ExpenseCategory }))}
+                options={(Object.entries(CATEGORY_LABELS) as [ExpenseCategory, string][]).map(([v, l]) => ({ value: v, label: l }))}
+              />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">Date</label>
@@ -1819,13 +1815,11 @@ export default function ProjectDetailPage() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">Status</label>
-              <select value={expenseForm.status} onChange={(e) => setExpenseForm((f) => ({ ...f, status: e.target.value as ExpenseStatus }))}
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              >
-                {(["PENDING", "APPROVED", "PAID"] as ExpenseStatus[]).map((s) => (
-                  <option key={s} value={s}>{s.charAt(0) + s.slice(1).toLowerCase()}</option>
-                ))}
-              </select>
+              <Select
+                value={expenseForm.status}
+                onChange={(v) => setExpenseForm((f) => ({ ...f, status: v as ExpenseStatus }))}
+                options={(["PENDING", "APPROVED", "PAID"] as ExpenseStatus[]).map((s) => ({ value: s, label: s.charAt(0) + s.slice(1).toLowerCase() }))}
+              />
             </div>
           </div>
           <div>
@@ -1904,11 +1898,11 @@ export default function ProjectDetailPage() {
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">Currency</label>
-              <select value={contractForm.currency} onChange={(e) => setContractForm((f) => ({ ...f, currency: e.target.value }))}
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              >
-                {CURRENCIES.map((c) => <option key={c}>{c}</option>)}
-              </select>
+              <Select
+                value={contractForm.currency}
+                onChange={(v) => setContractForm((f) => ({ ...f, currency: v }))}
+                options={CURRENCIES.map((c) => ({ value: c, label: c }))}
+              />
             </div>
           </div>
 
@@ -1950,14 +1944,12 @@ export default function ProjectDetailPage() {
                     {party.partyType === "CLIENT" && (
                       <div>
                         <label className="block text-xs text-gray-400 mb-1">Client</label>
-                        <select value={party.clientId} onChange={(e) => updateContractParty(i, "clientId", e.target.value)}
-                          className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-                        >
-                          <option value="">Pick client…</option>
-                          {contractClients.map((c) => (
-                            <option key={c.id} value={c.id}>{c.companyName ? `${c.companyName} (${c.name})` : c.name}</option>
-                          ))}
-                        </select>
+                        <Select
+                          value={party.clientId}
+                          onChange={(v) => updateContractParty(i, "clientId", v)}
+                          options={[{ value: "", label: "Pick client…" }, ...contractClients.map((c) => ({ value: c.id, label: String(c.companyName ? `${c.companyName} (${c.name})` : c.name) }))]}
+                          size="sm"
+                        />
                       </div>
                     )}
                     {/* v3: external parties are typed in directly — name and
@@ -1965,12 +1957,12 @@ export default function ProjectDetailPage() {
                     {party.partyType === "USER" && (
                       <div>
                         <label className="block text-xs text-gray-400 mb-1">Team Member</label>
-                        <select value={party.userId} onChange={(e) => updateContractParty(i, "userId", e.target.value)}
-                          className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-                        >
-                          <option value="">Pick user…</option>
-                          {contractUsers.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-                        </select>
+                        <Select
+                          value={party.userId}
+                          onChange={(v) => updateContractParty(i, "userId", v)}
+                          options={[{ value: "", label: "Pick user…" }, ...contractUsers.map((u) => ({ value: u.id, label: `${u.name}` }))]}
+                          size="sm"
+                        />
                       </div>
                     )}
                     <div>

@@ -13,6 +13,7 @@ import { useCurrentUser } from "@/lib/useCurrentUser";
 import { can } from "@/lib/permissions";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { CreativeTypeDot } from "@/components/content/CreativeTypeDot";
+import { Select } from "@/components/ui/Select";
 
 /* ─────────────────────────────────────────────────────────────
    Helpers
@@ -98,20 +99,6 @@ function Textarea({ ...props }: React.TextareaHTMLAttributes<HTMLTextAreaElement
       {...props}
       className={`w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none bg-white ${props.className ?? ""}`}
     />
-  );
-}
-
-function Select({ children, ...props }: React.SelectHTMLAttributes<HTMLSelectElement>) {
-  return (
-    <div className="relative">
-      <select
-        {...props}
-        className={`w-full appearance-none px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white pr-8 ${props.className ?? ""}`}
-      >
-        {children}
-      </select>
-      <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
-    </div>
   );
 }
 
@@ -349,25 +336,25 @@ function CompanyTab({
       <SectionCard title="Regional Settings" desc="Currency, timezone and date formatting used across reports">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <Field label="Default Currency">
-            <div className="relative">
-              <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 z-10" />
-              <Select value={form.currency ?? "USD"} onChange={(e) => set("currency", e.target.value)} className="pl-8">
-                {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
-              </Select>
-            </div>
+            <Select
+              value={form.currency ?? "USD"}
+              onChange={(v) => set("currency", v)}
+              options={CURRENCIES.map((c) => ({ value: c, label: c }))}
+            />
           </Field>
           <Field label="Timezone">
-            <div className="relative">
-              <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 z-10" />
-              <Select value={form.timezone ?? "UTC"} onChange={(e) => set("timezone", e.target.value)} className="pl-8">
-                {TIMEZONES.map((tz) => <option key={tz} value={tz}>{tz}</option>)}
-              </Select>
-            </div>
+            <Select
+              value={form.timezone ?? "UTC"}
+              onChange={(v) => set("timezone", v)}
+              options={TIMEZONES.map((tz) => ({ value: tz, label: tz }))}
+            />
           </Field>
           <Field label="Date Format">
-            <Select value={form.dateFormat ?? "MMM D, YYYY"} onChange={(e) => set("dateFormat", e.target.value)}>
-              {DATE_FORMATS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
-            </Select>
+            <Select
+              value={form.dateFormat ?? "MMM D, YYYY"}
+              onChange={(v) => set("dateFormat", v)}
+              options={DATE_FORMATS.map((f) => ({ value: f.value, label: f.label }))}
+            />
           </Field>
         </div>
       </SectionCard>
@@ -1193,28 +1180,19 @@ function UsersTab() {
                 type="email"
               />
               <div className="relative">
-                <select
+                <Select
                   value={newForm.role}
-                  onChange={(e) => setNewForm((p) => ({ ...p, role: e.target.value }))}
-                  className="w-full appearance-none px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-                >
-                  {ASSIGNABLE_ROLES.map((r) => (
-                    <option key={r} value={r}>{ROLE_LABELS[r].label}</option>
-                  ))}
-                </select>
+                  onChange={(v) => setNewForm((p) => ({ ...p, role: v }))}
+                  options={[...ASSIGNABLE_ROLES.map((r) => ({ value: r, label: String(ROLE_LABELS[r].label) }))]}
+                />
                 <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
               </div>
               <div className="relative">
-                <select
+                <Select
                   value={newForm.designationId}
-                  onChange={(e) => setNewForm((p) => ({ ...p, designationId: e.target.value }))}
-                  className="w-full appearance-none px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-                >
-                  <option value="">No designation</option>
-                  {designations.filter((d) => d.isActive).map((d) => (
-                    <option key={d.id} value={d.id}>{d.name}</option>
-                  ))}
-                </select>
+                  onChange={(v) => setNewForm((p) => ({ ...p, designationId: v }))}
+                  options={[{ value: "", label: "No designation" }, ...designations.filter((d) => d.isActive).map((d) => ({ value: d.id, label: d.name }))]}
+                />
                 <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
               </div>
             </div>
@@ -1437,18 +1415,13 @@ function UserRow({
       {/* Designation select (v2 — job label, not permission) */}
       <div className="flex-shrink-0 hidden sm:block">
         <div className="relative">
-          <select
+          <Select
             value={user.jobTitle?.id ?? ""}
-            onChange={(e) => onDesignationChange(user.id, e.target.value)}
+            onChange={(v) => onDesignationChange(user.id, v)}
+            options={[{ value: "", label: "No designation" }, ...designations.filter((d) => d.isActive).map((d) => ({ value: d.id, label: d.name }))]}
+            size="sm"
             disabled={!user.isActive}
-            className="appearance-none text-xs font-medium px-2.5 py-1 rounded-full border cursor-pointer focus:outline-none focus:ring-1 focus:ring-indigo-500 pr-6 bg-gray-50 text-gray-600 border-gray-200"
-            title="Designation"
-          >
-            <option value="">No designation</option>
-            {designations.filter((d) => d.isActive).map((d) => (
-              <option key={d.id} value={d.id}>{d.name}</option>
-            ))}
-          </select>
+          />
           <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 pointer-events-none opacity-60" />
         </div>
       </div>
@@ -1456,16 +1429,12 @@ function UserRow({
       {/* Role badge / select */}
       <div className="flex-shrink-0">
         <div className="relative">
-          <select
+          <Select
             value={user.role}
-            onChange={(e) => onRoleChange(user.id, e.target.value)}
+            onChange={(v) => onRoleChange(user.id, v)}
+            options={[...ASSIGNABLE_ROLES.map((r) => ({ value: r, label: String(ROLE_LABELS[r].label) }))]}
             disabled={!user.isActive}
-            className={`appearance-none text-xs font-medium px-2.5 py-1 rounded-full border cursor-pointer focus:outline-none focus:ring-1 focus:ring-indigo-500 pr-6 ${badge.color}`}
-          >
-            {ASSIGNABLE_ROLES.map((r) => (
-              <option key={r} value={r}>{ROLE_LABELS[r].label}</option>
-            ))}
-          </select>
+          />
           <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 pointer-events-none opacity-60" />
         </div>
       </div>

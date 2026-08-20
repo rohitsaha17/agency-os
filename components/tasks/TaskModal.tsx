@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { X, ChevronDown, Link2, Upload, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import type { Task, TaskFormData, TaskStatus, Priority, User } from "@/types";
+import { Select } from "@/components/ui/Select";
 
 const STATUS_OPTIONS: { value: TaskStatus; label: string }[] = [
   { value: "TODO", label: "To Do" },
@@ -34,13 +35,11 @@ function SelectInput({ value, onChange, options }: {
 }) {
   return (
     <div className="relative">
-      <select
+      <Select
         value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full appearance-none px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-      >
-        {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-      </select>
+        onChange={(v) => onChange(v)}
+        options={[...options.map((o) => ({ value: o.value, label: `${o.label}` }))]}
+      />
       <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
     </div>
   );
@@ -405,14 +404,11 @@ export function TaskModal({
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1.5">Parent Task (optional)</label>
               <div className="relative">
-                <select
+                <Select
                   value={form.parentId ?? ""}
-                  onChange={(e) => set("parentId", e.target.value || null)}
-                  className="w-full appearance-none px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-                >
-                  <option value="">None (top-level)</option>
-                  {parentOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
+                  onChange={(v) => set("parentId", v || null)}
+                  options={[{ value: "", label: "None (top-level)" }, ...parentOptions.map((o) => ({ value: o.value, label: `${o.label}` }))]}
+                />
                 <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
               </div>
             </div>

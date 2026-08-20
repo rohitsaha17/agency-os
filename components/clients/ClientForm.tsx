@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { BrandAssetsEditor } from "./BrandAssetsEditor";
 import { useCurrentUser } from "@/lib/useCurrentUser";
 import type { ClientFormData, ClientStatus, BrandColor, BrandAsset, TaxRegistration, ClientLink, ClientLinkType } from "@/types";
+import { Select } from "@/components/ui/Select";
 
 // ── Static data ──────────────────────────────────────────────
 
@@ -87,23 +88,20 @@ function TextInput({ value, onChange, placeholder, type = "text" }: {
   );
 }
 
+/** Kept as a name so call sites read the same; the control is the shared Select. */
 function SelectInput({ value, onChange, options, placeholder }: {
   value: string; onChange: (v: string) => void;
   options: { value: string; label: string }[];
   placeholder?: string;
 }) {
   return (
-    <div className="relative">
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full appearance-none px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-      >
-        {placeholder && <option value="">{placeholder}</option>}
-        {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-      </select>
-      <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-    </div>
+    <Select
+      value={value}
+      onChange={onChange}
+      options={options}
+      allowEmpty={!!placeholder}
+      placeholder={placeholder ?? "Select…"}
+    />
   );
 }
 
@@ -121,13 +119,11 @@ function LinksEditor({ value, onChange }: { value: ClientLink[]; onChange: (v: C
       {value.map((link) => (
         <div key={link.id} className="flex flex-col sm:grid sm:grid-cols-[140px_1fr_1fr_auto] gap-2 items-start">
           <div className="relative">
-            <select
+            <Select
               value={link.type}
-              onChange={(e) => update(link.id, "type", e.target.value)}
-              className="w-full appearance-none px-2 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-            >
-              {LINK_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
-            </select>
+              onChange={(v) => update(link.id, "type", v)}
+              options={[...LINK_TYPES.map((t) => ({ value: t.value, label: `${t.label}` }))]}
+            />
             <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
           </div>
           <input
@@ -188,13 +184,11 @@ function TaxRegistrationsEditor({
       {value.map((tax) => (
         <div key={tax.id} className="flex flex-col sm:grid sm:grid-cols-[120px_1fr_1fr_auto] gap-2 items-start">
           <div className="relative">
-            <select
+            <Select
               value={tax.type}
-              onChange={(e) => update(tax.id, "type", e.target.value)}
-              className="w-full appearance-none px-2 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-            >
-              {TAX_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-            </select>
+              onChange={(v) => update(tax.id, "type", v)}
+              options={[...TAX_TYPES.map((t) => ({ value: t, label: `${t}` }))]}
+            />
             <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
           </div>
           <input

@@ -6,6 +6,7 @@ import { Search, Plus, FolderKanban, CheckSquare, RefreshCw } from "lucide-react
 import { ProjectCard } from "@/components/projects/ProjectCard";
 import { Button } from "@/components/ui/Button";
 import type { Project, ProjectStatus, ProjectType, ClientSummary } from "@/types";
+import { Select } from "@/components/ui/Select";
 
 const STATUS_FILTERS: { label: string; value: ProjectStatus | "ALL" }[] = [
   { label: "All", value: "ALL" },
@@ -128,18 +129,11 @@ export default function ProjectsPage() {
                 className="w-full pl-9 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
               />
             </div>
-            <select
+            <Select
               value={filterClientId}
-              onChange={(e) => setFilterClientId(e.target.value)}
-              className="flex-shrink-0 px-3 py-2 rounded-lg text-sm bg-white border border-gray-200 text-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            >
-              <option value="">All Clients</option>
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.companyName ? `${c.companyName}` : c.name}
-                </option>
-              ))}
-            </select>
+              onChange={(v) => setFilterClientId(v)}
+              options={[{ value: "", label: "All Clients" }, ...clients.map((c) => ({ value: c.id, label: String(c.companyName ? `${c.companyName}` : c.name) }))]}
+            />
           </div>
           {/* Row 2: status + type filters */}
           <div className="flex items-center gap-3 flex-wrap">

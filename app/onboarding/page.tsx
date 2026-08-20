@@ -7,6 +7,7 @@ import {
   Image as ImageIcon,
 } from "lucide-react";
 import { BrandLogo } from "@/components/ui/BrandLogo";
+import { Select } from "@/components/ui/Select";
 
 /** Max logo size — stored as a base64 data-URL on the Organization row. */
 const MAX_LOGO_BYTES = 1.5 * 1024 * 1024;
@@ -262,23 +263,19 @@ export default function OnboardingPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-medium text-slate-400 mb-1.5">Currency</label>
-                <select
+                <Select
                   value={form.currency}
-                  onChange={(e) => set("currency", e.target.value)}
-                  className="w-full px-3.5 py-2.5 text-sm rounded-xl bg-slate-900 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                >
-                  {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
+                  onChange={(v) => set("currency", v)}
+                  options={[...CURRENCIES.map((c) => ({ value: c, label: `${c}` }))]}
+                />
               </div>
               <div>
                 <label className="block text-xs font-medium text-slate-400 mb-1.5">Timezone</label>
-                <select
+                <Select
                   value={form.timezone}
-                  onChange={(e) => set("timezone", e.target.value)}
-                  className="w-full px-3.5 py-2.5 text-sm rounded-xl bg-slate-900 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                >
-                  {TIMEZONES.map((t) => <option key={t} value={t}>{t}</option>)}
-                </select>
+                  onChange={(v) => set("timezone", v)}
+                  options={[...TIMEZONES.map((t) => ({ value: t, label: `${t}` }))]}
+                />
               </div>
             </div>
           </section>

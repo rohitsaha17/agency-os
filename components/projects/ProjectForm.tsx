@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { useCurrentUser } from "@/lib/useCurrentUser";
 import { can } from "@/lib/permissions";
 import type { ProjectFormData, ProjectType, ProjectStatus, ClientSummary } from "@/types";
+import { Select } from "@/components/ui/Select";
 
 const CURRENCIES = ["USD", "EUR", "GBP", "INR", "AUD", "CAD", "SGD", "AED", "Other"];
 
@@ -345,15 +346,11 @@ export function ProjectForm({ initialData, projectId, defaultClientId, onSuccess
       <div>
         <FormField label="Service Type">
           <div className="relative">
-            <select
+            <Select
               value={form.serviceType}
-              onChange={(e) => handleServiceTypeChange(e.target.value)}
-              className="w-full appearance-none px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-            >
-              {SERVICE_TYPES.map((s) => (
-                <option key={s.value} value={s.value}>{s.label}</option>
-              ))}
-            </select>
+              onChange={(v) => handleServiceTypeChange(v)}
+              options={[...SERVICE_TYPES.map((s) => ({ value: s.value, label: String(s.label) }))]}
+            />
             <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
           </div>
           {form.serviceType === "other" && (
@@ -391,18 +388,11 @@ export function ProjectForm({ initialData, projectId, defaultClientId, onSuccess
               </div>
             ) : (
               <div className="relative">
-                <select
+                <Select
                   value={form.clientId}
-                  onChange={(e) => set("clientId", e.target.value)}
-                  className="w-full appearance-none px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-                >
-                  <option value="">Select client</option>
-                  {clients.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.companyName ? `${c.companyName} (${c.name})` : c.name}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(v) => set("clientId", v)}
+                  options={[{ value: "", label: "Select client" }, ...clients.map((c) => ({ value: c.id, label: String(c.companyName ? `${c.companyName} (${c.name})` : c.name) }))]}
+                />
                 <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
               </div>
             )}
@@ -432,12 +422,11 @@ export function ProjectForm({ initialData, projectId, defaultClientId, onSuccess
         <div>
           <label className="block text-xs font-medium text-gray-700 mb-1.5">Status</label>
           <div className="relative">
-            <select
-              value={form.status} onChange={(e) => set("status", e.target.value as ProjectStatus)}
-              className="w-full appearance-none px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-            >
-              {STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
+            <Select
+              value={form.status}
+              onChange={(v) => set("status", v as ProjectStatus)}
+              options={[...STATUS_OPTIONS.map((o) => ({ value: o.value, label: `${o.label}` }))]}
+            />
             <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
           </div>
         </div>
@@ -445,12 +434,11 @@ export function ProjectForm({ initialData, projectId, defaultClientId, onSuccess
         <div>
           <label className="block text-xs font-medium text-gray-700 mb-1.5">Currency</label>
           <div className="relative">
-            <select
-              value={form.currency} onChange={(e) => set("currency", e.target.value)}
-              className="w-full appearance-none px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-            >
-              {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
+            <Select
+              value={form.currency}
+              onChange={(v) => set("currency", v)}
+              options={[...CURRENCIES.map((c) => ({ value: c, label: `${c}` }))]}
+            />
             <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
           </div>
         </div>
@@ -459,16 +447,11 @@ export function ProjectForm({ initialData, projectId, defaultClientId, onSuccess
           <>
             <FormField label="Frequency">
               <div className="relative">
-                <select
+                <Select
                   value={form.recurringFrequency}
-                  onChange={(e) => set("recurringFrequency", e.target.value)}
-                  className="w-full appearance-none px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-                >
-                  <option value="">Select frequency</option>
-                  {RECURRING_FREQUENCIES.map((f) => (
-                    <option key={f.value} value={f.value}>{f.label}</option>
-                  ))}
-                </select>
+                  onChange={(v) => set("recurringFrequency", v)}
+                  options={[{ value: "", label: "Select frequency" }, ...RECURRING_FREQUENCIES.map((f) => ({ value: f.value, label: String(f.label) }))]}
+                />
                 <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
               </div>
             </FormField>
@@ -515,16 +498,11 @@ export function ProjectForm({ initialData, projectId, defaultClientId, onSuccess
           {deliverables.map((row, i) => (
             <div key={i} className="flex items-center gap-2">
               <div className="relative flex-1">
-                <select
+                <Select
                   value={row.creativeTypeId}
-                  onChange={(e) => setDeliverable(i, { creativeTypeId: e.target.value })}
-                  className="w-full appearance-none px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-                >
-                  <option value="">Creative type…</option>
-                  {creativeTypes.map((t) => (
-                    <option key={t.id} value={t.id}>{t.icon ? `${t.icon} ` : ""}{t.name}</option>
-                  ))}
-                </select>
+                  onChange={(v) => setDeliverable(i, { creativeTypeId: v })}
+                  options={[{ value: "", label: "Creative type…" }, ...creativeTypes.map((t) => ({ value: t.id, label: String(`${t.icon ? `${t.icon} ` : ""}${t.name}`) }))]}
+                />
                 <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
               </div>
               <input

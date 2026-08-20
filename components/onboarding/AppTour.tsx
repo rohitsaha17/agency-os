@@ -105,8 +105,16 @@ export function AppTour() {
       if (localStorage.getItem(storageKey)) return;
     } catch { return; }
     const t = setTimeout(() => {
-      // A dialog open means they're mid-task — don't interrupt.
-      if (document.querySelector("[data-modal-open]")) return;
+      // Don't interrupt someone mid-task. Not every dialog in the app uses the
+      // shared Modal, so this asks the DOM what's actually happening rather
+      // than trusting a marker to have been added: an overlay on screen, or a
+      // caret sitting in a field, both mean "come back later".
+      const focused = document.activeElement as HTMLElement | null;
+      const typing =
+        !!focused &&
+        (["INPUT", "TEXTAREA", "SELECT"].includes(focused.tagName) || focused.isContentEditable);
+      if (typing) return;
+      if (document.querySelector("[data-modal-open], [role='dialog']")) return;
       setActive(true);
     }, 800);
     return () => clearTimeout(t);

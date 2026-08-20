@@ -2,12 +2,13 @@
 
 import { useState, useRef } from "react";
 import {
-  Plus, Trash2, Pencil, X, Check, ChevronDown,
+  Plus, Trash2, Pencil, X, Check,
   ImageIcon, Type, BookOpen, Sparkles, Camera,
   Grid2X2, Share2, FileText, Package, Palette, ALargeSmall,
   ExternalLink, Link2, Upload, Loader2,
 } from "lucide-react";
 import type { BrandColor, BrandAsset, ColorTag, AssetType } from "@/types";
+import { Select } from "@/components/ui/Select";
 
 // ── Constants ────────────────────────────────────────────────
 
@@ -141,26 +142,6 @@ function ColorTagBadge({ tag }: { tag: ColorTag }) {
     <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${t?.style ?? "bg-gray-100 text-gray-500"}`}>
       {t?.label ?? tag}
     </span>
-  );
-}
-
-function Select({ value, onChange, options, placeholder, className = "" }: {
-  value: string; onChange: (v: string) => void;
-  options: { value: string; label: string }[];
-  placeholder?: string; className?: string;
-}) {
-  return (
-    <div className={`relative ${className}`}>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full appearance-none pl-3 pr-8 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-      >
-        {placeholder && <option value="">{placeholder}</option>}
-        {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-      </select>
-      <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
-    </div>
   );
 }
 
@@ -460,9 +441,9 @@ function AssetFormFields({
           <Select
             value={draft.type}
             onChange={(v) => {
-              const t = v as AssetType;
-              set("type", t);
-              set("variant", VARIANTS_BY_TYPE[t]?.[0] ?? "Primary");
+            const t = v as AssetType;
+            set("type", t);
+            set("variant", VARIANTS_BY_TYPE[t]?.[0] ?? "Primary");
             }}
             options={ASSET_TYPES.map((t) => ({ value: t.value, label: t.label }))}
           />

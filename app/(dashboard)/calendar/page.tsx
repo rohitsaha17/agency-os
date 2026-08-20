@@ -15,6 +15,7 @@ import { MonthGrid, MONTH_NAMES, isSameDay } from "@/components/calendar/MonthGr
 import { useWheelPeriod } from "@/components/calendar/useWheelPeriod";
 import { CONTENT_STATUS_META, contentStatusChip } from "@/components/content/ContentCalendarTab";
 import { CreativeTypeDot } from "@/components/content/CreativeTypeDot";
+import { Select } from "@/components/ui/Select";
 
 // ── Constants (legacy task/project layers) ───────────────────
 
@@ -371,32 +372,37 @@ export default function CalendarPage() {
         {showFilters && (
           <div className="mt-3 pt-3 border-t border-gray-100 flex flex-wrap items-center gap-3">
             {canFilterByUser && (
-              <select value={filterUserId} onChange={(e) => setFilterUserId(e.target.value)}
-                className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-700 min-w-[130px]">
-                <option value="">All Assignees</option>
-                {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-              </select>
+              <Select
+                value={filterUserId}
+                onChange={(v) => setFilterUserId(v)}
+                options={[{ value: "", label: "All Assignees" }, ...users.map((u) => ({ value: u.id, label: `${u.name}` }))]}
+                size="sm"
+              />
             )}
-            <select value={filterClientId} onChange={(e) => setFilterClientId(e.target.value)}
-              className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-700 min-w-[130px]">
-              <option value="">All Clients</option>
-              {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-            <select value={filterProjectId} onChange={(e) => setFilterProjectId(e.target.value)}
-              className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-700 min-w-[130px]">
-              <option value="">All Projects</option>
-              {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-            <select value={filterTypeId} onChange={(e) => setFilterTypeId(e.target.value)}
-              className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-700 min-w-[130px]">
-              <option value="">All Types</option>
-              {types.map((t) => <option key={t.id} value={t.id}>{t.icon ? `${t.icon} ` : ""}{t.name}</option>)}
-            </select>
-            <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}
-              className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-700 min-w-[130px]">
-              <option value="">All Statuses</option>
-              {Object.entries(CONTENT_STATUS_META).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-            </select>
+            <Select
+              value={filterClientId}
+              onChange={(v) => setFilterClientId(v)}
+              options={[{ value: "", label: "All Clients" }, ...clients.map((c) => ({ value: c.id, label: `${c.name}` }))]}
+              size="sm"
+            />
+            <Select
+              value={filterProjectId}
+              onChange={(v) => setFilterProjectId(v)}
+              options={[{ value: "", label: "All Projects" }, ...projects.map((p) => ({ value: p.id, label: `${p.name}` }))]}
+              size="sm"
+            />
+            <Select
+              value={filterTypeId}
+              onChange={(v) => setFilterTypeId(v)}
+              options={[{ value: "", label: "All Types" }, ...types.map((t) => ({ value: t.id, label: String(`${t.icon ? `${t.icon} ` : ""}${t.name}`) }))]}
+              size="sm"
+            />
+            <Select
+              value={filterStatus}
+              onChange={(v) => setFilterStatus(v)}
+              options={[{ value: "", label: "All Statuses" }, ...Object.entries(CONTENT_STATUS_META).map(([k, v]) => ({ value: k, label: String(v.label) }))]}
+              size="sm"
+            />
             <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
               <input type="checkbox" checked={extraOnly} onChange={(e) => setExtraOnly(e.target.checked)}
                 className="rounded border-gray-300 text-indigo-600" />
@@ -422,14 +428,12 @@ export default function CalendarPage() {
               <FolderKanban className="w-3 h-3" /> Show projects
             </label>
             {showTasks && (
-              <select value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)}
-                className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-700 min-w-[110px]">
-                <option value="">All Priorities</option>
-                <option value="URGENT">Urgent</option>
-                <option value="HIGH">High</option>
-                <option value="MEDIUM">Medium</option>
-                <option value="LOW">Low</option>
-              </select>
+              <Select
+                value={filterPriority}
+                onChange={(v) => setFilterPriority(v)}
+                options={[{ value: "", label: "All Priorities" }, { value: "URGENT", label: "Urgent" }, { value: "HIGH", label: "High" }, { value: "MEDIUM", label: "Medium" }, { value: "LOW", label: "Low" }]}
+                size="sm"
+              />
             )}
 
             {activeFilterCount > 0 && (
@@ -815,20 +819,19 @@ function AddEventDialog({
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1.5">Kind</label>
-              <select value={form.kind} onChange={(e) => setForm((f) => ({ ...f, kind: e.target.value }))}
-                className="w-full appearance-none px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                {["FESTIVAL", "CAMPAIGN", "SHOOT", "INTERNAL", "OTHER"].map((k) => (
-                  <option key={k} value={k}>{k.charAt(0) + k.slice(1).toLowerCase()}</option>
-                ))}
-              </select>
+              <Select
+                value={form.kind}
+                onChange={(v) => setForm((f) => ({ ...f, kind: v }))}
+                options={[...["FESTIVAL", "CAMPAIGN", "SHOOT", "INTERNAL", "OTHER"].map((k) => ({ value: k, label: String(k.charAt(0) + k.slice(1).toLowerCase()) }))]}
+              />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1.5">Client (optional)</label>
-              <select value={form.clientId} onChange={(e) => setForm((f) => ({ ...f, clientId: e.target.value }))}
-                className="w-full appearance-none px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                <option value="">Org-wide</option>
-                {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+              <Select
+                value={form.clientId}
+                onChange={(v) => setForm((f) => ({ ...f, clientId: v }))}
+                options={[{ value: "", label: "Org-wide" }, ...clients.map((c) => ({ value: c.id, label: `${c.name}` }))]}
+              />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1.5">Date</label>

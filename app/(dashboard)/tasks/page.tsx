@@ -17,6 +17,7 @@ import { SubmitWorkDialog, RequestChangesDialog, MarkPostedDialog } from "@/comp
 import { broadcastChange, useLiveRefresh } from "@/lib/live";
 import { toast } from "@/lib/toast";
 import type { Task } from "@/types";
+import { Select } from "@/components/ui/Select";
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -768,11 +769,12 @@ function TasksBoardInner() {
                       <div className="flex items-center gap-2 mt-2.5 flex-wrap">
                         {reassignFor === t.id ? (
                           <>
-                            <select value={reassignTo} onChange={(e) => setReassignTo(e.target.value)}
-                              className="px-2 py-1.5 text-xs border border-gray-300 rounded-lg bg-white">
-                              <option value="">Pick person…</option>
-                              {teamUsers.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-                            </select>
+                            <Select
+                              value={reassignTo}
+                              onChange={(v) => setReassignTo(v)}
+                              options={[{ value: "", label: "Pick person…" }, ...teamUsers.map((u) => ({ value: u.id, label: `${u.name}` }))]}
+                              size="sm"
+                            />
                             <button onClick={() => reassignTo && approve(t.id, reassignTo)} disabled={!reassignTo}
                               className="px-3 py-1.5 text-xs font-medium bg-indigo-600 text-white rounded-lg disabled:opacity-50">Assign</button>
                             <button onClick={() => setReassignFor(null)} className="text-xs text-gray-400">Cancel</button>

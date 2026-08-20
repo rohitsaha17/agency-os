@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { X, Hash, Lock, Users, Building2, Globe } from "lucide-react";
 import type { ChannelType, Channel } from "@/types";
+import { Select } from "@/components/ui/Select";
 
 const CHANNEL_TYPES: { value: ChannelType; label: string; icon: React.ReactNode; desc: string }[] = [
   {
@@ -128,11 +129,11 @@ export function CreateChannelModal({ open, onClose, onCreated }: CreateChannelMo
             {needsProject && (
               <div>
                 <label className="block text-xs font-medium text-slate-400 mb-1.5">Project</label>
-                <select value={projectId} onChange={(e) => setProjectId(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                  <option value="">Select a project…</option>
-                  {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
+                <Select
+                  value={projectId}
+                  onChange={(v) => setProjectId(v)}
+                  options={[{ value: "", label: "Select a project…" }, ...projects.map((p) => ({ value: p.id, label: `${p.name}` }))]}
+                />
               </div>
             )}
 
@@ -140,11 +141,11 @@ export function CreateChannelModal({ open, onClose, onCreated }: CreateChannelMo
             {needsClient && (
               <div>
                 <label className="block text-xs font-medium text-slate-400 mb-1.5">Client</label>
-                <select value={clientId} onChange={(e) => setClientId(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                  <option value="">Select a client…</option>
-                  {clients.map((c) => <option key={c.id} value={c.id}>{c.companyName ? `${c.companyName} (${c.name})` : c.name}</option>)}
-                </select>
+                <Select
+                  value={clientId}
+                  onChange={(v) => setClientId(v)}
+                  options={[{ value: "", label: "Select a client…" }, ...clients.map((c) => ({ value: c.id, label: String(c.companyName ? `${c.companyName} (${c.name})` : c.name) }))]}
+                />
               </div>
             )}
 

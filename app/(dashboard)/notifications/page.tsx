@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { Bell, CheckCheck, ChevronDown, ChevronUp } from "lucide-react";
+import { Select } from "@/components/ui/Select";
 
 interface NotificationRow {
   id: string;
@@ -78,11 +79,12 @@ export default function NotificationsPage() {
             <p className="text-sm text-gray-500 mt-0.5">{unread} unread</p>
           </div>
           <div className="flex items-center gap-2">
-            <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}
-              className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-700">
-              <option value="">All types</option>
-              {types.map((t) => <option key={t} value={t}>{t.replace(/_/g, " ").toLowerCase()}</option>)}
-            </select>
+            <Select
+              value={typeFilter}
+              onChange={(v) => setTypeFilter(v)}
+              options={[{ value: "", label: "All types" }, ...types.map((t) => ({ value: t, label: `${t.replace(/_/g, " ").toLowerCase()}` }))]}
+              size="sm"
+            />
             {unread > 0 && (
               <button onClick={markAllRead}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-700">

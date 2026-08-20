@@ -15,6 +15,7 @@ import { RoundHistory } from "@/components/tasks/RoundHistory";
 import { TaskUpdates } from "./TaskUpdates";
 import { TaskFiles } from "./TaskFiles";
 import { DeliveryDialog } from "./DeliveryDialog";
+import { Select } from "@/components/ui/Select";
 import { useCurrentUser } from "@/lib/useCurrentUser";
 import { can } from "@/lib/permissions";
 import type {
@@ -47,22 +48,22 @@ const PRIORITY_OPTIONS: { value: Priority; label: string }[] = [
   { value: "HIGH", label: "High" }, { value: "URGENT", label: "Urgent" },
 ];
 
+/** Thin wrapper kept so existing call sites read the same; the control is the
+ *  shared Select. */
 function SelectField({ label, value, onChange, options, placeholder }: {
   label: string; value: string; onChange: (v: string) => void;
   options: { value: string; label: string }[]; placeholder?: string;
 }) {
   return (
-    <div>
-      <label className="block text-xs font-medium text-gray-500 mb-1">{label}</label>
-      <div className="relative">
-        <select value={value} onChange={(e) => onChange(e.target.value)}
-          className="w-full appearance-none px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white text-gray-800">
-          {placeholder && <option value="">{placeholder}</option>}
-          {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
-        <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
-      </div>
-    </div>
+    <Select
+      label={label}
+      value={value}
+      onChange={onChange}
+      options={options}
+      size="sm"
+      allowEmpty={!!placeholder}
+      placeholder={placeholder ?? "Select…"}
+    />
   );
 }
 
@@ -78,11 +79,12 @@ function AssigneePicker({ users, assigneeIds, managerId, onChangeAssignees, onCh
       <div>
         <label className="block text-xs font-medium text-gray-500 mb-1.5">Manager / Reviewer</label>
         <div className="relative">
-          <select value={managerId} onChange={(e) => onChangeManager(e.target.value)}
-            className="w-full appearance-none px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white text-gray-800">
-            <option value="">Unassigned</option>
-            {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-          </select>
+          <Select
+            value={managerId}
+            onChange={(v) => onChangeManager(v)}
+            options={[{ value: "", label: "Unassigned" }, ...users.map((u) => ({ value: u.id, label: `${u.name}` }))]}
+            size="sm"
+          />
           <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
         </div>
       </div>
@@ -499,10 +501,12 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-1">Status</label>
                   <div className="relative">
-                    <select value={status} onChange={(e) => { const s = e.target.value as TaskStatus; setStatus(s); handleStatusChange(s); }}
-                      className="w-full appearance-none px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white text-gray-800">
-                      {STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                    </select>
+                    <Select
+                      value={status}
+                      onChange={(v) => { const s = v as TaskStatus; setStatus(s); handleStatusChange(s); }}
+                      options={[...STATUS_OPTIONS.map((o) => ({ value: o.value, label: `${o.label}` }))]}
+                      size="sm"
+                    />
                     <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
                   </div>
                 </div>

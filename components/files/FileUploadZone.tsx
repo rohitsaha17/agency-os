@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Upload, CheckCircle, XCircle, Loader2, FolderUp, Link2, Folder, Building2, Briefcase, Pencil, Check } from "lucide-react";
 import type { AssetFile } from "@/types";
+import { Select } from "@/components/ui/Select";
 
 // ── types ──────────────────────────────────────────────────────
 
@@ -227,49 +228,37 @@ export function FileUploadZone({
               <label className="flex items-center gap-1.5 text-[11px] text-slate-500 mb-1">
                 <Briefcase className="w-3 h-3" /> Project
               </label>
-              <select
+              <Select
                 value={selectedProjectId}
-                onChange={(e) => setSelectedProjectId(e.target.value)}
+                onChange={(v) => setSelectedProjectId(v)}
+                options={[{ value: "", label: "None" }, ...projects.map((p) => ({ value: p.id, label: String(p.name) }))]}
+                size="sm"
                 disabled={!!projectId}
-                className="w-full px-2.5 py-1.5 rounded-lg text-sm bg-slate-900 border border-slate-700 text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
-              >
-                <option value="">None</option>
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
+              />
             </div>
             <div>
               <label className="flex items-center gap-1.5 text-[11px] text-slate-500 mb-1">
                 <Building2 className="w-3 h-3" /> Client
               </label>
-              <select
+              <Select
                 value={selectedClientId}
-                onChange={(e) => setSelectedClientId(e.target.value)}
+                onChange={(v) => setSelectedClientId(v)}
+                options={[{ value: "", label: "None" }, ...clients.map((c) => ({ value: c.id, label: String(c.name) }))]}
+                size="sm"
                 disabled={!!clientId}
-                className="w-full px-2.5 py-1.5 rounded-lg text-sm bg-slate-900 border border-slate-700 text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
-              >
-                <option value="">None</option>
-                {clients.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
+              />
             </div>
             <div>
               <label className="flex items-center gap-1.5 text-[11px] text-slate-500 mb-1">
                 <Folder className="w-3 h-3" /> Folder
               </label>
-              <select
+              <Select
                 value={selectedFolderId}
-                onChange={(e) => setSelectedFolderId(e.target.value)}
+                onChange={(v) => setSelectedFolderId(v)}
+                options={[{ value: "", label: "None (root)" }, ...folders.map((f) => ({ value: f.id, label: String(f.name) }))]}
+                size="sm"
                 disabled={!!folderId}
-                className="w-full px-2.5 py-1.5 rounded-lg text-sm bg-slate-900 border border-slate-700 text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
-              >
-                <option value="">None (root)</option>
-                {folders.map((f) => (
-                  <option key={f.id} value={f.id}>{f.name}</option>
-                ))}
-              </select>
+              />
             </div>
           </div>
         </div>

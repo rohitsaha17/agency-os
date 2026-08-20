@@ -29,6 +29,7 @@ import { can, canViewContacts } from "@/lib/permissions";
 import { Client, ContactFormData, ClientContact, ProjectStatus, ProjectType, AssetFile, ContractType, ContractPartyType, User, Invoice, InvoiceStatus, Channel, ChatMessage, Expense, ExpenseCategory, ExpenseStatus, Receipt, ReceiptMethod } from "@/types";
 import { calcInvoiceTotal } from "@/lib/format";
 import { formatMoney, resolveClientCurrency } from "@/lib/money";
+import { Select } from "@/components/ui/Select";
 
 // ── helpers ──────────────────────────────────────────────────
 type Tab = "content" | "overview" | "contacts" | "brand" | "tax" | "projects" | "files" | "contracts" | "chat" | "invoices" | "expenses" | "receipts";
@@ -808,7 +809,9 @@ export default function ClientDetailPage() {
     { id: "expenses",    label: "Expenses" },
     { id: "files",       label: "Files" },
     { id: "chat",        label: "Chat" },
-    { id: "contracts",   label: "Contracts" },
+    // Contracts is commercial paperwork and /api/contracts refuses without
+    // financials.view — the tab was still being drawn, so it opened onto a 403.
+    ...(seesMoney ? [{ id: "contracts" as Tab, label: "Contracts" }] : []),
   ];
 
   return (
@@ -1965,35 +1968,21 @@ export default function ClientDetailPage() {
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Currency</label>
-              <select
+              <Select
                 value={expenseForm.currency}
-                onChange={(e) => setExpenseForm((f) => ({ ...f, currency: e.target.value }))}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-              >
-                {["USD", "EUR", "GBP", "INR", "AUD", "CAD", "SGD", "AED"].map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
+                onChange={(v) => setExpenseForm((f) => ({ ...f, currency: v }))}
+                options={[...["USD", "EUR", "GBP", "INR", "AUD", "CAD", "SGD", "AED"].map((c) => ({ value: c, label: String(c) }))]}
+              />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Category</label>
-              <select
+              <Select
                 value={expenseForm.category}
-                onChange={(e) => setExpenseForm((f) => ({ ...f, category: e.target.value as ExpenseCategory }))}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-              >
-                <option value="SOFTWARE_TOOLS">Software &amp; Tools</option>
-                <option value="FREELANCER_PAYMENT">Freelancer Payment</option>
-                <option value="VENDOR_PAYMENT">Vendor Payment</option>
-                <option value="STOCK_ASSETS">Stock Assets</option>
-                <option value="PRINTING">Printing</option>
-                <option value="TRAVEL">Travel</option>
-                <option value="ADVERTISING">Advertising</option>
-                <option value="OFFICE">Office &amp; Overhead</option>
-                <option value="EQUIPMENT">Equipment</option>
-                <option value="COMMISSIONS">Commissions</option>
-                <option value="OTHER">Other</option>
-              </select>
+                onChange={(v) => setExpenseForm((f) => ({ ...f, category: v as ExpenseCategory }))}
+                options={[{ value: "SOFTWARE_TOOLS", label: "Software &amp; Tools" }, { value: "FREELANCER_PAYMENT", label: "Freelancer Payment" }, { value: "VENDOR_PAYMENT", label: "Vendor Payment" }, { value: "STOCK_ASSETS", label: "Stock Assets" }, { value: "PRINTING", label: "Printing" }, { value: "TRAVEL", label: "Travel" }, { value: "ADVERTISING", label: "Advertising" }, { value: "OFFICE", label: "Office &amp; Overhead" }, { value: "EQUIPMENT", label: "Equipment" }, { value: "COMMISSIONS", label: "Commissions" }, { value: "OTHER", label: "Other" }]}
+              />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Date</label>
@@ -2007,14 +1996,11 @@ export default function ClientDetailPage() {
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Project (optional)</label>
-            <select
+            <Select
               value={expenseForm.projectId}
-              onChange={(e) => setExpenseForm((f) => ({ ...f, projectId: e.target.value }))}
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-            >
-              <option value="">— Direct to client (no project) —</option>
-              {(client?.projects ?? []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+              onChange={(v) => setExpenseForm((f) => ({ ...f, projectId: v }))}
+              options={[{ value: "", label: "— Direct to client (no project) —" }, ...(client?.projects ?? []).map((p) => ({ value: p.id, label: p.name }))]}
+            />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Notes</label>
@@ -2049,13 +2035,11 @@ export default function ClientDetailPage() {
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Currency</label>
-              <select
+              <Select
                 value={receiptForm.currency}
-                onChange={(e) => setReceiptForm((f) => ({ ...f, currency: e.target.value }))}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-              >
-                {["USD", "EUR", "GBP", "INR", "AUD", "CAD", "SGD", "AED"].map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
+                onChange={(v) => setReceiptForm((f) => ({ ...f, currency: v }))}
+                options={[...["USD", "EUR", "GBP", "INR", "AUD", "CAD", "SGD", "AED"].map((c) => ({ value: c, label: String(c) }))]}
+              />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -2070,30 +2054,20 @@ export default function ClientDetailPage() {
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Method</label>
-              <select
+              <Select
                 value={receiptForm.method}
-                onChange={(e) => setReceiptForm((f) => ({ ...f, method: e.target.value as ReceiptMethod }))}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-              >
-                <option value="BANK_TRANSFER">Bank Transfer</option>
-                <option value="CASH">Cash</option>
-                <option value="CHECK">Cheque</option>
-                <option value="CARD">Card</option>
-                <option value="UPI">UPI</option>
-                <option value="OTHER">Other</option>
-              </select>
+                onChange={(v) => setReceiptForm((f) => ({ ...f, method: v as ReceiptMethod }))}
+                options={[{ value: "BANK_TRANSFER", label: "Bank Transfer" }, { value: "CASH", label: "Cash" }, { value: "CHECK", label: "Cheque" }, { value: "CARD", label: "Card" }, { value: "UPI", label: "UPI" }, { value: "OTHER", label: "Other" }]}
+              />
             </div>
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Linked Invoice (optional)</label>
-            <select
+            <Select
               value={receiptForm.invoiceId}
-              onChange={(e) => setReceiptForm((f) => ({ ...f, invoiceId: e.target.value }))}
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-            >
-              <option value="">— None —</option>
-              {invoices.map((inv) => <option key={inv.id} value={inv.id}>{inv.invoiceNumber}</option>)}
-            </select>
+              onChange={(v) => setReceiptForm((f) => ({ ...f, invoiceId: v }))}
+              options={[{ value: "", label: "— None —" }, ...invoices.map((inv) => ({ value: inv.id, label: `${inv.invoiceNumber}` }))]}
+            />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -2245,11 +2219,11 @@ export default function ClientDetailPage() {
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">Currency</label>
-              <select value={clientContractForm.currency} onChange={(e) => setClientContractForm((f) => ({ ...f, currency: e.target.value }))}
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              >
-                {CURRENCIES.map((c) => <option key={c}>{c}</option>)}
-              </select>
+              <Select
+                value={clientContractForm.currency}
+                onChange={(v) => setClientContractForm((f) => ({ ...f, currency: v }))}
+                options={CURRENCIES.map((c) => ({ value: c, label: c }))}
+              />
             </div>
           </div>
 
@@ -2301,12 +2275,12 @@ export default function ClientDetailPage() {
                     {party.partyType === "USER" && (
                       <div>
                         <label className="block text-xs text-gray-400 mb-1">Team Member</label>
-                        <select value={party.userId} onChange={(e) => updateClientContractParty(i, "userId", e.target.value)}
-                          className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-                        >
-                          <option value="">Pick user…</option>
-                          {contractFormUsers.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-                        </select>
+                        <Select
+                          value={party.userId}
+                          onChange={(v) => updateClientContractParty(i, "userId", v)}
+                          options={[{ value: "", label: "Pick user…" }, ...contractFormUsers.map((u) => ({ value: u.id, label: `${u.name}` }))]}
+                          size="sm"
+                        />
                       </div>
                     )}
                     <div>

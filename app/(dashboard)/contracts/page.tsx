@@ -8,6 +8,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Plus, Search, FileText, CheckCircle2, Clock, AlertCircle, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import type { Contract, ContractType, ContractStatus, Project, ClientSummary } from "@/types";
+import { Select } from "@/components/ui/Select";
 
 const TYPE_LABELS: Record<ContractType, string> = {
   NDA: "NDA",
@@ -123,44 +124,30 @@ function ContractsPageInner() {
               className="pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 w-52"
             />
           </div>
-          <select
+          <Select
             value={filterClientId}
-            onChange={(e) => { setFilterClientId(e.target.value); setFilterProjectId(""); }}
-            className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          >
-            <option value="">All Clients</option>
-            {clients.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.companyName ? `${c.companyName} (${c.name})` : c.name}
-              </option>
-            ))}
-          </select>
-          <select
+            onChange={(v) => { setFilterClientId(v); setFilterProjectId(""); }}
+            options={[{ value: "", label: "All Clients" }, ...clients.map((c) => ({ value: c.id, label: String(c.companyName ? `${c.companyName} (${c.name})` : c.name) }))]}
+            size="sm"
+          />
+          <Select
             value={filterProjectId}
-            onChange={(e) => setFilterProjectId(e.target.value)}
-            className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          >
-            <option value="">All Projects</option>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
-          <select value={filterType} onChange={(e) => setFilterType(e.target.value as ContractType | "")}
-            className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          >
-            <option value="">All Types</option>
-            {(Object.entries(TYPE_LABELS) as [ContractType, string][]).map(([v, l]) => (
-              <option key={v} value={v}>{l}</option>
-            ))}
-          </select>
-          <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as ContractStatus | "")}
-            className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          >
-            <option value="">All Statuses</option>
-            {STATUS_ORDER.map((s) => (
-              <option key={s} value={s}>{STATUS_CONFIG[s].label}</option>
-            ))}
-          </select>
+            onChange={(v) => setFilterProjectId(v)}
+            options={[{ value: "", label: "All Projects" }, ...projects.map((p) => ({ value: p.id, label: String(p.name) }))]}
+            size="sm"
+          />
+          <Select
+            value={filterType}
+            onChange={(v) => setFilterType(v as ContractType | "")}
+            options={[{ value: "", label: "All Types" }, ...(Object.entries(TYPE_LABELS) as [ContractType, string][]).map(([v, l]) => ({ value: v, label: l }))]}
+            size="sm"
+          />
+          <Select
+            value={filterStatus}
+            onChange={(v) => setFilterStatus(v as ContractStatus | "")}
+            options={[{ value: "", label: "All Statuses" }, ...STATUS_ORDER.map((s) => ({ value: s, label: String(STATUS_CONFIG[s].label) }))]}
+            size="sm"
+          />
         </div>
       </div>
 

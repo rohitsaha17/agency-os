@@ -6,6 +6,7 @@ import Link from "next/link";
 import { ChevronRight, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import type { ContractType, ContractPartyType, Client, Project, User } from "@/types";
+import { Select } from "@/components/ui/Select";
 
 const TYPE_OPTIONS: { value: ContractType; label: string }[] = [
   { value: "NDA",               label: "NDA" },
@@ -148,25 +149,19 @@ export default function NewContractPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Link to Project</label>
-              <select value={form.projectId} onChange={(e) => setField("projectId", e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              >
-                <option value="">None</option>
-                {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
+              <Select
+                value={form.projectId}
+                onChange={(v) => setField("projectId", v)}
+                options={[{ value: "", label: "None" }, ...projects.map((p) => ({ value: p.id, label: `${p.name}` }))]}
+              />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Primary Client</label>
-              <select value={form.clientId} onChange={(e) => setField("clientId", e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              >
-                <option value="">None</option>
-                {clients.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.companyName ? `${c.companyName} (${c.name})` : c.name}
-                  </option>
-                ))}
-              </select>
+              <Select
+                value={form.clientId}
+                onChange={(v) => setField("clientId", v)}
+                options={[{ value: "", label: "None" }, ...clients.map((c) => ({ value: c.id, label: String(c.companyName ? `${c.companyName} (${c.name})` : c.name) }))]}
+              />
             </div>
           </div>
 
@@ -195,11 +190,11 @@ export default function NewContractPage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Currency</label>
-              <select value={form.currency} onChange={(e) => setField("currency", e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              >
-                {CURRENCIES.map((c) => <option key={c}>{c}</option>)}
-              </select>
+              <Select
+                value={form.currency}
+                onChange={(v) => setField("currency", v)}
+                options={CURRENCIES.map((c) => ({ value: c, label: c }))}
+              />
             </div>
           </div>
 
@@ -242,16 +237,12 @@ export default function NewContractPage() {
                     {party.partyType === "CLIENT" && (
                       <div>
                         <label className="block text-xs text-gray-500 mb-1">Select Client</label>
-                        <select value={party.clientId} onChange={(e) => updateParty(i, "clientId", e.target.value)}
-                          className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-                        >
-                          <option value="">Pick client...</option>
-                          {clients.map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {c.companyName ? `${c.companyName} (${c.name})` : c.name}
-                            </option>
-                          ))}
-                        </select>
+                        <Select
+                          value={party.clientId}
+                          onChange={(v) => updateParty(i, "clientId", v)}
+                          options={[{ value: "", label: "Pick client..." }, ...clients.map((c) => ({ value: c.id, label: String(c.companyName ? `${c.companyName} (${c.name})` : c.name) }))]}
+                          size="sm"
+                        />
                       </div>
                     )}
                     {/* v3: external parties are typed in directly — name and
@@ -259,12 +250,12 @@ export default function NewContractPage() {
                     {party.partyType === "USER" && (
                       <div>
                         <label className="block text-xs text-gray-500 mb-1">Select System User</label>
-                        <select value={party.userId} onChange={(e) => updateParty(i, "userId", e.target.value)}
-                          className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-                        >
-                          <option value="">Pick user...</option>
-                          {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-                        </select>
+                        <Select
+                          value={party.userId}
+                          onChange={(v) => updateParty(i, "userId", v)}
+                          options={[{ value: "", label: "Pick user..." }, ...users.map((u) => ({ value: u.id, label: `${u.name}` }))]}
+                          size="sm"
+                        />
                       </div>
                     )}
 

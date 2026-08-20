@@ -13,6 +13,7 @@ import { useCurrentUser } from "@/lib/useCurrentUser";
 import { toast } from "@/lib/toast";
 import type { ContentItem, ContentStatus, CreativeType, Task } from "@/types";
 import { CreativeTypeDot } from "@/components/content/CreativeTypeDot";
+import { Select } from "@/components/ui/Select";
 
 // ── Status styling ───────────────────────────────────────────
 
@@ -26,6 +27,10 @@ export const CONTENT_STATUS_META: Record<ContentStatus, { label: string; chip: s
   SCHEDULED:       { label: "Scheduled",       chip: "bg-violet-50 text-violet-700 border-violet-200",   dot: "bg-violet-500" },
   POSTED:          { label: "Posted",          chip: "bg-indigo-50 text-indigo-700 border-indigo-200",   dot: "bg-indigo-600" },
   MISSED:          { label: "Missed",          chip: "bg-red-50 text-red-600 border-red-200",            dot: "bg-red-500" },
+  // v3: the junior has sent work in and the SMM hasn't ruled on it yet.
+  SUBMITTED:       { label: "Submitted",       chip: "bg-orange-50 text-orange-700 border-orange-200",   dot: "bg-orange-500" },
+  // v3: the SMM approved it; the posting task now exists.
+  APPROVED:        { label: "Approved",        chip: "bg-teal-50 text-teal-700 border-teal-200",         dot: "bg-teal-500" },
 };
 
 /**
@@ -43,7 +48,11 @@ export const CONTENT_STATUS_META: Record<ContentStatus, { label: string; chip: s
  * problem being fixed.
  */
 export function contentStatusChip(item: { status: ContentStatus; description: string | null }) {
-  const meta = CONTENT_STATUS_META[item.status];
+  // Falls back rather than returning undefined: a status this build doesn't
+  // know about should render as itself, not crash the calendar.
+  const meta = CONTENT_STATUS_META[item.status] ?? {
+    label: String(item.status), chip: "bg-gray-100 text-gray-600 border-gray-200", dot: "bg-gray-400",
+  };
   // `description` is the ContentItem's brief. Required (not optional) in the
   // signature on purpose: an optional field would silently be `undefined` at
   // any call site that forgot to select it, and every planned item would then
@@ -195,11 +204,11 @@ function ItemDialog({
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1.5">Creative Type <span className="text-red-500">*</span></label>
-              <select value={form.creativeTypeId}
-                onChange={(e) => setForm((f) => ({ ...f, creativeTypeId: e.target.value }))}
-                className="w-full appearance-none px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                {types.map((t) => <option key={t.id} value={t.id}>{t.icon ? `${t.icon} ` : ""}{t.name}</option>)}
-              </select>
+              <Select
+                value={form.creativeTypeId}
+                onChange={(v) => setForm((f) => ({ ...f, creativeTypeId: v }))}
+                options={[...types.map((t) => ({ value: t.id, label: String(`${t.icon ? `${t.icon} ` : ""}${t.name}`) }))]}
+              />
             </div>
           </div>
           <div>

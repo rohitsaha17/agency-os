@@ -16,6 +16,7 @@ import { useCurrentUser } from "@/lib/useCurrentUser";
 import { broadcastChange, useLiveRefresh } from "@/lib/live";
 import { toast } from "@/lib/toast";
 import { CreativeTypeDot } from "@/components/content/CreativeTypeDot";
+import { Select } from "@/components/ui/Select";
 
 type View = "day" | "week" | "month" | "year" | "schedule";
 
@@ -685,12 +686,11 @@ function AddPersonalDialog({
           )}
 
           {mode === "teammate" && (
-            <select value={form.userId}
-              onChange={(e) => setForm((f) => ({ ...f, userId: e.target.value }))}
-              className="w-full appearance-none px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
-              <option value="">Pick a teammate…</option>
-              {teammates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-            </select>
+            <Select
+              value={form.userId}
+              onChange={(v) => setForm((f) => ({ ...f, userId: v }))}
+              options={[{ value: "", label: "Pick a teammate…" }, ...teammates.map((t) => ({ value: t.id, label: String(t.name) }))]}
+            />
           )}
 
           <input autoFocus value={form.title}

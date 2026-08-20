@@ -306,7 +306,11 @@ export interface Comment {
 
 export type ContentStatus =
   | "PLANNED" | "ASSIGNED" | "IN_PROGRESS" | "IN_REVIEW"
-  | "TEAM_APPROVED" | "CLIENT_APPROVED" | "SCHEDULED" | "POSTED" | "MISSED";
+  | "TEAM_APPROVED" | "CLIENT_APPROVED" | "SCHEDULED" | "POSTED" | "MISSED"
+  // v3 submit -> review loop (prisma ContentStatus). These were missing here
+  // while the database happily produced them, so any lookup keyed on status
+  // came back undefined.
+  | "SUBMITTED" | "APPROVED";
 
 export interface CreativeType {
   id: string;

@@ -12,6 +12,7 @@ import { useDebounce } from "@/lib/hooks";
 import { formatMoney } from "@/lib/money";
 import { useCurrentUser } from "@/lib/useCurrentUser";
 import type { Expense, ExpenseCategory, ExpenseStatus, Project, ClientSummary } from "@/types";
+import { Select } from "@/components/ui/Select";
 
 const CATEGORY_LABELS: Record<ExpenseCategory, string> = {
   SOFTWARE_TOOLS: "Software & Tools",
@@ -244,48 +245,30 @@ function ExpensesPageInner() {
               className="pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 w-56"
             />
           </div>
-          <select
+          <Select
             value={filterClientId}
-            onChange={(e) => { setFilterClientId(e.target.value); setFilterProjectId(""); }}
-            className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          >
-            <option value="">All Clients</option>
-            {clients.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.companyName ? `${c.companyName} (${c.name})` : c.name}
-              </option>
-            ))}
-          </select>
-          <select
+            onChange={(v) => { setFilterClientId(v); setFilterProjectId(""); }}
+            options={[{ value: "", label: "All Clients" }, ...clients.map((c) => ({ value: c.id, label: String(c.companyName ? `${c.companyName} (${c.name})` : c.name) }))]}
+            size="sm"
+          />
+          <Select
             value={filterProjectId}
-            onChange={(e) => setFilterProjectId(e.target.value)}
-            className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          >
-            <option value="">All Projects</option>
-            {allProjectsFull
-              .filter((p) => !filterClientId || p.clientId === filterClientId)
-              .map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-          </select>
-          <select
-            value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}
-            className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          >
-            <option value="">All Categories</option>
-            {(Object.entries(CATEGORY_LABELS) as [ExpenseCategory, string][]).map(([v, l]) => (
-              <option key={v} value={v}>{l}</option>
-            ))}
-          </select>
-          <select
-            value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}
-            className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          >
-            <option value="">All Statuses</option>
-            {(["PENDING", "APPROVED", "PAID", "REJECTED"] as ExpenseStatus[]).map((s) => (
-              <option key={s} value={s}>{s.charAt(0) + s.slice(1).toLowerCase()}</option>
-            ))}
-          </select>
+            onChange={(v) => setFilterProjectId(v)}
+            options={[{ value: "", label: "All Projects" }, ...allProjectsFull.filter((p) => !filterClientId || p.clientId === filterClientId).map((p) => ({ value: p.id, label: p.name }))]}
+            size="sm"
+          />
+          <Select
+            value={filterCategory}
+            onChange={(v) => setFilterCategory(v)}
+            options={[{ value: "", label: "All Categories" }, ...(Object.entries(CATEGORY_LABELS) as [ExpenseCategory, string][]).map(([v, l]) => ({ value: v, label: l }))]}
+            size="sm"
+          />
+          <Select
+            value={filterStatus}
+            onChange={(v) => setFilterStatus(v)}
+            options={[{ value: "", label: "All Statuses" }, ...(["PENDING", "APPROVED", "PAID", "REJECTED"] as ExpenseStatus[]).map((s) => ({ value: s, label: s.charAt(0) + s.slice(1).toLowerCase() }))]}
+            size="sm"
+          />
           {(filterCategory || filterStatus || search || filterProjectId || filterClientId) && (
             <button onClick={() => { setSearch(""); setFilterCategory(""); setFilterStatus(""); setFilterProjectId(""); setFilterClientId(""); }} className="text-xs text-gray-500 hover:text-gray-800 flex items-center gap-1">
               <Filter className="w-3 h-3" /> Clear
@@ -362,16 +345,11 @@ function ExpensesPageInner() {
                     </td>
                     <td className="px-5 py-3 text-center">
                       <div className="relative inline-block">
-                        <select
+                        <Select
                           value={exp.status}
-                          onChange={(e) => handleStatusChange(exp.id, e.target.value as ExpenseStatus)}
-                          onClick={(e) => e.stopPropagation()}
-                          className={`text-xs font-medium px-2 py-1 rounded-full border-0 cursor-pointer appearance-none focus:outline-none focus:ring-2 focus:ring-indigo-500 ${STATUS_COLORS[exp.status]}`}
-                        >
-                          {(["PENDING", "APPROVED", "PAID", "REJECTED"] as ExpenseStatus[]).map((s) => (
-                            <option key={s} value={s}>{s.charAt(0) + s.slice(1).toLowerCase()}</option>
-                          ))}
-                        </select>
+                          onChange={(v) => handleStatusChange(exp.id, v as ExpenseStatus)}
+                          options={(["PENDING", "APPROVED", "PAID", "REJECTED"] as ExpenseStatus[]).map((s) => ({ value: s, label: s.charAt(0) + s.slice(1).toLowerCase() }))}
+                        />
                       </div>
                     </td>
                     <td className="px-5 py-3">
@@ -413,24 +391,22 @@ function ExpensesPageInner() {
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">Currency</label>
-                <select value={form.currency} onChange={(e) => set("currency", e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                >
-                  {CURRENCIES.map((c) => <option key={c}>{c}</option>)}
-                </select>
+                <Select
+                  value={form.currency}
+                  onChange={(v) => set("currency", v)}
+                  options={CURRENCIES.map((c) => ({ value: c, label: c }))}
+                />
               </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">Category</label>
-                <select value={form.category} onChange={(e) => set("category", e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                >
-                  {(Object.entries(CATEGORY_LABELS) as [ExpenseCategory, string][]).map(([v, l]) => (
-                    <option key={v} value={v}>{l}</option>
-                  ))}
-                </select>
+                <Select
+                  value={form.category}
+                  onChange={(v) => set("category", v)}
+                  options={(Object.entries(CATEGORY_LABELS) as [ExpenseCategory, string][]).map(([v, l]) => ({ value: v, label: l }))}
+                />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">Date</label>
@@ -443,12 +419,11 @@ function ExpensesPageInner() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">Project</label>
-                <select value={form.projectId} onChange={(e) => set("projectId", e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                >
-                  <option value="">No project</option>
-                  {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
+                <Select
+                  value={form.projectId}
+                  onChange={(v) => set("projectId", v)}
+                  options={[{ value: "", label: "No project" }, ...projects.map((p) => ({ value: p.id, label: `${p.name}` }))]}
+                />
               </div>
             </div>
 

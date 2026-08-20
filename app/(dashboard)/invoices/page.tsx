@@ -19,6 +19,7 @@ import { NeedsPricingCard } from "@/components/finance/NeedsPricingCard";
 import { BuildFromClient, type BuiltLine } from "@/components/finance/BuildFromClient";
 import { RequireCapability } from "@/components/layout/RequireCapability";
 import type { Invoice, InvoiceStatus, ClientSummary, Project } from "@/types";
+import { Select } from "@/components/ui/Select";
 
 // ── Constants ─────────────────────────────────────────────────
 
@@ -162,24 +163,19 @@ function InvoiceFormModal({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">Client *</label>
-            <select value={form.clientId} onChange={(e) => setField("clientId", e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              required
-            >
-              <option value="">Select client…</option>
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>{c.companyName ? `${c.companyName} (${c.name})` : c.name}</option>
-              ))}
-            </select>
+            <Select
+              value={form.clientId}
+              onChange={(v) => setField("clientId", v)}
+              options={[{ value: "", label: "Select client…" }, ...clients.map((c) => ({ value: c.id, label: String(c.companyName ? `${c.companyName} (${c.name})` : c.name) }))]}
+            />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">Project</label>
-            <select value={form.projectId} onChange={(e) => setField("projectId", e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            >
-              <option value="">None</option>
-              {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+            <Select
+              value={form.projectId}
+              onChange={(v) => setField("projectId", v)}
+              options={[{ value: "", label: "None" }, ...projects.map((p) => ({ value: p.id, label: `${p.name}` }))]}
+            />
           </div>
         </div>
 
@@ -305,11 +301,11 @@ function InvoiceFormModal({
 
         <div>
           <label className="block text-xs font-medium text-gray-500 mb-1">Currency</label>
-          <select value={form.currency} onChange={(e) => setField("currency", e.target.value)}
-            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          >
-            {CURRENCIES.map((c) => <option key={c}>{c}</option>)}
-          </select>
+          <Select
+            value={form.currency}
+            onChange={(v) => setField("currency", v)}
+            options={CURRENCIES.map((c) => ({ value: c, label: c }))}
+          />
         </div>
 
         {!fromBillables && (
@@ -517,18 +513,18 @@ function InvoicesPageInner() {
               className="pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 w-44"
             />
           </div>
-          <select value={filterClient} onChange={(e) => setFilterClient(e.target.value)}
-            className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          >
-            <option value="">All Clients</option>
-            {clients.map((c) => <option key={c.id} value={c.id}>{c.companyName ?? c.name}</option>)}
-          </select>
-          <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as InvoiceStatus | "")}
-            className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          >
-            <option value="">All Statuses</option>
-            {STATUS_ORDER.map((s) => <option key={s} value={s}>{STATUS_CONFIG[s].label}</option>)}
-          </select>
+          <Select
+            value={filterClient}
+            onChange={(v) => setFilterClient(v)}
+            options={[{ value: "", label: "All Clients" }, ...clients.map((c) => ({ value: c.id, label: `${c.companyName ?? c.name}` }))]}
+            size="sm"
+          />
+          <Select
+            value={filterStatus}
+            onChange={(v) => setFilterStatus(v as InvoiceStatus | "")}
+            options={[{ value: "", label: "All Statuses" }, ...STATUS_ORDER.map((s) => ({ value: s, label: `${STATUS_CONFIG[s].label}` }))]}
+            size="sm"
+          />
           {hasFilters && (
             <button onClick={() => { setSearch(""); setFilterStatus(""); setFilterClient(""); }}
               className="text-xs text-gray-500 hover:text-gray-800 flex items-center gap-1"
@@ -622,16 +618,11 @@ function InvoicesPageInner() {
                           {formatMoney(total, inv.currency)}
                         </td>
                         <td className="px-5 py-3.5 text-center">
-                          <select
+                          <Select
                             value={inv.status}
-                            onChange={(e) => handleStatusChange(inv.id, e.target.value as InvoiceStatus)}
-                            onClick={(e) => e.stopPropagation()}
-                            className={`text-xs font-medium px-2.5 py-1 rounded-full border-0 cursor-pointer appearance-none focus:outline-none focus:ring-2 focus:ring-indigo-500 ${cfg.color}`}
-                          >
-                            {STATUS_ORDER.map((s) => (
-                              <option key={s} value={s}>{STATUS_CONFIG[s].label}</option>
-                            ))}
-                          </select>
+                            onChange={(v) => handleStatusChange(inv.id, v as InvoiceStatus)}
+                            options={[...STATUS_ORDER.map((s) => ({ value: s, label: String(STATUS_CONFIG[s].label) }))]}
+                          />
                         </td>
                         <td className="px-5 py-3.5">
                           <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">

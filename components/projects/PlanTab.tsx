@@ -12,12 +12,13 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   ChevronLeft, ChevronRight, Plus, Calendar as CalIcon, List as ListIcon,
-  Layers, Lock, AlertTriangle,
+  Layers, Lock, Unlock, AlertTriangle,
 } from "lucide-react";
 import { MonthGrid, MONTH_NAMES } from "@/components/calendar/MonthGrid";
 import { CONTENT_STATUS_META } from "@/components/content/ContentCalendarTab";
 import { Button } from "@/components/ui/Button";
 import { toast } from "@/lib/toast";
+import { CloseCycleWizard } from "@/components/projects/CloseCycleWizard";
 import { broadcastChange } from "@/lib/live";
 import type { ContentStatus } from "@/types";
 
@@ -30,6 +31,7 @@ interface QuotaRow {
   posted: number;
   extra: number;
   carriedInExtra: number;
+  carriedInQuota: number;
   full: boolean;
 }
 
@@ -62,6 +64,8 @@ interface PlanPayload {
   items: PlanItem[];
   canPlan: boolean;
   canOverrideBilling: boolean;
+  canClose: boolean;
+  canReopen: boolean;
 }
 
 /** A meter reads "Reels 4/15" with the bar filling as the cycle is planned. */
@@ -85,11 +89,15 @@ function QuotaMeter({ row }: { row: QuotaRow }) {
         <div className="h-full rounded-full bg-emerald-500 absolute inset-y-0 left-0 transition-all"
           style={{ width: `${postedPct}%` }} />
       </div>
-      {(row.extra > 0 || row.carriedInExtra > 0) && (
-        <p className="text-[10px] text-amber-600 mt-1">
-          {row.extra > 0 && `+${row.extra} extra`}
-          {row.extra > 0 && row.carriedInExtra > 0 && " · "}
-          {row.carriedInExtra > 0 && `${row.carriedInExtra} carried in (extra)`}
+      {(row.extra > 0 || row.carriedInExtra > 0 || row.carriedInQuota > 0) && (
+        <p className="text-[10px] mt-1 space-x-1">
+          {row.extra > 0 && <span className="text-amber-600">+{row.extra} extra</span>}
+          {row.carriedInExtra > 0 && (
+            <span className="text-amber-600">{row.carriedInExtra} carried in (extra)</span>
+          )}
+          {row.carriedInQuota > 0 && (
+            <span className="text-indigo-500">{row.carriedInQuota} carried in</span>
+          )}
         </p>
       )}
     </div>
@@ -104,6 +112,7 @@ export function PlanTab({ projectId }: { projectId: string }) {
   const [dialogDate, setDialogDate] = useState<Date | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [editItem, setEditItem] = useState<PlanItem | null>(null);
+  const [closing, setClosing] = useState(false);
 
   const load = useCallback(async () => {
     const url = cycleId
@@ -161,6 +170,33 @@ export function PlanTab({ projectId }: { projectId: string }) {
   const cycleStart = new Date(cycle.startDate);
   const closed = cycle.status === "CLOSED";
 
+  /**
+   * Reopening is a manager's call and is written to the history. It also
+   * withdraws the billing lines the close produced, so any amount already
+   * typed on an extra is lost — worth saying out loud before it happens.
+   */
+  const reopen = async () => {
+    const ok = window.confirm(
+      `Reopen ${cycle.label}?\n\n`
+      + "The billing lines this close produced will be withdrawn, including any "
+      + "amounts already entered. They are regenerated when you close it again.",
+    );
+    if (!ok) return;
+    const res = await fetch(`/api/cycles/${cycle.id}/reopen`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason: "reopened from the plan" }),
+    });
+    const d = await res.json();
+    if (!res.ok) { toast.error(d.error?.message ?? "Couldn't reopen"); return; }
+    toast.success(
+      d.pricedLost > 0
+        ? `${cycle.label} reopened — ${d.pricedLost} priced line${d.pricedLost === 1 ? "" : "s"} withdrawn`
+        : `${cycle.label} reopened`,
+    );
+    setLoading(true); load(); broadcastChange("all");
+  };
+
   const goCycle = (delta: number) => {
     const next = data.cycles[cycleIndex + delta];
     if (next) { setCycleId(next.id); setLoading(true); }
@@ -212,6 +248,20 @@ export function PlanTab({ projectId }: { projectId: string }) {
               Add content
             </Button>
           </>
+        )}
+
+        {/* v3: ending the month is a deliberate act, not a date passing */}
+        {data.canPlan && data.canClose && (
+          <Button size="sm" variant="secondary" icon={<Lock className="w-3.5 h-3.5" />}
+            onClick={() => setClosing(true)}>
+            Close cycle
+          </Button>
+        )}
+        {closed && data.canReopen && (
+          <Button size="sm" variant="secondary" icon={<Unlock className="w-3.5 h-3.5" />}
+            onClick={reopen}>
+            Reopen
+          </Button>
         )}
       </div>
 
@@ -315,6 +365,14 @@ export function PlanTab({ projectId }: { projectId: string }) {
           canOverrideBilling={data.canOverrideBilling}
           onClose={() => { setDialogDate(null); setEditItem(null); }}
           onSaved={() => { setDialogDate(null); setEditItem(null); setLoading(true); load(); broadcastChange("all"); }}
+        />
+      )}
+
+      {closing && (
+        <CloseCycleWizard
+          cycleId={cycle.id}
+          onClose={() => setClosing(false)}
+          onClosed={() => { setClosing(false); setLoading(true); load(); broadcastChange("all"); }}
         />
       )}
 

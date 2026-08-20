@@ -60,6 +60,7 @@ export async function GET(req: NextRequest, { params }: Params) {
         project: { id: project.id, name: project.name, type: project.type, client: project.client },
         cycles: [], cycle: null, summary: null, items: [],
         canPlan: true, canOverrideBilling: can(user, "projects.pricing"),
+        canClose: false, canReopen: false,
       });
     }
 
@@ -94,6 +95,10 @@ export async function GET(req: NextRequest, { params }: Params) {
       canPlan: selected.status === "OPEN",
       // Only admin/manager may flip an EXTRA back to INCLUDED.
       canOverrideBilling: can(user, "projects.pricing"),
+      // An SMM closes their own project's cycles…
+      canClose: can(user, "cycles.close", { ownsProject }),
+      // …but only the people who own the money can undo a close.
+      canReopen: can(user, "projects.pricing"),
     });
   } catch (error) {
     return handleApiError(error, "GET /api/projects/[id]/plan");

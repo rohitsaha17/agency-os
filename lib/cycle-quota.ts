@@ -30,6 +30,8 @@ export interface QuotaRow {
   extra: number;
   /** Carried in from a previous cycle and sitting outside the quota. */
   carriedInExtra: number;
+  /** Carried in and consuming this cycle's quota. */
+  carriedInQuota: number;
   full: boolean;
 }
 
@@ -87,14 +89,14 @@ export async function cycleSummary(
     rows.set(d.creativeType.id, {
       creativeType: d.creativeType,
       quota: d.qtyPerCycle,
-      planned: 0, posted: 0, extra: 0, carriedInExtra: 0, full: false,
+      planned: 0, posted: 0, extra: 0, carriedInExtra: 0, carriedInQuota: 0, full: false,
     });
   }
   for (const i of items) {
     if (!rows.has(i.creativeTypeId)) {
       rows.set(i.creativeTypeId, {
         creativeType: i.creativeType,
-        quota: 0, planned: 0, posted: 0, extra: 0, carriedInExtra: 0, full: false,
+        quota: 0, planned: 0, posted: 0, extra: 0, carriedInExtra: 0, carriedInQuota: 0, full: false,
       });
     }
   }
@@ -114,6 +116,10 @@ export async function cycleSummary(
       row.extra++;
     } else if (COMMITTED.includes(i.status)) {
       row.planned++;
+      // Carried in INSIDE_QUOTA: it eats this cycle's allowance (counted
+      // above) but is worth showing as carried so the SMM knows why the
+      // meter started part-full.
+      if (i.carriedFromId) row.carriedInQuota++;
     }
     if (i.status === "POSTED") row.posted++;
   }

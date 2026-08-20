@@ -15,6 +15,7 @@ import { useDebounce } from "@/lib/hooks";
 import { calcInvoiceTotal } from "@/lib/format";
 import { formatMoney } from "@/lib/money";
 import { useCurrentUser } from "@/lib/useCurrentUser";
+import { NeedsPricingCard } from "@/components/finance/NeedsPricingCard";
 import type { Invoice, InvoiceStatus, ClientSummary, Project } from "@/types";
 
 // ── Constants ─────────────────────────────────────────────────
@@ -520,6 +521,10 @@ export default function InvoicesPage() {
             </div>
           ))}
         </div>
+
+        {/* v3: extras an SMM flagged at cycle close, waiting on a price.
+            Renders nothing when the queue is empty. */}
+        <NeedsPricingCard currency={displayCurrency} />
 
         {/* Filters */}
         <div className="flex items-center gap-3 flex-wrap">

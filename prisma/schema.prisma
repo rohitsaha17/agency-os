@@ -252,6 +252,22 @@ enum CycleStatus {
   CLOSED
 }
 
+// v3: what kind of line a billable item becomes on an invoice.
+enum BillableKind {
+  PACKAGE // the cycle's retainer fee
+  EXTRA // over-delivery the SMM flagged to bill
+  COMPLIMENTARY // over-delivery given away — invoiced at 1 so the client sees it
+  ADHOC_TASK // billable work outside any project
+}
+
+// v3: where a billable item is in its life.
+enum BillableStatus {
+  PENDING_PRICING // the SMM flagged it; an admin still has to set the amount
+  READY // priced and waiting to go on an invoice
+  INVOICED // it's on one
+  WAIVED // dropped, never to be billed
+}
+
 // ============================================================
 // USERS — Agency team members
 // ============================================================
@@ -308,6 +324,7 @@ model User {
   closedCycles         ProjectCycle[]  @relation("CyclesClosed")
   tasksToApprove       Task[]          @relation("TaskApprover")
   taskReviews          TaskReview[]    @relation("TaskReviews")
+  flaggedBillables     BillableItem[]  @relation("FlaggedBillables")
 
   @@unique([organizationId, email])
   @@index([organizationId])
@@ -390,6 +407,7 @@ model Client {
   packages        ClientPackage[] @relation("ClientPackages")
   followUps       FollowUp[]      @relation("ClientFollowUps")
   reviewBatches   ReviewBatch[]   @relation("ClientReviewBatches")
+  billableItems   BillableItem[]
 
   @@index([organizationId])
   @@map("clients")
@@ -474,6 +492,7 @@ model Project {
   createdBy    User?           @relation("ProjectCreator", fields: [createdById], references: [id])
   deliverables ProjectDeliverable[]
   cycles       ProjectCycle[]
+  billableItems BillableItem[]
   tasks        Task[]
   files        File[]
   folders      Folder[]
@@ -549,10 +568,54 @@ model ProjectCycle {
   closedBy     User?         @relation("CyclesClosed", fields: [closedById], references: [id], onDelete: SetNull)
   contentItems ContentItem[]
   tasks        Task[]
+  billableItems BillableItem[]
 
   @@unique([projectId, startDate])
   @@index([projectId, status])
   @@map("project_cycles")
+}
+
+/// v3 — the bridge between "what happened" and "what gets billed"
+/// (docs/V3_CONTEXT.md §3).
+///
+/// Closing a cycle produces these: one PACKAGE line for the retainer, one
+/// EXTRA per item the SMM flagged to bill, one COMPLIMENTARY per freebie.
+/// The SMM decides WHETHER something is billable; only an admin or manager
+/// ever sets `amount`, which is why it starts null on an EXTRA.
+model BillableItem {
+  id             String         @id @default(cuid())
+  organizationId String
+  clientId       String
+  projectId      String?
+  cycleId        String?
+  contentItemId  String?
+  taskId         String?
+  label          String
+  kind           BillableKind
+  /// The SMM who flagged it — accountability for a billing decision.
+  flaggedById    String?
+  /// Null until an admin prices it. COMPLIMENTARY is 1 so the client sees
+  /// the goodwill on the invoice rather than nothing at all.
+  amount         Decimal?       @db.Decimal(12, 2)
+  status         BillableStatus @default(PENDING_PRICING)
+  invoiceId      String?
+  notes          String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  client       Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  project      Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  cycle        ProjectCycle? @relation(fields: [cycleId], references: [id], onDelete: SetNull)
+  contentItem  ContentItem?  @relation(fields: [contentItemId], references: [id], onDelete: SetNull)
+  task         Task?         @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  flaggedBy    User?         @relation("FlaggedBillables", fields: [flaggedById], references: [id], onDelete: SetNull)
+  invoice      Invoice?      @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, status])
+  @@index([clientId, status])
+  @@index([cycleId])
+  @@map("billable_items")
 }
 
 // ============================================================
@@ -623,6 +686,7 @@ model Task {
   preferredAssignee User?       @relation("TaskPreferredAssignee", fields: [preferredAssigneeId], references: [id])
   deliveries    TaskDelivery[]
   reviews       TaskReview[]
+  billableItems BillableItem[]
   changeRequests ChangeRequest[]
   manager      User?            @relation("TaskManager", fields: [managerId], references: [id])
   assignees    TaskAssignee[]
@@ -721,6 +785,7 @@ model ContentItem {
   createdBy     User?         @relation("CreatedContentItems", fields: [createdById], references: [id])
   tasks         Task[]        @relation("ContentItemTasks")
   billedLines   InvoiceLineItem[] @relation("BilledContentItems")
+  billableItems BillableItem[]
 
   @@index([cycleId, status])
   @@index([organizationId, clientId, date])
@@ -897,6 +962,7 @@ model Invoice {
   client       Client            @relation(fields: [clientId], references: [id])
   lineItems    InvoiceLineItem[]
   receipts     Receipt[]
+  billableItems BillableItem[]
 
   @@unique([organizationId, invoiceNumber])
   @@index([status, clientId])
@@ -1392,6 +1458,7 @@ model Organization {
   clientPackages ClientPackage[]
   followUps     FollowUp[]
   reviewBatches ReviewBatch[]
+  billableItems BillableItem[]
 
   @@map("organizations")
 }

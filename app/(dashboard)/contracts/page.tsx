@@ -1,5 +1,7 @@
 "use client";
 
+import { RequireCapability } from "@/components/layout/RequireCapability";
+
 import { useEffect, useState, useCallback, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -248,9 +250,13 @@ function ContractsPageInner() {
 }
 
 export default function ContractsPage() {
+  // v3: the API refuses this outright without financials.view — say so
+  // rather than rendering a shell that 403s behind the scenes.
   return (
-    <Suspense fallback={<div className="flex items-center justify-center h-full"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500" /></div>}>
-      <ContractsPageInner />
-    </Suspense>
+    <RequireCapability capability="financials.view" what="Contracts">
+      <Suspense fallback={<div className="flex items-center justify-center h-full"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500" /></div>}>
+        <ContractsPageInner />
+      </Suspense>
+    </RequireCapability>
   );
 }

@@ -1,13 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
-import { jsonFor } from "@/lib/api-permissions";
+import { jsonFor, requireCapability } from "@/lib/api-permissions";
 import { apiError, handleApiError, ApiError } from "@/lib/api-errors";
 import { checkRateLimit, WRITE_RATE_LIMITS } from "@/lib/rate-limit";
 
 export async function GET(req: NextRequest) {
   try {
     const user = await requireAuth(req);
+    // v3: a contract is a commercial document — same gate as the nav,
+    // which hides Contracts from anyone without financials.view.
+    requireCapability(user, "financials.view");
 
     const { searchParams } = new URL(req.url);
     const type          = searchParams.get("type");
@@ -46,6 +49,9 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const user = await requireAuth(req);
+    // v3: a contract is a commercial document — same gate as the nav,
+    // which hides Contracts from anyone without financials.view.
+    requireCapability(user, "financials.view");
 
     const rl = checkRateLimit(req, `contracts:create:${user.id}`, WRITE_RATE_LIMITS.light);
     if (!rl.allowed) return apiError("Too many requests, please slow down", 429);

@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { notify, notifyMany } from "@/lib/notify";
 import { logStatus } from "@/lib/audit";
 import { scanUpcomingEvents } from "@/lib/reminders";
+import { runV3Reminders } from "@/lib/v3-reminders";
 
 function dayKey(d: Date) { return d.toISOString().slice(0, 10); }
 
@@ -253,5 +254,9 @@ export async function runDailyScan(now: Date, force = false): Promise<{ ran: boo
     }
   }
 
-  return { ran: true, summary };
+  // v3: the nudges that only make sense on a clock — posting due today,
+  // a cycle about to end, a project nobody has planned (lib/v3-reminders.ts).
+  const v3 = await runV3Reminders(now);
+
+  return { ran: true, summary: { ...summary, ...v3 } };
 }

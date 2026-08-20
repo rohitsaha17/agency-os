@@ -1,156 +1,138 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import Link from "next/link";
-import { BarChart3, Download, ShieldAlert } from "lucide-react";
-import { useCurrentUser } from "@/lib/useCurrentUser";
+/**
+ * v3 Phase 8 — reports, gated by the same capabilities as everything else.
+ *
+ * Five reports, and which you can open follows the matrix rather than a
+ * hardcoded role list (docs/V3_CONTEXT.md §8). An SMM holds reports.delivery
+ * but sees only their own projects, which the API scopes rather than the UI
+ * filtering afterwards.
+ */
 
-interface MissedRow {
-  kind: "task" | "content";
-  id: string;
-  title: string;
-  client: string;
-  assignee: string;
-  dueDate: string;
-  daysLate: number;
-  status: string;
-  link: string;
-}
+import { useState, useEffect, useCallback } from "react";
+import { BarChart3, Download, Loader2 } from "lucide-react";
+import { useCurrentUser } from "@/lib/useCurrentUser";
+import { can } from "@/lib/permissions";
+import { RequireCapability } from "@/components/layout/RequireCapability";
+
+type Row = Record<string, string | number | null>;
+
+const REPORTS: { id: string; label: string; hint: string; needsAll?: boolean }[] = [
+  { id: "delivery",  label: "Delivery",         hint: "Quota against what actually went out, per cycle" },
+  { id: "deadline",  label: "Deadlines",        hint: "What's late, by how long, and whose it is" },
+  { id: "workload",  label: "Team workload",    hint: "Open, submitted and overdue per person" },
+  { id: "cycles",    label: "Cycle history",    hint: "Every close: what carried, what billed" },
+  // Only reports.all reaches this one — the API refuses it too.
+  { id: "financial", label: "Revenue & margin", hint: "Invoiced, collected and spent per client", needsAll: true },
+];
 
 export default function ReportsPage() {
-  const { user: currentUser, loading: userLoading } = useCurrentUser();
-  const [rows, setRows] = useState<MissedRow[]>([]);
+  return (
+    <RequireCapability capability="reports.delivery" what="Reports">
+      <ReportsPageInner />
+    </RequireCapability>
+  );
+}
+
+function ReportsPageInner() {
+  const { user } = useCurrentUser();
+  const [report, setReport] = useState<string>("delivery");
+  const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
-  const [month, setMonth] = useState("");
-  const [clientId, setClientId] = useState("");
-  const [assigneeId, setAssigneeId] = useState("");
-  const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
-  const [users, setUsers] = useState<{ id: string; name: string }[]>([]);
+  const [scoped, setScoped] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const allowed = currentUser && ["ADMIN", "OWNER", "MANAGER"].includes(currentUser.role);
+  const seesFinancials = can(user, "reports.all");
+  const available = REPORTS.filter((r) => !r.needsAll || seesFinancials);
 
-  useEffect(() => {
-    if (!allowed) return;
-    fetch("/api/clients").then((r) => r.json()).then((d) => { if (Array.isArray(d)) setClients(d); });
-    fetch("/api/users").then((r) => r.json()).then((d) => { if (Array.isArray(d)) setUsers(d); });
-  }, [allowed]);
-
-  const fetchRows = useCallback(async () => {
-    if (!allowed) return;
-    setLoading(true);
+  const load = useCallback(async () => {
+    setLoading(true); setError(null);
     try {
-      const params = new URLSearchParams();
-      if (month) params.set("month", month);
-      if (clientId) params.set("clientId", clientId);
-      if (assigneeId) params.set("assigneeId", assigneeId);
-      const res = await fetch(`/api/reports/missed?${params}`);
+      const res = await fetch(`/api/reports/v3?report=${report}`);
       const d = await res.json();
-      if (res.ok) setRows(Array.isArray(d) ? d : []);
-    } finally {
-      setLoading(false);
-    }
-  }, [allowed, month, clientId, assigneeId]);
+      if (!res.ok) { setError(d.error?.message ?? "Couldn't load that report"); setRows([]); return; }
+      setRows(d.rows);
+      setScoped(d.scoped);
+    } finally { setLoading(false); }
+  }, [report]);
 
-  useEffect(() => { fetchRows(); }, [fetchRows]);
+  useEffect(() => { load(); }, [load]);
 
-  const exportCsv = () => {
-    const header = ["Item", "Kind", "Client", "Assignee", "Due date", "Days late", "Status"];
-    const lines = rows.map((r) => [
-      `"${r.title.replace(/"/g, '""')}"`, r.kind, `"${r.client}"`, `"${r.assignee}"`,
-      r.dueDate.slice(0, 10), r.daysLate, r.status,
-    ].join(","));
-    const blob = new Blob([[header.join(","), ...lines].join("\n")], { type: "text/csv" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `missed-deadlines${month ? `-${month}` : ""}.csv`;
-    a.click();
-    URL.revokeObjectURL(a.href);
-  };
-
-  if (!userLoading && !allowed) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full text-center p-8">
-        <ShieldAlert className="w-12 h-12 text-gray-300 mb-4" />
-        <p className="text-sm font-medium text-gray-700">Reports are available to managers and admins.</p>
-      </div>
-    );
-  }
+  const headers = rows.length > 0 ? Object.keys(rows[0]) : [];
+  const current = REPORTS.find((r) => r.id === report);
 
   return (
     <div className="flex flex-col h-full">
-      <div className="bg-white border-b border-gray-200 px-4 sm:px-6 lg:px-8 py-4 sm:py-5">
-        <div className="flex items-center justify-between flex-wrap gap-3">
+      <div className="bg-white border-b border-gray-200 px-4 sm:px-6 lg:px-8 py-4 sm:py-5 flex-shrink-0">
+        <div className="flex items-start justify-between gap-3 flex-wrap">
           <div>
             <h1 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
               <BarChart3 className="w-5 h-5 text-indigo-500" /> Reports
             </h1>
-            <p className="text-sm text-gray-500 mt-0.5">Missed &amp; crossed deadlines across tasks and content</p>
+            <p className="text-sm text-gray-500 mt-0.5">
+              {current?.hint}
+              {scoped && <span className="text-gray-400"> · your projects only</span>}
+            </p>
           </div>
-          <button onClick={exportCsv} disabled={rows.length === 0}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-700 disabled:opacity-40">
+          <a
+            href={`/api/reports/v3?report=${report}&format=csv`}
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
             <Download className="w-3.5 h-3.5" /> Export CSV
-          </button>
+          </a>
         </div>
-        <div className="flex items-center gap-3 mt-4 flex-wrap">
-          <input type="month" value={month} onChange={(e) => setMonth(e.target.value)}
-            className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-700" />
-          <select value={clientId} onChange={(e) => setClientId(e.target.value)}
-            className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-700 min-w-[130px]">
-            <option value="">All Clients</option>
-            {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-          <select value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)}
-            className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-700 min-w-[130px]">
-            <option value="">All Assignees</option>
-            {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-          </select>
-          {(month || clientId || assigneeId) && (
-            <button onClick={() => { setMonth(""); setClientId(""); setAssigneeId(""); }}
-              className="text-xs text-gray-500 hover:text-red-600">Clear</button>
-          )}
+
+        <div className="flex gap-1.5 mt-4 flex-wrap">
+          {available.map((r) => (
+            <button key={r.id} onClick={() => setReport(r.id)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                report === r.id
+                  ? "bg-indigo-600 text-white"
+                  : "text-gray-600 border border-gray-200 hover:bg-gray-50"
+              }`}>
+              {r.label}
+            </button>
+          ))}
         </div>
       </div>
 
-      <div className="flex-1 px-4 sm:px-6 lg:px-8 py-4 sm:py-6 overflow-auto">
+      <div className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8">
         {loading ? (
-          <div className="space-y-2">{[1, 2, 3, 4].map((i) => <div key={i} className="h-11 bg-gray-100 rounded-xl animate-pulse" />)}</div>
+          <div className="flex items-center gap-2 text-sm text-gray-400 py-10 justify-center">
+            <Loader2 className="w-4 h-4 animate-spin" /> Loading…
+          </div>
+        ) : error ? (
+          <p className="text-sm text-red-600 text-center py-10">{error}</p>
         ) : rows.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
-            <BarChart3 className="w-12 h-12 text-emerald-300 mb-4" />
-            <p className="text-sm font-medium text-gray-700">Nothing missed — the team is on track. 🎉</p>
+          <div className="text-center py-16">
+            <BarChart3 className="w-9 h-9 text-gray-200 mx-auto mb-3" />
+            <p className="text-sm font-medium text-gray-600">Nothing to report yet</p>
+            <p className="text-xs text-gray-400 mt-1">
+              {report === "cycles"
+                ? "Closing a cycle is what fills this in."
+                : "This fills in as work moves through the system."}
+            </p>
           </div>
         ) : (
-          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden overflow-x-auto">
-            <table className="w-full text-sm min-w-[720px]">
+          <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
+            <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-100">
-                  {["Item", "Client", "Assignee", "Due date", "Days late", "Status"].map((h) => (
-                    <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500">{h}</th>
+                <tr className="bg-gray-50 border-b border-gray-200">
+                  {headers.map((h) => (
+                    <th key={h} className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 whitespace-nowrap">
+                      {/* CamelCase headers read better with spaces */}
+                      {h.replace(/([a-z])([A-Z])/g, "$1 $2")}
+                    </th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
-                {rows.map((r) => (
-                  <tr key={`${r.kind}-${r.id}`} className="hover:bg-gray-50">
-                    <td className="px-4 py-3">
-                      <Link href={r.link} className="font-medium text-gray-900 hover:text-indigo-600">
-                        {r.title}
-                      </Link>
-                      <span className={`ml-2 text-[9px] font-semibold uppercase px-1.5 py-0.5 rounded-full ${
-                        r.kind === "content" ? "bg-fuchsia-50 text-fuchsia-600" : "bg-indigo-50 text-indigo-600"
-                      }`}>{r.kind}</span>
-                    </td>
-                    <td className="px-4 py-3 text-gray-500 text-xs">{r.client}</td>
-                    <td className="px-4 py-3 text-gray-500 text-xs">{r.assignee}</td>
-                    <td className="px-4 py-3 text-gray-400 text-xs">
-                      {new Date(r.dueDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`text-xs font-semibold ${r.daysLate > 14 ? "text-red-600" : r.daysLate > 7 ? "text-orange-600" : "text-amber-600"}`}>
-                        {r.daysLate}d
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-xs text-gray-500">{r.status.replace(/_/g, " ")}</td>
+              <tbody>
+                {rows.map((r, i) => (
+                  <tr key={i} className={`border-b border-gray-100 ${i % 2 ? "bg-gray-50/40" : ""}`}>
+                    {headers.map((h) => (
+                      <td key={h} className="px-4 py-2.5 text-gray-700 whitespace-nowrap">
+                        {r[h] ?? "—"}
+                      </td>
+                    ))}
                   </tr>
                 ))}
               </tbody>

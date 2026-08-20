@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useCurrentUser } from "@/lib/useCurrentUser";
 import { can } from "@/lib/permissions";
+import { RoleBlocks } from "@/components/dashboard/RoleBlocks";
 import { formatMoney } from "@/lib/money";
 import {
   AlertCircle, Clock, CheckCircle2, Ban, FolderKanban,
@@ -735,6 +736,10 @@ export default function DashboardPage() {
       </div>
 
       <div className="flex-1 px-4 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-5 overflow-auto">
+
+        {/* v3: the blocks THIS role needs, first — a junior lands on their
+            work, a manager on the money (docs/V3_CONTEXT.md §8). */}
+        <RoleBlocks currency={data.currency} />
 
         {/* ── Row 1: Stats ───────────────────────────────────── */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
-import { jsonFor } from "@/lib/api-permissions";
+import { jsonFor, requireCapability } from "@/lib/api-permissions";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 
 type Params = { params: Promise<{ id: string }> };
@@ -21,6 +21,9 @@ export async function GET(req: NextRequest, { params }: Params) {
   const { id } = await params;
   try {
     const user = await requireAuth(req);
+    // v3: a contract is a commercial document — same gate as the nav,
+    // which hides Contracts from anyone without financials.view.
+    requireCapability(user, "financials.view");
     const contract = await prisma.contract.findFirst({
       where: { id, organizationId: user.organizationId },
       include: CONTRACT_INCLUDE,
@@ -36,6 +39,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const { id } = await params;
   try {
     const user = await requireAuth(req);
+    // v3: a contract is a commercial document — same gate as the nav,
+    // which hides Contracts from anyone without financials.view.
+    requireCapability(user, "financials.view");
 
     // Verify org ownership before mutating.
     const existing = await prisma.contract.findFirst({
@@ -89,6 +95,9 @@ export async function DELETE(req: NextRequest, { params }: Params) {
   const { id } = await params;
   try {
     const user = await requireAuth(req);
+    // v3: a contract is a commercial document — same gate as the nav,
+    // which hides Contracts from anyone without financials.view.
+    requireCapability(user, "financials.view");
     const existing = await prisma.contract.findFirst({
       where: { id, organizationId: user.organizationId },
       select: { id: true },

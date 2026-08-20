@@ -601,14 +601,21 @@ export function buildInvoiceHtml(inv: InvoicePdfData, s: CompanySettings): strin
   const cfg    = parseCfg(s);
   const accent = s.letterheadColor || "#6366f1";
 
-  // v2: complimentary (free) lines are listed separately and never totalled
-  const billed = inv.lineItems.filter((li) => !li.isFree);
-  const freeLines = inv.lineItems.filter((li) => li.isFree);
+  // v3: complimentary lines are listed in their own section with the tag, at
+  // the token amount they were invoiced at, so the client sees the goodwill
+  // rather than a silent zero (docs/V3_CONTEXT.md §3). v2's genuinely
+  // zero-rated lines land in the same section.
+  const isComplimentary = (li: { isFree?: boolean; kind?: string }) =>
+    li.kind === "COMPLIMENTARY" || li.isFree;
+  const billed = inv.lineItems.filter((li) => !isComplimentary(li));
+  const freeLines = inv.lineItems.filter(isComplimentary);
 
   const subtotal = billed.reduce((sum, li) => sum + li.quantity * li.unitPrice, 0);
+  // The token amounts still belong in the total, or the invoice wouldn't add up.
+  const complimentaryTotal = freeLines.reduce((sum, li) => sum + li.quantity * li.unitPrice, 0);
   const disc     = subtotal * ((inv.discountPct ?? 0) / 100);
   const tax      = (subtotal - disc) * ((inv.taxPct ?? 0) / 100);
-  const total    = subtotal - disc + tax;
+  const total    = subtotal - disc + tax + complimentaryTotal;
 
   const fmtStatus: Record<string, string> = {
     DRAFT: "badge-gray", SENT: "badge-blue", PAID: "badge-green",
@@ -632,9 +639,10 @@ export function buildInvoiceHtml(inv: InvoicePdfData, s: CompanySettings): strin
       <td class="desc">${esc(li.description)}</td>
       <td class="qty">${li.quantity}</td>
       <td class="price" style="color:#15803d;font-weight:600;">Complimentary</td>
-      <td class="total" style="color:#15803d;">${fmt(0, inv.currency)}</td>
+      <td class="total" style="color:#15803d;">${fmt(li.quantity * li.unitPrice, inv.currency)}</td>
     </tr>
   `).join("");
+
 
   const agencyName = s.name || "Agency";
 

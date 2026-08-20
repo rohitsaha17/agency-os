@@ -29,7 +29,18 @@ export async function GET(req: NextRequest) {
     const where = {
       organizationId: user.organizationId,
       ...(clientId  ? { clientId }  : {}),
-      ...(projectId ? { projectId } : {}),
+      // v3: an invoice built from a client's outstanding work spans several
+      // projects and so carries no single projectId — which is why the
+      // project Invoices tab used to come up empty. Match either the direct
+      // link OR any billable line that came from this project.
+      ...(projectId
+        ? {
+            OR: [
+              { projectId },
+              { billableItems: { some: { projectId } } },
+            ],
+          }
+        : {}),
       ...(status    ? { status: status as never } : {}),
       ...(search    ? { invoiceNumber: { contains: search, mode: "insensitive" as const } } : {}),
     };
@@ -143,7 +154,11 @@ export async function POST(req: NextRequest) {
 
       let resolvedLineItems = lineItems as {
         description: string; quantity: number; unitPrice: number; unit?: string; order?: number;
-        kind?: "PACKAGE" | "EXTRA" | "CUSTOM"; isFree?: boolean; contentItemId?: string | null;
+        kind?: "PACKAGE" | "EXTRA" | "COMPLIMENTARY" | "ADHOC_TASK" | "CUSTOM";
+        isFree?: boolean; contentItemId?: string | null;
+        // v3: which billable item produced this line, so the builder can
+        // never offer the same work twice.
+        billableItemId?: string | null;
       }[] | undefined;
       let resolvedDiscountPct = discountPct != null ? parseFloat(discountPct) : null;
       let resolvedTaxPct = taxPct != null ? parseFloat(taxPct) : null;
@@ -164,12 +179,19 @@ export async function POST(req: NextRequest) {
             create: (resolvedLineItems ?? []).map((li, i) => ({
               description: li.description,
               quantity:    li.quantity ?? 1,
-              unitPrice:   li.isFree ? 0 : (li.unitPrice ?? 0),
+              // Complimentary keeps its token amount; only a v2 zero-rated
+              // line is forced to nothing.
+              unitPrice:   (li.isFree && li.kind !== "COMPLIMENTARY") ? 0 : (li.unitPrice ?? 0),
               unit:        li.unit ?? null,
               order:       li.order ?? i,
               kind:        li.kind ?? "CUSTOM",
-              isFree:      !!li.isFree,
+              // v3: a complimentary line is invoiced at its token amount (1)
+              // so the client SEES the goodwill, and it totals like any other
+              // line so the invoice adds up. isFree stays for v2's genuinely
+              // zero-rated lines (docs/V3_CONTEXT.md §3).
+              isFree:      !!li.isFree && li.kind !== "COMPLIMENTARY",
               contentItemId: li.contentItemId ?? null,
+              billableItemId: li.billableItemId ?? null,
             })),
           },
         },
@@ -187,6 +209,34 @@ export async function POST(req: NextRequest) {
           data: { invoicedInId: created.id },
         });
       }
+
+      // ── v3: consume the billable items this invoice was built from ──
+      // Marking them INVOICED is what stops the builder re-offering them.
+      // Anything the user unticked simply isn't in the list, so it stays
+      // available for a later invoice.
+      const consumed = (resolvedLineItems ?? [])
+        .map((li) => li.billableItemId)
+        .filter(Boolean) as string[];
+      if (consumed.length) {
+        await tx.billableItem.updateMany({
+          where: { id: { in: consumed }, organizationId: user.organizationId },
+          data: { status: "INVOICED", invoiceId: created.id },
+        });
+
+        // A cycle records where it was billed, so the Plan tab can say so.
+        const cycles = await tx.billableItem.findMany({
+          where: { id: { in: consumed }, cycleId: { not: null } },
+          select: { cycleId: true },
+        });
+        const cycleIds = [...new Set(cycles.map((c) => c.cycleId!))];
+        if (cycleIds.length) {
+          await tx.projectCycle.updateMany({
+            where: { id: { in: cycleIds } },
+            data: { invoiceId: created.id },
+          });
+        }
+      }
+
       return created;
       });
     }

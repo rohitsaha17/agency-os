@@ -16,6 +16,8 @@ import { calcInvoiceTotal } from "@/lib/format";
 import { formatMoney } from "@/lib/money";
 import { useCurrentUser } from "@/lib/useCurrentUser";
 import { NeedsPricingCard } from "@/components/finance/NeedsPricingCard";
+import { BuildFromClient, type BuiltLine } from "@/components/finance/BuildFromClient";
+import { RequireCapability } from "@/components/layout/RequireCapability";
 import type { Invoice, InvoiceStatus, ClientSummary, Project } from "@/types";
 
 // ── Constants ─────────────────────────────────────────────────
@@ -90,40 +92,10 @@ function InvoiceFormModal({
     discountPct: "", taxPct: "", notes: "",
   });
   const [lineItems, setLineItems] = useState<LineItemDraft[]>([{ ...EMPTY_LINE }]);
-  // v2 Phase 7: generate from a client's package month
-  const [fromMonth, setFromMonth] = useState(false);
-  const [genMonth, setGenMonth] = useState(new Date().toISOString().slice(0, 7));
-  const [genLoading, setGenLoading] = useState(false);
-  const [genInfo, setGenInfo] = useState<string | null>(null);
-
-  const generateFromMonth = async (clientId: string, month: string) => {
-    if (!clientId || !month) return;
-    setGenLoading(true);
-    setGenInfo(null);
-    try {
-      const res = await fetch(`/api/invoices/generate-from-month?clientId=${clientId}&month=${month}`);
-      const d = await res.json();
-      if (!res.ok) { setGenInfo(d.error?.message ?? "Failed to generate"); return; }
-      if (d.lines.length === 0) {
-        setGenInfo("No package or unbilled extras found for that month.");
-        setLineItems([{ ...EMPTY_LINE }]);
-        return;
-      }
-      setLineItems(d.lines.map((l: { kind: "PACKAGE" | "EXTRA"; description: string; quantity: number; unitPrice: number; contentItemId: string | null }) => ({
-        description: l.description,
-        quantity: String(l.quantity),
-        unitPrice: String(l.unitPrice),
-        unit: "",
-        kind: l.kind,
-        contentItemId: l.contentItemId,
-        mode: "include" as const,
-      })));
-      setField("currency", d.currency);
-      setGenInfo(d.packageFound ? null : "No active package for that month — extras only.");
-    } finally {
-      setGenLoading(false);
-    }
-  };
+  // v3: build from what actually happened — the billable items a closed
+  // cycle produced. Replaces v2's "generate from a package month".
+  const [fromBillables, setFromBillables] = useState(true);
+  const [builtLines, setBuiltLines] = useState<BuiltLine[]>([]);
 
   const setField = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -137,7 +109,14 @@ function InvoiceFormModal({
     if (!form.clientId) { toast.error("Client is required"); return; }
     setSaving(true);
     try {
-      const payload = { ...form, lineItems: lineItems
+      const payload = fromBillables
+        ? {
+            ...form,
+            // v3: each line carries its billableItemId, which is what marks
+            // the source INVOICED so the builder never re-offers it.
+            lineItems: builtLines.map((li, i) => ({ ...li, unit: null, order: i })),
+          }
+        : { ...form, lineItems: lineItems
             .filter((li) => li.mode !== "exclude")
             .map((li, i) => ({
               description: li.description, quantity: parseFloat(li.quantity) || 1,
@@ -204,37 +183,29 @@ function InvoiceFormModal({
           </div>
         </div>
 
-        {/* v2 Phase 7: generate from package month */}
+        {/* v3: build from what actually happened */}
         {form.clientId && (
-          <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-100 space-y-2">
-            <div className="flex items-center gap-3">
-              <input type="checkbox" id="fromMonth" checked={fromMonth}
-                onChange={(e) => {
-                  setFromMonth(e.target.checked);
-                  if (e.target.checked) {
-                    generateFromMonth(form.clientId, genMonth);
-                  } else {
-                    setLineItems([{ ...EMPTY_LINE }]);
-                    setGenInfo(null);
-                  }
-                }}
-                className="w-4 h-4 text-emerald-600 rounded" />
-              <label htmlFor="fromMonth" className="text-sm text-emerald-800 font-medium">
-                Generate from month (package + extras)
-              </label>
-              {fromMonth && (
-                <input type="month" value={genMonth}
-                  onChange={(e) => { setGenMonth(e.target.value); generateFromMonth(form.clientId, e.target.value); }}
-                  className="ml-auto px-2 py-1 text-xs border border-emerald-200 rounded-lg bg-white" />
-              )}
-            </div>
-            {genLoading && <p className="text-xs text-emerald-600">Loading month…</p>}
-            {genInfo && <p className="text-xs text-amber-600">{genInfo}</p>}
+          <div className="p-3 bg-indigo-50 rounded-xl border border-indigo-100 space-y-3">
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input type="checkbox" checked={fromBillables}
+                onChange={(e) => setFromBillables(e.target.checked)}
+                className="w-4 h-4 text-indigo-600 rounded" />
+              <span className="text-sm text-indigo-800 font-medium">
+                Build from this client&rsquo;s outstanding work
+              </span>
+            </label>
+            {fromBillables && (
+              <BuildFromClient
+                clientId={form.clientId}
+                currency={form.currency || "USD"}
+                onLines={(lines) => setBuiltLines(lines)}
+              />
+            )}
           </div>
         )}
 
-        {/* Line items */}
-        {(
+        {/* Line items — manual entry, for anything the builder can't know */}
+        {!fromBillables && (
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="text-xs font-medium text-gray-500">Line Items</label>
@@ -341,7 +312,7 @@ function InvoiceFormModal({
           </select>
         </div>
 
-        {(
+        {!fromBillables && (
           <div className="text-right text-sm text-gray-600 bg-gray-50 rounded-xl px-4 py-3 space-y-1">
             <div className="flex justify-between"><span>Subtotal</span><span className="font-medium">{formatMoney(subtotal, form.currency || "USD")}</span></div>
             {disc > 0 && <div className="flex justify-between text-red-600"><span>Discount ({form.discountPct}%)</span><span>−{formatMoney(disc, form.currency)}</span></div>}
@@ -372,6 +343,16 @@ function InvoiceFormModal({
 // ── Main page ──────────────────────────────────────────────────
 
 export default function InvoicesPage() {
+  // v3: the API refuses an SMM outright; this keeps the page honest rather
+  // than rendering a shell full of 403s.
+  return (
+    <RequireCapability capability="invoices.manage" what="Invoicing">
+      <InvoicesPageInner />
+    </RequireCapability>
+  );
+}
+
+function InvoicesPageInner() {
   const toast   = useToast();
   const confirm = useConfirm();
   const { user: currentUser } = useCurrentUser();

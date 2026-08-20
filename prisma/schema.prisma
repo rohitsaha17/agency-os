@@ -975,6 +975,10 @@ model Invoice {
 enum LineItemKind {
   PACKAGE
   EXTRA
+  // v3: mirrors BillableKind so a line remembers which kind of billable
+  // produced it (docs/V3_CONTEXT.md §3).
+  COMPLIMENTARY
+  ADHOC_TASK
   CUSTOM
 }
 
@@ -990,6 +994,9 @@ model InvoiceLineItem {
   kind          LineItemKind @default(CUSTOM)
   isFree        Boolean      @default(false) // complimentary — excluded from totals
   contentItemId String?
+  /// v3: which billable item this line came from, so the builder can never
+  /// offer the same work twice.
+  billableItemId String?
 
   invoice     Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   contentItem ContentItem? @relation("BilledContentItems", fields: [contentItemId], references: [id])

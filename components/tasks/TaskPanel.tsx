@@ -105,7 +105,8 @@ function AssigneePicker({ users, assigneeIds, managerId, onChangeAssignees, onCh
 interface TaskPanelProps {
   task: Task;
   allTasks: Task[];
-  projectId: string;
+  /** v3: tasks can exist without a project (personal, general). */
+  projectId?: string;
   onClose: () => void;
   onUpdated: (task: Task) => void;
   onDeleted: (taskId: string) => void;

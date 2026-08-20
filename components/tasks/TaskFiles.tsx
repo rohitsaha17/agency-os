@@ -86,7 +86,8 @@ function UploadZone({
 
 interface TaskFilesProps {
   taskId: string;
-  projectId: string;
+  /** v3: absent for tasks that belong to no project. */
+  projectId?: string;
 }
 
 export function TaskFiles({ taskId, projectId }: TaskFilesProps) {
@@ -117,7 +118,7 @@ export function TaskFiles({ taskId, projectId }: TaskFilesProps) {
         const fd = new FormData();
         fd.append("file", f);
         fd.append("taskId", taskId);
-        fd.append("projectId", projectId);
+        if (projectId) fd.append("projectId", projectId);
         await fetch("/api/files", { method: "POST", body: fd });
       }
       fetchFiles();

@@ -45,6 +45,11 @@ export async function GET(req: NextRequest) {
           id: true, topic: true, status: true, date: true, clientId: true,
           client: { select: { id: true, name: true } },
           creativeType: { select: { id: true, name: true, icon: true, color: true } },
+          tasks: {
+            where: { deletedAt: null, assignees: { some: { userId: user.id } } },
+            select: { id: true },
+            take: 1,
+          },
         },
       }),
       // (c) my personal items
@@ -75,7 +80,7 @@ export async function GET(req: NextRequest) {
         projectId: t.projectId,
         contentItemId: t.contentItemId,
         clientName: t.client?.name ?? t.project?.client?.name ?? null,
-        link: t.projectId ? `/projects/${t.projectId}?task=${t.id}` : `/tasks?task=${t.id}`,
+        link: `/tasks?task=${t.id}`,
       })),
       ...contentItems.map((c) => ({
         kind: "content" as const,
@@ -86,7 +91,9 @@ export async function GET(req: NextRequest) {
         clientName: c.client.name,
         clientId: c.clientId,
         creativeType: c.creativeType,
-        link: `/clients/${c.clientId}?tab=content`,
+        // v3: open the task the viewer actually holds on this item — a
+        // junior can't reach the client page (docs/V3_CONTEXT.md §2).
+        link: c.tasks[0] ? `/tasks?task=${c.tasks[0].id}` : `/clients/${c.clientId}?tab=content`,
       })),
       ...personal.map((p) => ({
         kind: "personal" as const,
@@ -140,7 +147,7 @@ export async function GET(req: NextRequest) {
           title: t.title,
           date: t.dueDate!.toISOString(),
           priority: t.priority,
-          link: t.projectId ? `/projects/${t.projectId}?task=${t.id}` : `/tasks?task=${t.id}`,
+          link: `/tasks?task=${t.id}`,
         })),
         ...overduePersonal.map((p) => ({
           kind: "personal" as const,

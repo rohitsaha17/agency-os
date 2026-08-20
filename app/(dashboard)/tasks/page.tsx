@@ -10,6 +10,8 @@ import { TaskModal } from "@/components/tasks/TaskModal";
 import { DeliveryDialog } from "@/components/tasks/DeliveryDialog";
 import { CalendarTasksSwitch } from "@/components/calendar/CalendarTasksSwitch";
 import { useCurrentUser } from "@/lib/useCurrentUser";
+import { can } from "@/lib/permissions";
+import { TaskPanel } from "@/components/tasks/TaskPanel";
 import { broadcastChange, useLiveRefresh } from "@/lib/live";
 import { toast } from "@/lib/toast";
 import type { Task } from "@/types";
@@ -153,17 +155,14 @@ function TasksBoardInner() {
   const { user: currentUser } = useCurrentUser();
   const searchParams = useSearchParams();
 
-  const [lists, setLists] = useState<ListRow[]>([]);
   const [items, setItems] = useState<PersonalRow[]>([]);
   const [orgTasks, setOrgTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<SidebarView>("all");
   const [hiddenLists, setHiddenLists] = useState<Set<string>>(new Set());
   const [showCompleted, setShowCompleted] = useState<Set<string>>(new Set());
-  const [addingList, setAddingList] = useState(false);
-  const [newListName, setNewListName] = useState("");
-  const [menuFor, setMenuFor] = useState<string | null>(null);
-  const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
+  // v3: the shared task drawer, opened from a row or from ?task=<id>
+  const [openTask, setOpenTask] = useState<Task | null>(null);
   const [deliveryFor, setDeliveryFor] = useState<{ id: string; title: string } | null>(null);
   const [showOrgTaskModal, setShowOrgTaskModal] = useState(false);
   const [approvals, setApprovals] = useState<Task[] | null>(null);
@@ -172,19 +171,17 @@ function TasksBoardInner() {
   const [reassignTo, setReassignTo] = useState("");
   const [teamUsers, setTeamUsers] = useState<{ id: string; name: string }[]>([]);
 
-  const isHead =
-    currentUser?.designation === "HEAD_OF_DESIGN" ||
-    currentUser?.role === "ADMIN" || currentUser?.role === "OWNER";
+  // v3: the Approvals inbox belongs to anyone who reviews work, which is a
+  // capability rather than a job title (docs/V3_CONTEXT.md §2).
+  const isHead = can(currentUser, "tasks.review");
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [listsRes, itemsRes, tasksRes] = await Promise.all([
-        fetch("/api/task-lists"),
+      const [itemsRes, tasksRes] = await Promise.all([
         fetch("/api/personal-items"),
         fetch("/api/tasks?includeCompleted=true&all=1"),
       ]);
-      if (listsRes.ok) setLists(await listsRes.json());
       if (itemsRes.ok) setItems(await itemsRes.json());
       if (tasksRes.ok) {
         const all = await tasksRes.json();
@@ -204,7 +201,13 @@ function TasksBoardInner() {
 
   useEffect(() => {
     if (searchParams.get("tab") === "approvals" && isHead) setShowApprovals(true);
-  }, [searchParams, isHead]);
+    // v3: notifications and the calendar deep-link to /tasks?task=<id>
+    const wanted = searchParams.get("task");
+    if (wanted) {
+      const t = orgTasks.find((x) => x.id === wanted);
+      if (t) setOpenTask(t);
+    }
+  }, [searchParams, isHead, orgTasks]);
 
   const fetchApprovals = useCallback(async () => {
     if (!isHead) return;
@@ -243,35 +246,32 @@ function TasksBoardInner() {
     broadcastChange("all");
   };
 
-  const createList = async () => {
-    if (!newListName.trim()) { setAddingList(false); return; }
-    const res = await fetch("/api/task-lists", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: newListName }),
-    });
-    if (res.ok) {
-      setNewListName("");
-      setAddingList(false);
-      fetchAll();
+  /**
+   * v3: lists are AUTOMATIC. One per project the user holds an open task in,
+   * named after the project, appearing and disappearing on their own — nobody
+   * creates, renames or deletes a list (docs/V3_CONTEXT.md §3).
+   */
+  const autoLists = useMemo(() => {
+    const byProject = new Map<string, { id: string; name: string; tasks: Task[] }>();
+    for (const t of orgTasks) {
+      if (!t.projectId) continue;
+      const name = t.project?.name ?? "Project";
+      if (!byProject.has(t.projectId)) {
+        byProject.set(t.projectId, { id: t.projectId, name, tasks: [] });
+      }
+      byProject.get(t.projectId)!.tasks.push(t);
     }
-  };
+    // A list with nothing open in it has served its purpose and goes away.
+    return [...byProject.values()]
+      .filter((l) => l.tasks.some((t) => t.status !== "DONE"))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [orgTasks]);
 
-  const renameList = async () => {
-    if (!renaming || !renaming.name.trim()) { setRenaming(null); return; }
-    await fetch(`/api/task-lists/${renaming.id}`, {
-      method: "PATCH", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: renaming.name }),
-    });
-    setRenaming(null);
-    fetchAll();
-  };
-
-  const deleteList = async (id: string) => {
-    if (!confirm("Delete this list? Its tasks move to My Tasks.")) return;
-    await fetch(`/api/task-lists/${id}`, { method: "DELETE" });
-    setMenuFor(null);
-    fetchAll();
-  };
+  /** Tasks with no project — they belong beside the personal reminders. */
+  const looseTasks = useMemo(
+    () => orgTasks.filter((t) => !t.projectId),
+    [orgTasks],
+  );
 
   const approve = async (taskId: string, assigneeId?: string) => {
     const res = await fetch(`/api/tasks/${taskId}/approve`, {
@@ -294,11 +294,17 @@ function TasksBoardInner() {
           {done ? <CheckCircle2 className="w-4.5 h-4.5 text-indigo-500" /> : <Circle className="w-4.5 h-4.5 text-gray-300 hover:text-indigo-400" />}
         </button>
         <div className="flex-1 min-w-0">
-          <a href={t.projectId ? `/projects/${t.projectId}?task=${t.id}` : "#"}
-            className={`block text-sm leading-snug ${done ? "line-through text-gray-400" : "text-gray-800 hover:text-indigo-700"}`}>
+          <button onClick={() => setOpenTask(t)}
+            className={`block w-full text-left text-sm leading-snug ${done ? "line-through text-gray-400" : "text-gray-800 hover:text-indigo-700"}`}>
             {t.title}
-          </a>
+          </button>
           <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+            {/* v3: a round badge from round 2 — the work came back once */}
+            {(t.revision ?? 1) > 1 && (
+              <span className="inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-full">
+                Round {t.revision}
+              </span>
+            )}
             <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 bg-indigo-50 text-indigo-600 rounded-full">
               <FolderKanban className="w-2.5 h-2.5" />
               {(t as Task & { project?: { name?: string } }).project?.name ?? t.client?.name ?? "Assigned to you"}
@@ -354,50 +360,48 @@ function TasksBoardInner() {
 
   // ── Column ─────────────────────────────────────────────────
 
-  const Column = ({ id, title, personal, org }: {
-    id: string; title: string; personal: PersonalRow[]; org?: Task[];
+  /**
+   * One column. `kind` decides what it is:
+   *   "personal" — My List, the only place anyone freely creates items
+   *   "project"  — an auto list, read-only in structure
+   */
+  const Column = ({ id, title, subtitle, kind, personal, org }: {
+    id: string; title: string; subtitle?: string;
+    kind: "personal" | "project";
+    personal: PersonalRow[]; org?: Task[];
   }) => {
     const openPersonal = personal.filter((p) => !p.done);
     const donePersonal = personal.filter((p) => p.done);
     const openOrg = (org ?? []).filter((t) => t.status !== "DONE");
     const doneOrg = (org ?? []).filter((t) => t.status === "DONE");
     const completedCount = donePersonal.length + doneOrg.length;
-    const isCustom = id !== "my-tasks";
     const expanded = showCompleted.has(id);
+    // Overdue is the number worth shouting about.
+    const overdue = openOrg.filter(
+      (t) => t.dueDate && new Date(t.dueDate) < new Date(new Date().toDateString()),
+    ).length;
 
     return (
       <div className="w-[320px] flex-shrink-0 bg-white border border-gray-200 rounded-2xl flex flex-col h-full shadow-sm">
-        <div className="flex items-center justify-between px-4 pt-4 pb-2 flex-shrink-0">
-          {renaming?.id === id ? (
-            <input autoFocus value={renaming.name}
-              onChange={(e) => setRenaming({ id, name: e.target.value })}
-              onKeyDown={(e) => { if (e.key === "Enter") renameList(); if (e.key === "Escape") setRenaming(null); }}
-              onBlur={renameList}
-              className="text-base font-semibold text-gray-900 border-b border-indigo-300 outline-none bg-transparent w-40" />
-          ) : (
-            <h2 className="text-base font-semibold text-gray-900">{title}</h2>
-          )}
-          {isCustom && (
-            <div className="relative">
-              <button onClick={() => setMenuFor(menuFor === id ? null : id)}
-                className="p-1.5 text-gray-400 hover:bg-gray-100 rounded-full">
-                <MoreVertical className="w-4 h-4" />
-              </button>
-              {menuFor === id && (
-                <div className="absolute right-0 top-8 z-20 bg-white border border-gray-200 rounded-xl shadow-lg py-1 min-w-[130px]">
-                  <button onClick={() => { setRenaming({ id, name: title }); setMenuFor(null); }}
-                    className="block w-full text-left px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50">Rename list</button>
-                  <button onClick={() => deleteList(id)}
-                    className="block w-full text-left px-3 py-1.5 text-xs text-red-500 hover:bg-red-50">Delete list</button>
-                </div>
+        <div className="px-4 pt-4 pb-2 flex-shrink-0">
+          <div className="flex items-baseline justify-between gap-2">
+            <h2 className="text-base font-semibold text-gray-900 truncate">{title}</h2>
+            <span className="text-xs text-gray-400 flex-shrink-0 tabular-nums">
+              {openOrg.length + openPersonal.length}
+              {overdue > 0 && (
+                <span className="text-red-500 font-semibold ml-1.5">{overdue} overdue</span>
               )}
-            </div>
-          )}
+            </span>
+          </div>
+          {subtitle && <p className="text-[11px] text-gray-400 truncate mt-0.5">{subtitle}</p>}
         </div>
 
-        <div className="px-2 pb-1">
-          <AddTaskComposer listId={isCustom ? id : null} onAdded={fetchAll} />
-        </div>
+        {/* v3: My List is the ONLY list anyone can add to freely. */}
+        {kind === "personal" && (
+          <div className="px-2 pb-1">
+            <AddTaskComposer listId={null} onAdded={fetchAll} />
+          </div>
+        )}
 
         <div className="flex-1 overflow-y-auto px-2 pb-2 min-h-[120px]">
           {loading ? (
@@ -405,9 +409,11 @@ function TasksBoardInner() {
           ) : openOrg.length + openPersonal.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-10 text-center px-4">
               <CheckCircle2 className="w-9 h-9 text-emerald-200 mb-2" />
-              <p className="text-sm font-medium text-gray-600">No tasks yet</p>
+              <p className="text-sm font-medium text-gray-600">Nothing open</p>
               <p className="text-xs text-gray-400 mt-0.5">
-                {isCustom ? "Add your to-dos and keep track of them here." : "Tasks delegated to you land here automatically."}
+                {kind === "personal"
+                  ? "Your own reminders live here."
+                  : "Work assigned to you on this project lands here."}
               </p>
             </div>
           ) : (
@@ -447,7 +453,15 @@ function TasksBoardInner() {
     return m;
   }, [items]);
   const starredItems = useMemo(() => items.filter((p) => p.starred), [items]);
-  const myTasksCount = orgTasks.filter((t) => t.status !== "DONE").length + noListItems.filter((p) => !p.done).length;
+  // What My List actually holds: personal reminders plus any task with no
+  // project (project work lives in its own automatic list).
+  const myListCount = looseTasks.filter((t) => t.status !== "DONE").length
+    + noListItems.filter((p) => !p.done).length;
+  const openCount = orgTasks.filter((t) => t.status !== "DONE").length
+    + noListItems.filter((p) => !p.done).length;
+  const overdueCount = orgTasks.filter(
+    (t) => t.status !== "DONE" && t.dueDate && new Date(t.dueDate) < new Date(new Date().toDateString()),
+  ).length;
 
   return (
     // Anchor to the viewport so the rail and columns fill the page
@@ -459,7 +473,11 @@ function TasksBoardInner() {
           <div>
             <h1 className="text-xl font-semibold text-gray-900">Tasks</h1>
             <p className="text-sm text-gray-500 mt-0.5">
-              {myTasksCount} open in My Tasks · work delegated to you lands here and on your calendar
+              {openCount} open
+              {overdueCount > 0 && (
+                <span className="text-red-600 font-medium"> · {overdueCount} overdue</span>
+              )}
+              {" · "}work assigned to you lands here and on your calendar
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -475,10 +493,14 @@ function TasksBoardInner() {
                 )}
               </button>
             )}
-            <button onClick={() => setShowOrgTaskModal(true)}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-500 transition-colors">
-              <Repeat className="w-4 h-4" /> Delegate a team task
-            </button>
+            {/* v3: a junior assigns to nobody — their scope is selfOnly
+                (docs/V3_CONTEXT.md §2), so delegation simply isn't offered. */}
+            {can(currentUser, "tasks.assign") && (
+              <button onClick={() => setShowOrgTaskModal(true)}
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-500 transition-colors">
+                <Repeat className="w-4 h-4" /> Delegate a team task
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -509,11 +531,11 @@ function TasksBoardInner() {
 
             <label className="flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 rounded-lg cursor-default">
               <input type="checkbox" checked readOnly className="rounded border-gray-300 text-indigo-600" />
-              <span className="flex-1 truncate font-medium">My Tasks</span>
-              <span className="text-xs text-gray-400">{myTasksCount}</span>
+              <span className="flex-1 truncate font-medium">My List</span>
+              <span className="text-xs text-gray-400">{myListCount}</span>
             </label>
-            {lists.map((l) => {
-              const count = (itemsByList.get(l.id) ?? []).filter((p) => !p.done).length;
+            {autoLists.map((l) => {
+              const count = l.tasks.filter((t) => t.status !== "DONE").length;
               return (
                 <label key={l.id} className="flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-50 rounded-lg">
                   <input type="checkbox"
@@ -526,21 +548,11 @@ function TasksBoardInner() {
               );
             })}
 
-            {addingList ? (
-              <div className="px-3 py-1.5">
-                <input autoFocus value={newListName}
-                  onChange={(e) => setNewListName(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") createList(); if (e.key === "Escape") { setAddingList(false); setNewListName(""); } }}
-                  onBlur={createList}
-                  placeholder="List name…"
-                  className="w-full text-sm px-2 py-1.5 border border-indigo-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" />
-              </div>
-            ) : (
-              <button onClick={() => setAddingList(true)}
-                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm font-medium text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors">
-                <Plus className="w-4 h-4" /> Create new list
-              </button>
-            )}
+            {/* v3: lists appear and disappear on their own — one per project
+                you hold work in. Nothing here creates or deletes one. */}
+            <p className="px-3 pt-2 text-[11px] text-gray-400 leading-snug">
+              Project lists appear here automatically while you have open work on them.
+            </p>
           </div>
         </div>
 
@@ -566,22 +578,33 @@ function TasksBoardInner() {
               </div>
             ) : (
               <>
-                <Column id="my-tasks" title="My Tasks" personal={noListItems} org={orgTasks} />
-                {lists.filter((l) => !hiddenLists.has(l.id)).map((l) => (
-                  <Column key={l.id} id={l.id} title={l.name} personal={itemsByList.get(l.id) ?? []} />
+                {/* My List — personal reminders plus any task with no project */}
+                <Column id="my-list" title="My List" kind="personal"
+                  subtitle="Your own reminders"
+                  personal={noListItems} org={looseTasks} />
+                {/* One per project you hold work in, named after the project */}
+                {autoLists.filter((l) => !hiddenLists.has(l.id)).map((l) => (
+                  <Column key={l.id} id={l.id} title={l.name} kind="project"
+                    subtitle={l.tasks[0]?.client?.name ?? undefined}
+                    personal={[]} org={l.tasks} />
                 ))}
-                {/* Ghost column: quick create */}
-                <div className="w-[240px] flex-shrink-0 h-full">
-                  <button onClick={() => setAddingList(true)}
-                    className="w-full h-full min-h-[160px] border-2 border-dashed border-gray-200 rounded-2xl text-sm font-medium text-gray-400 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50/30 transition-colors">
-                    <Plus className="w-4 h-4 inline mr-1" /> New list
-                  </button>
-                </div>
               </>
             )}
           </div>
         </div>
       </div>
+
+      {/* v3: ONE task drawer, the same component the project page uses */}
+      {openTask && (
+        <TaskPanel
+          task={openTask}
+          allTasks={orgTasks}
+          projectId={openTask.projectId ?? undefined}
+          onClose={() => setOpenTask(null)}
+          onUpdated={() => { fetchAll(); broadcastChange("all"); }}
+          onDeleted={() => { setOpenTask(null); fetchAll(); broadcastChange("all"); }}
+        />
+      )}
 
       {/* ── Approvals slide-over (heads only) ── */}
       {showApprovals && isHead && (

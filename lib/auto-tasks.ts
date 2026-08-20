@@ -103,3 +103,113 @@ export async function createPlanningTask(opts: {
 
   return task.id;
 }
+
+/**
+ * The junior's brief: a CONTENT_WORK task carrying everything the SMM wrote.
+ *
+ * This is the handoff that makes the spine work — the person doing the job
+ * should never have to go hunting for the brief, so topic, content, reference
+ * and extra note are all copied onto the task (docs/V3_CONTEXT.md §3).
+ *
+ * Idempotent per (contentItem, assignee): re-assigning the same person
+ * returns the existing task rather than creating a second one.
+ */
+export async function createContentWorkTask(opts: {
+  organizationId: string;
+  contentItemId: string;
+  assigneeId: string;
+  /** The SMM doing the assigning — they review it later. */
+  approverId: string;
+  /** Defaults to the publish date minus two days. */
+  dueDate?: Date | null;
+}): Promise<string | null> {
+  const { organizationId, contentItemId, assigneeId, approverId } = opts;
+
+  const item = await prisma.contentItem.findUnique({
+    where: { id: contentItemId },
+    select: {
+      id: true, topic: true, description: true, referenceUrl: true,
+      referenceFileId: true, date: true, clientId: true, projectId: true,
+      cycleId: true, status: true,
+      client: { select: { name: true } },
+      creativeType: { select: { name: true } },
+    },
+  });
+  if (!item) return null;
+
+  const existing = await prisma.task.findFirst({
+    where: {
+      contentItemId,
+      deletedAt: null,
+      assignees: { some: { userId: assigneeId } },
+    },
+    select: { id: true },
+  });
+  if (existing) return existing.id;
+
+  // Due two days before it publishes, so there's room to review and fix.
+  const dueDate = opts.dueDate ?? (() => {
+    const d = new Date(item.date);
+    d.setUTCDate(d.getUTCDate() - 2);
+    return d;
+  })();
+
+  const task = await prisma.task.create({
+    data: {
+      organizationId,
+      projectId: item.projectId,
+      clientId: item.clientId,
+      contentItemId: item.id,
+      cycleId: item.cycleId,
+      kind: "CONTENT_WORK",
+      title: item.topic,
+      // Everything the SMM wrote, carried across verbatim
+      topic: item.topic,
+      content: item.description,
+      referenceUrl: item.referenceUrl,
+      referenceFileId: item.referenceFileId,
+      description: item.description,
+      status: "TODO",
+      dueDate,
+      approverId,
+      assignees: { create: [{ userId: assigneeId }] },
+    },
+    select: { id: true },
+  });
+
+  // The item is no longer merely planned — someone owns it now.
+  if (item.status === "PLANNED") {
+    await prisma.contentItem.update({
+      where: { id: item.id },
+      data: { status: "ASSIGNED" },
+    });
+    await logStatus({
+      organizationId,
+      entityType: "CONTENT_ITEM",
+      entityId: item.id,
+      from: item.status,
+      to: "ASSIGNED",
+      userId: approverId,
+      note: "assigned",
+    });
+  }
+
+  await logStatus({
+    organizationId,
+    entityType: "TASK",
+    entityId: task.id,
+    to: "TODO",
+    userId: approverId,
+    note: "assigned from the plan",
+  });
+  await notify({
+    organizationId,
+    userId: assigneeId,
+    type: "TASK_ASSIGNED",
+    title: `${item.creativeType.name}: ${item.topic}`,
+    body: `${item.client.name} — due ${dueDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`,
+    link: `/tasks?task=${task.id}`,
+  });
+
+  return task.id;
+}

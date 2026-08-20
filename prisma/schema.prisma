@@ -72,9 +72,11 @@ enum ProjectStatus {
 enum TaskStatus {
   TODO
   IN_PROGRESS
-  IN_REVIEW
+  IN_REVIEW // v3: submitted, waiting on the approver
   DONE
   BLOCKED
+  // v3: the approver sent it back — same task, next round
+  CHANGES_REQUESTED
 }
 
 // v3: what KIND of work a task represents (docs/V3_CONTEXT.md §3). Auto-tasks
@@ -298,6 +300,7 @@ model User {
   createdReviewBatches ReviewBatch[]   @relation("CreatedReviewBatches")
   projectMembersAdded  ProjectMember[] @relation("ProjectMembersAdded")
   closedCycles         ProjectCycle[]  @relation("CyclesClosed")
+  tasksToApprove       Task[]          @relation("TaskApprover")
 
   @@unique([organizationId, email])
   @@index([organizationId])
@@ -538,6 +541,7 @@ model ProjectCycle {
   project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
   closedBy     User?         @relation("CyclesClosed", fields: [closedById], references: [id], onDelete: SetNull)
   contentItems ContentItem[]
+  tasks        Task[]
 
   @@unique([projectId, startDate])
   @@index([projectId, status])
@@ -576,6 +580,17 @@ model Task {
   contentItem          ContentItem? @relation("ContentItemTasks", fields: [contentItemId], references: [id])
   preferredAssigneeId  String?
   assignmentStatus     AssignmentStatus @default(NONE)
+
+  // ── v3: the submit → review loop (docs/V3_CONTEXT.md §3) ──
+  /// Bumped every time the approver asks for changes. Round 1 is the first
+  /// submission; the badge appears from round 2.
+  revision    Int       @default(1)
+  /// The SMM who reviews this work. Set when the task is created from a plan.
+  approverId  String?
+  submittedAt DateTime?
+  approvedAt  DateTime?
+  /// Which cycle the work belongs to, for cycle close (Phase 6).
+  cycleId     String?
   sortOrder            Int        @default(0) // personal-queue rank
   isAdHoc              Boolean    @default(false)
   progress             Int        @default(0) // Cached 0-100, recomputed on subtask change
@@ -596,6 +611,8 @@ model Task {
   project      Project?         @relation(fields: [projectId], references: [id], onDelete: Cascade)
   client       Client?          @relation("ClientTasks", fields: [clientId], references: [id])
   referenceFile     File?       @relation("TaskReferenceFile", fields: [referenceFileId], references: [id])
+  approver          User?         @relation("TaskApprover", fields: [approverId], references: [id], onDelete: SetNull)
+  cycle             ProjectCycle? @relation(fields: [cycleId], references: [id], onDelete: SetNull)
   preferredAssignee User?       @relation("TaskPreferredAssignee", fields: [preferredAssigneeId], references: [id])
   deliveries    TaskDelivery[]
   changeRequests ChangeRequest[]

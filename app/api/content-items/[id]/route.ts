@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 import { can } from "@/lib/permissions";
+import { createContentWorkTask } from "@/lib/auto-tasks";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -50,8 +51,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const {
       date, creativeTypeId, topic, description, referenceUrl, referenceFileId,
       isExtra, isAdHoc, projectId, countAgainstPrevMonth,
-      // v3: billing intent, and the cycle the item belongs to
-      billingIntent, cycleId,
+      // v3: billing intent, the cycle, and assigning from the plan
+      billingIntent, cycleId, assigneeId,
     } = await req.json();
 
     // v3: an SMM flags work but never un-flags an extra — turning a billable
@@ -85,6 +86,23 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       },
       include: ITEM_INCLUDE,
     });
+
+    // v3: assigning later works exactly like assigning while planning —
+    // createContentWorkTask is idempotent per (item, assignee).
+    if (assigneeId) {
+      await createContentWorkTask({
+        organizationId: user.organizationId,
+        contentItemId: id,
+        assigneeId,
+        approverId: user.id,
+      });
+      const fresh = await prisma.contentItem.findUnique({
+        where: { id },
+        include: ITEM_INCLUDE,
+      });
+      return NextResponse.json(fresh ?? updated);
+    }
+
     return NextResponse.json(updated);
   } catch (error) {
     return handleApiError(error, "PATCH /api/content-items/[id]");

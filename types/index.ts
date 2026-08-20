@@ -431,7 +431,15 @@ export interface Task {
   dependsOn?: TaskDependency[];
   blockedBy?: TaskDependency[];
   createdAt: string;
-  updatedAt: string;
+  updatedAt: string;  /** v3: the project this belongs to — drives the auto lists on /tasks */
+  project?: { id: string; name: string } | null;
+  /** v3: what kind of work this is */
+  kind?: "PLANNING" | "CONTENT_WORK" | "POST" | "GENERAL" | "PERSONAL";
+  /** v3: bumped each time the approver asks for changes */
+  revision?: number;
+  approverId?: string | null;
+  submittedAt?: string | null;
+  approvedAt?: string | null;
 }
 
 export interface TaskFormData {

@@ -5,6 +5,7 @@ import { handleApiError, ApiError } from "@/lib/api-errors";
 import { logStatus } from "@/lib/audit";
 import { cycleForDate } from "@/lib/cycles";
 import { quotaCheck } from "@/lib/cycle-quota";
+import { createContentWorkTask } from "@/lib/auto-tasks";
 
 const ITEM_INCLUDE = {
   creativeType: true,
@@ -162,7 +163,23 @@ export async function POST(req: NextRequest) {
       note: beyondQuota ? "planned — beyond quota, flagged EXTRA" : "planned",
     });
 
-    return NextResponse.json(serialize(item), { status: 201 });
+    // v3: planning and delegating in one action. The assigner becomes the
+    // approver, so the work comes back to whoever briefed it.
+    if (assigneeId) {
+      await createContentWorkTask({
+        organizationId: user.organizationId,
+        contentItemId: item.id,
+        assigneeId,
+        approverId: user.id,
+      });
+    }
+
+    const fresh = await prisma.contentItem.findUnique({
+      where: { id: item.id },
+      include: ITEM_INCLUDE,
+    });
+
+    return NextResponse.json(serialize(fresh ?? item), { status: 201 });
   } catch (error) {
     return handleApiError(error, "POST /api/content-items");
   }

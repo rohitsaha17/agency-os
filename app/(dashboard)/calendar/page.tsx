@@ -44,6 +44,21 @@ const EVENT_KIND_STYLE: Record<string, string> = {
   OTHER: "bg-gray-100 text-gray-700 border-gray-200",
 };
 
+
+/** One labelled checkbox in the filter rail. */
+function Toggle({ checked, onChange, label, icon }: {
+  checked: boolean; onChange: (v: boolean) => void; label: string; icon?: React.ReactNode;
+}) {
+  return (
+    <label className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer py-0.5">
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)}
+        className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500/40" />
+      {icon}
+      <span>{label}</span>
+    </label>
+  );
+}
+
 const CLIENT_COLORS = [
   "bg-indigo-50 text-indigo-700 border-indigo-200",
   "bg-rose-50 text-rose-700 border-rose-200",
@@ -108,14 +123,6 @@ export default function CalendarPage() {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Date | null>(null);
 
-  // Open on today. The panel used to start empty, so the calendar loaded with
-  // a blank column on desktop and no agenda at all on a phone — you had to
-  // tap something before the page said anything. Set after mount rather than
-  // in the initial state: `new Date()` during a server render can disagree
-  // with the client's across midnight, and that is a hydration mismatch.
-  useEffect(() => {
-    setSelected((cur) => cur ?? new Date());
-  }, []);
   // v3 Phase 0 (defect 4): clicking a content chip opens THAT item in the
   // side panel instead of navigating away to the client page.
   const [selectedItem, setSelectedItem] = useState<MasterItem | null>(null);
@@ -210,9 +217,31 @@ export default function CalendarPage() {
   // Navigation
   const prevMonth = () => { if (month === 0) { setYear(y => y - 1); setMonth(11); } else setMonth(m => m - 1); };
   const nextMonth = () => { if (month === 11) { setYear(y => y + 1); setMonth(0); } else setMonth(m => m + 1); };
-  const goToday = () => { setYear(now.getFullYear()); setMonth(now.getMonth()); setWeekStart(now); };
+  const goToday = () => {
+    setYear(now.getFullYear()); setMonth(now.getMonth()); setWeekStart(now);
+    setSelectedItem(null); setSelected(now);
+  };
   const prevWeek = () => setWeekStart(d => { const n = new Date(d); n.setDate(n.getDate() - 7); return n; });
   const nextWeek = () => setWeekStart(d => { const n = new Date(d); n.setDate(n.getDate() + 7); return n; });
+
+  /**
+   * Keep the day panel inside the month you're looking at.
+   *
+   * Changing month left the selection behind, so the panel would read
+   * "Saturday, August 22 — Nothing scheduled" beside a grid showing
+   * September. It now follows: today if today is in view, otherwise the 1st.
+   */
+  useEffect(() => {
+    if (view !== "month") return;
+    setSelected((cur) => {
+      if (cur && cur.getFullYear() === year && cur.getMonth() === month) return cur;
+      const today = new Date();
+      return today.getFullYear() === year && today.getMonth() === month
+        ? today
+        : new Date(year, month, 1);
+    });
+    setSelectedItem(null);
+  }, [year, month, view]);
 
   const clearFilters = () => {
     setFilterUserId(""); setFilterProjectId(""); setFilterClientId(""); setFilterPriority("");
@@ -357,6 +386,106 @@ export default function CalendarPage() {
 
   const activeClientName = filterClientId ? clients.find((c) => c.id === filterClientId)?.name : null;
 
+
+  /**
+   * Filters as a rail, not a ribbon.
+   *
+   * They used to wrap across the top of the page: eight controls with no
+   * labels on one line, each one costing the grid vertical space, and no way
+   * to tell "All Types" from "All Statuses" without opening both. Grouped and
+   * labelled down the side, they stay put while you read the month.
+   */
+  const filtersPanel = (
+    <div className="p-4 space-y-5">
+      <div>
+        <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2">
+          Search
+        </label>
+        <div className="relative">
+          <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Topic, client, project…"
+            className="w-full pl-8 pr-7 py-2 text-xs bg-white border border-gray-200 rounded-lg text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-400"
+          />
+          {search && (
+            <button onClick={() => setSearch("")} aria-label="Clear search"
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-700">
+              <X className="w-3 h-3" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Narrow to</p>
+
+        <div>
+          <label className="block text-[11px] text-gray-500 mb-1">Client</label>
+          <Select value={filterClientId} onChange={chooseClient} size="sm" className="w-full"
+            options={[{ value: "", label: "All clients" }, ...clients.map((c) => ({ value: c.id, label: `${c.name}` }))]} />
+        </div>
+
+        <div>
+          <label className="block text-[11px] text-gray-500 mb-1">Project</label>
+          <Select value={filterProjectId} onChange={chooseProject} size="sm" className="w-full"
+            options={[{ value: "", label: "All projects" }, ...visibleProjects.map((p) => ({ value: p.id, label: `${p.name}` }))]} />
+          {filterClientId && visibleProjects.length < projects.length && (
+            <p className="text-[10px] text-gray-400 mt-1">
+              Showing this client&rsquo;s projects only.
+            </p>
+          )}
+        </div>
+
+        <div>
+          <label className="block text-[11px] text-gray-500 mb-1">Content type</label>
+          <Select value={filterTypeId} onChange={(v) => setFilterTypeId(v)} size="sm" className="w-full"
+            options={[{ value: "", label: "All types" }, ...types.map((t) => ({ value: t.id, label: String(`${t.icon ? `${t.icon} ` : ""}${t.name}`) }))]} />
+        </div>
+
+        <div>
+          <label className="block text-[11px] text-gray-500 mb-1">Status</label>
+          <Select value={filterStatus} onChange={(v) => setFilterStatus(v)} size="sm" className="w-full"
+            options={[{ value: "", label: "All statuses" }, ...Object.entries(CONTENT_STATUS_META).map(([k, v]) => ({ value: k, label: String(v.label) }))]} />
+        </div>
+
+        {canFilterByUser && (
+          <div>
+            <label className="block text-[11px] text-gray-500 mb-1">Assigned to</label>
+            <Select value={filterUserId} onChange={(v) => setFilterUserId(v)} size="sm" className="w-full"
+              options={[{ value: "", label: "Anyone" }, ...users.map((u) => ({ value: u.id, label: `${u.name}` }))]} />
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-2 pt-1 border-t border-gray-100">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 pt-3">Show on calendar</p>
+        <Toggle checked={showTasks} onChange={setShowTasks} icon={<CheckSquare className="w-3 h-3" />} label="Tasks" />
+        <Toggle checked={showProjects} onChange={setShowProjects} icon={<FolderKanban className="w-3 h-3" />} label="Projects" />
+        {showTasks && (
+          <div className="pl-6 pt-1">
+            <Select value={filterPriority} onChange={(v) => setFilterPriority(v)} size="sm" className="w-full"
+              options={[{ value: "", label: "Any priority" }, { value: "URGENT", label: "Urgent" }, { value: "HIGH", label: "High" }, { value: "MEDIUM", label: "Medium" }, { value: "LOW", label: "Low" }]} />
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-2 pt-1 border-t border-gray-100">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 pt-3">Only show</p>
+        <Toggle checked={extraOnly} onChange={setExtraOnly} label="Over-delivered extras" />
+        <Toggle checked={adHocOnly} onChange={setAdHocOnly} icon={<Zap className="w-3 h-3 text-amber-500" />} label="Ad-hoc" />
+      </div>
+
+      {activeFilterCount > 0 && (
+        <button onClick={clearFilters}
+          className="flex items-center gap-1.5 w-full justify-center px-3 py-2 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 hover:text-red-600 hover:border-red-200 transition-colors">
+          <X className="w-3 h-3" /> Clear {activeFilterCount} filter{activeFilterCount !== 1 ? "s" : ""}
+        </button>
+      )}
+    </div>
+  );
+
   return (
     // Viewport-locked so a whole month fits without scrolling the page.
     <div className="flex flex-col h-[calc(100dvh-3.5rem)] lg:h-dvh min-h-0">
@@ -436,105 +565,23 @@ export default function CalendarPage() {
           </div>
         </div>
 
-        {/* ── Filter bar ────────────────────────────────────── */}
-        {showFilters && (
-          <div className="mt-3 pt-3 border-t border-gray-100 flex flex-wrap items-center gap-3">
-            {canFilterByUser && (
-              <Select
-                value={filterUserId}
-                onChange={(v) => setFilterUserId(v)}
-                options={[{ value: "", label: "All Assignees" }, ...users.map((u) => ({ value: u.id, label: `${u.name}` }))]}
-                size="sm"
-              />
-            )}
-            {/* Search first: it's the fastest way to find one thing, and
-                everything after it is for narrowing rather than finding. */}
-            <div className="relative">
-              <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search topic, client, project…"
-                className="w-full sm:w-56 pl-8 pr-7 py-1.5 text-xs bg-white border border-gray-200 rounded-lg text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-400"
-              />
-              {search && (
-                <button
-                  onClick={() => setSearch("")}
-                  aria-label="Clear search"
-                  className="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 text-gray-400 hover:text-gray-700"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              )}
-            </div>
-            <Select
-              value={filterClientId}
-              onChange={chooseClient}
-              options={[{ value: "", label: "All Clients" }, ...clients.map((c) => ({ value: c.id, label: `${c.name}` }))]}
-              size="sm"
-            />
-            <Select
-              value={filterProjectId}
-              onChange={chooseProject}
-              options={[{ value: "", label: "All Projects" }, ...visibleProjects.map((p) => ({ value: p.id, label: `${p.name}` }))]}
-              size="sm"
-            />
-            <Select
-              value={filterTypeId}
-              onChange={(v) => setFilterTypeId(v)}
-              options={[{ value: "", label: "All Types" }, ...types.map((t) => ({ value: t.id, label: String(`${t.icon ? `${t.icon} ` : ""}${t.name}`) }))]}
-              size="sm"
-            />
-            <Select
-              value={filterStatus}
-              onChange={(v) => setFilterStatus(v)}
-              options={[{ value: "", label: "All Statuses" }, ...Object.entries(CONTENT_STATUS_META).map(([k, v]) => ({ value: k, label: String(v.label) }))]}
-              size="sm"
-            />
-            <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
-              <input type="checkbox" checked={extraOnly} onChange={(e) => setExtraOnly(e.target.checked)}
-                className="rounded border-gray-300 text-indigo-600" />
-              Extra only
-            </label>
-            <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
-              <input type="checkbox" checked={adHocOnly} onChange={(e) => setAdHocOnly(e.target.checked)}
-                className="rounded border-gray-300 text-indigo-600" />
-              Ad-hoc only
-            </label>
-
-            <span className="mx-1 text-gray-200">|</span>
-
-            {/* Legacy layers */}
-            <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
-              <input type="checkbox" checked={showTasks} onChange={(e) => setShowTasks(e.target.checked)}
-                className="rounded border-gray-300 text-indigo-600" />
-              <CheckSquare className="w-3 h-3" /> Show tasks
-            </label>
-            <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
-              <input type="checkbox" checked={showProjects} onChange={(e) => setShowProjects(e.target.checked)}
-                className="rounded border-gray-300 text-indigo-600" />
-              <FolderKanban className="w-3 h-3" /> Show projects
-            </label>
-            {showTasks && (
-              <Select
-                value={filterPriority}
-                onChange={(v) => setFilterPriority(v)}
-                options={[{ value: "", label: "All Priorities" }, { value: "URGENT", label: "Urgent" }, { value: "HIGH", label: "High" }, { value: "MEDIUM", label: "Medium" }, { value: "LOW", label: "Low" }]}
-                size="sm"
-              />
-            )}
-
-            {activeFilterCount > 0 && (
-              <button onClick={clearFilters} className="flex items-center gap-1 text-xs text-gray-500 hover:text-red-600">
-                <X className="w-3 h-3" /> Clear
-              </button>
-            )}
-          </div>
-        )}
       </div>
 
       {/* ── Body ────────────────────────────────────────────── */}
       <div className="flex flex-col lg:flex-row flex-1 min-h-0">
+        {/* Filter rail — beside the grid on desktop so opening it doesn't
+            shorten the month, stacked above it on narrower screens. */}
+        {showFilters && (
+          <>
+            <aside className="hidden lg:block w-60 flex-shrink-0 border-r border-gray-200 bg-white overflow-y-auto">
+              {filtersPanel}
+            </aside>
+            <div className="lg:hidden border-b border-gray-200 bg-white max-h-[45vh] overflow-y-auto">
+              {filtersPanel}
+            </div>
+          </>
+        )}
+
         <div ref={gridWrapRef} className="flex-1 min-w-0 min-h-0 flex flex-col px-3 sm:px-5 py-3">
           {/* The grid is the page's one object — give it an edge and a
               shadow so it sits ON the page rather than being a region of it. */}
@@ -603,7 +650,9 @@ export default function CalendarPage() {
               const legacy = (showTasks || showProjects) ? legacyOn(day) : [];
               const taskEvents = showTasks ? legacy.filter((e) => e.type === "task") : [];
               const projectEvents = showProjects ? legacy.filter((e) => e.type === "project") : [];
-              const maxShow = view === "week" ? 7 : 2;
+              // Chips lost the avatar and the two dots, so a third fits in
+              // the same cell height.
+              const maxShow = view === "week" ? 7 : 3;
               return (
                 <>
                   {/* Project bars (legacy layer) */}
@@ -621,15 +670,19 @@ export default function CalendarPage() {
                       <button key={i.id} type="button"
                         onClick={(e) => { e.stopPropagation(); setSelected(day); setSelectedItem(i); }}
                         title={`${i.client.name}${i.project ? ` · ${i.project.name}` : ""} — ${i.creativeType.name}: ${i.topic} (${meta.label})`}
-                        className={`w-full text-left flex items-center gap-1 mb-0.5 px-1.5 py-[3px] rounded-md border shadow-[0_1px_1px_rgba(15,23,42,0.04)] hover:shadow-[0_2px_4px_rgba(15,23,42,0.10)] hover:-translate-y-px transition-all duration-150 ${chipClass(i)}`}
+                        /* A month cell is about 90px wide. The chip used to
+                           spend that on a client bubble, a type dot, a status
+                           dot and a bolt, leaving roughly 30px for the topic —
+                           so every item on the grid read "Ree…". The colour
+                           already carries whatever "Color by" is set to, and
+                           the rest is in the tooltip and the day panel, so the
+                           text gets the width instead. */
+                        className={`w-full text-left flex items-center mb-[3px] pl-1.5 pr-1 py-[3px] rounded-[5px] border border-l-[3px] shadow-[0_1px_1px_rgba(15,23,42,0.04)] hover:shadow-[0_2px_5px_rgba(15,23,42,0.12)] hover:-translate-y-px transition-all duration-150 ${chipClass(i)}`}
                       >
-                        <span className="w-3.5 h-3.5 rounded-full bg-black/[0.07] dark:bg-white/[0.12] text-[7px] font-bold flex items-center justify-center flex-shrink-0">
-                          {initials(i.client.name)}
+                        <span className="text-[10.5px] font-medium truncate leading-[1.35] flex-1 min-w-0">
+                          {i.topic}
                         </span>
-                        <CreativeTypeDot color={i.creativeType.color} />
-                        <span className="text-[10px] truncate leading-tight flex-1">{i.topic}</span>
-                        <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${meta.dot}`} />
-                        {i.isAdHoc && <Zap className="w-2 h-2 text-amber-500 flex-shrink-0" />}
+                        {i.isAdHoc && <Zap className="w-2.5 h-2.5 ml-0.5 flex-shrink-0 opacity-70" />}
                       </button>
                     );
                   })}

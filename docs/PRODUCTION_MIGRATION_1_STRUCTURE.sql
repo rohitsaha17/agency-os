@@ -4,12 +4,11 @@
 -- Tables, columns, enums and indexes the target database is missing,
 -- derived by diffing it against prisma/schema.prisma.
 --
--- !! 9 DESTRUCTIVE STATEMENT(S) below drop a table or column:
+-- !! 8 DESTRUCTIVE STATEMENT(S) below drop a table or column:
 --      ALTER TABLE "contract_parties" DROP COLUMN "stakeholderId";
---      ALTER TABLE "expenses" DROP COLUMN "stakeholderId",
---      ALTER TABLE "invoices" DROP COLUMN "quotationId",
+--      ALTER TABLE "expenses" DROP COLUMN "stakeholderId";
+--      ALTER TABLE "invoices" DROP COLUMN "quotationId";
 --      ALTER TABLE "projects" DROP COLUMN "quotationId",
---      DROP TABLE "company_settings";
 --      DROP TABLE "quotation_line_items";
 --      DROP TABLE "quotations";
 --      DROP TABLE "rate_cards";
@@ -73,25 +72,13 @@ CREATE TYPE "BillableKind" AS ENUM ('PACKAGE', 'EXTRA', 'COMPLIMENTARY', 'ADHOC_
 CREATE TYPE "BillableStatus" AS ENUM ('PENDING_PRICING', 'READY', 'INVOICED', 'WAIVED');
 
 -- CreateEnum
-CREATE TYPE "TrialRequestStatus" AS ENUM ('NEW', 'CONTACTED', 'CONVERTED', 'DECLINED');
-
--- CreateEnum
 CREATE TYPE "LineItemKind" AS ENUM ('PACKAGE', 'EXTRA', 'COMPLIMENTARY', 'ADHOC_TASK', 'CUSTOM');
-
--- CreateEnum
-CREATE TYPE "ReceiptMethod" AS ENUM ('BANK_TRANSFER', 'CASH', 'CHECK', 'CARD', 'UPI', 'OTHER');
-
--- CreateEnum
-CREATE TYPE "PlanTier" AS ENUM ('TRIAL', 'FULL');
 
 -- CreateEnum
 CREATE TYPE "FollowUpStatus" AS ENUM ('PENDING', 'DONE', 'SNOOZED');
 
 -- CreateEnum
 CREATE TYPE "EventKind" AS ENUM ('FESTIVAL', 'CAMPAIGN', 'SHOOT', 'INTERNAL', 'OTHER');
-
--- AlterEnum
-ALTER TYPE "ExpenseCategory" ADD VALUE 'COMMISSIONS';
 
 -- AlterEnum
 -- This migration adds more than one value to an enum.
@@ -115,7 +102,6 @@ ALTER TYPE "TaskStatus" ADD VALUE 'CHANGES_REQUESTED';
 -- the enum.
 
 
-ALTER TYPE "UserRole" ADD VALUE 'OWNER';
 ALTER TYPE "UserRole" ADD VALUE 'SMM';
 ALTER TYPE "UserRole" ADD VALUE 'TEAM';
 
@@ -143,11 +129,14 @@ ALTER TABLE "quotations" DROP CONSTRAINT "quotations_clientId_fkey";
 -- DropForeignKey
 ALTER TABLE "quotations" DROP CONSTRAINT "quotations_createdById_fkey";
 
--- DropIndex
-DROP INDEX "clients_email_key";
+-- DropForeignKey
+ALTER TABLE "quotations" DROP CONSTRAINT "quotations_organizationId_fkey";
 
--- DropIndex
-DROP INDEX "invoices_invoiceNumber_key";
+-- DropForeignKey
+ALTER TABLE "rate_cards" DROP CONSTRAINT "rate_cards_organizationId_fkey";
+
+-- DropForeignKey
+ALTER TABLE "stakeholders" DROP CONSTRAINT "stakeholders_organizationId_fkey";
 
 -- DropIndex
 DROP INDEX "invoices_quotationId_key";
@@ -155,33 +144,15 @@ DROP INDEX "invoices_quotationId_key";
 -- DropIndex
 DROP INDEX "projects_quotationId_key";
 
--- DropIndex
-DROP INDEX "users_email_key";
-
--- AlterTable
-ALTER TABLE "channels" ADD COLUMN     "organizationId" TEXT NOT NULL;
-
 -- AlterTable
 ALTER TABLE "clients" ADD COLUMN     "currency" TEXT,
-ADD COLUMN     "importance" "ClientImportance" NOT NULL DEFAULT 'NORMAL',
-ADD COLUMN     "organizationId" TEXT NOT NULL;
+ADD COLUMN     "importance" "ClientImportance" NOT NULL DEFAULT 'NORMAL';
 
 -- AlterTable
 ALTER TABLE "contract_parties" DROP COLUMN "stakeholderId";
 
 -- AlterTable
-ALTER TABLE "contracts" ADD COLUMN     "organizationId" TEXT NOT NULL;
-
--- AlterTable
-ALTER TABLE "expenses" DROP COLUMN "stakeholderId",
-ADD COLUMN     "clientId" TEXT,
-ADD COLUMN     "organizationId" TEXT NOT NULL;
-
--- AlterTable
-ALTER TABLE "files" ADD COLUMN     "organizationId" TEXT NOT NULL;
-
--- AlterTable
-ALTER TABLE "folders" ADD COLUMN     "organizationId" TEXT NOT NULL;
+ALTER TABLE "expenses" DROP COLUMN "stakeholderId";
 
 -- AlterTable
 ALTER TABLE "invoice_line_items" ADD COLUMN     "billableItemId" TEXT,
@@ -190,8 +161,10 @@ ADD COLUMN     "isFree" BOOLEAN NOT NULL DEFAULT false,
 ADD COLUMN     "kind" "LineItemKind" NOT NULL DEFAULT 'CUSTOM';
 
 -- AlterTable
-ALTER TABLE "invoices" DROP COLUMN "quotationId",
-ADD COLUMN     "organizationId" TEXT NOT NULL;
+ALTER TABLE "invoices" DROP COLUMN "quotationId";
+
+-- AlterTable
+ALTER TABLE "organizations" ADD COLUMN     "requireAssignmentApproval" BOOLEAN NOT NULL DEFAULT false;
 
 -- AlterTable
 ALTER TABLE "project_members" ADD COLUMN     "addedById" TEXT;
@@ -201,11 +174,7 @@ ALTER TABLE "projects" DROP COLUMN "quotationId",
 ADD COLUMN     "cycleAmount" DECIMAL(12,2),
 ADD COLUMN     "cycleEndDate" TIMESTAMP(3),
 ADD COLUMN     "cycleStartDate" TIMESTAMP(3),
-ADD COLUMN     "cycleUnit" "CycleUnit" NOT NULL DEFAULT 'MONTH',
-ADD COLUMN     "organizationId" TEXT NOT NULL;
-
--- AlterTable
-ALTER TABLE "task_templates" ADD COLUMN     "organizationId" TEXT NOT NULL;
+ADD COLUMN     "cycleUnit" "CycleUnit" NOT NULL DEFAULT 'MONTH';
 
 -- AlterTable
 ALTER TABLE "tasks" ADD COLUMN     "approvedAt" TIMESTAMP(3),
@@ -218,7 +187,6 @@ ADD COLUMN     "cycleId" TEXT,
 ADD COLUMN     "extraNote" TEXT,
 ADD COLUMN     "isAdHoc" BOOLEAN NOT NULL DEFAULT false,
 ADD COLUMN     "kind" "TaskKind" NOT NULL DEFAULT 'GENERAL',
-ADD COLUMN     "organizationId" TEXT NOT NULL,
 ADD COLUMN     "preferredAssigneeId" TEXT,
 ADD COLUMN     "referenceFileId" TEXT,
 ADD COLUMN     "referenceUrl" TEXT,
@@ -229,15 +197,12 @@ ADD COLUMN     "topic" TEXT,
 ALTER COLUMN "projectId" DROP NOT NULL;
 
 -- AlterTable
+ALTER TABLE "trial_requests" ALTER COLUMN "updatedAt" DROP DEFAULT;
+
+-- AlterTable
 ALTER TABLE "users" ADD COLUMN     "designation" "Designation",
 ADD COLUMN     "designationId" TEXT,
-ADD COLUMN     "organizationId" TEXT NOT NULL,
-ADD COLUMN     "passwordHash" TEXT,
-ADD COLUMN     "passwordSetAt" TIMESTAMP(3),
 ALTER COLUMN "role" SET DEFAULT 'TEAM';
-
--- DropTable
-DROP TABLE "company_settings";
 
 -- DropTable
 DROP TABLE "quotation_line_items";
@@ -259,25 +224,6 @@ DROP TYPE "StakeholderRole";
 
 -- DropEnum
 DROP TYPE "StakeholderType";
-
--- CreateTable
-CREATE TABLE "trial_requests" (
-    "id" TEXT NOT NULL,
-    "agencyName" TEXT NOT NULL,
-    "contactName" TEXT NOT NULL,
-    "email" TEXT NOT NULL,
-    "phone" TEXT,
-    "location" TEXT,
-    "website" TEXT,
-    "teamSize" TEXT,
-    "services" TEXT,
-    "message" TEXT,
-    "status" "TrialRequestStatus" NOT NULL DEFAULT 'NEW',
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "trial_requests_pkey" PRIMARY KEY ("id")
-);
 
 -- CreateTable
 CREATE TABLE "designations" (
@@ -438,64 +384,6 @@ CREATE TABLE "change_requests" (
 );
 
 -- CreateTable
-CREATE TABLE "receipts" (
-    "id" TEXT NOT NULL,
-    "organizationId" TEXT NOT NULL,
-    "clientId" TEXT NOT NULL,
-    "invoiceId" TEXT,
-    "amount" DECIMAL(12,2) NOT NULL,
-    "currency" TEXT NOT NULL DEFAULT 'USD',
-    "receivedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "method" "ReceiptMethod" NOT NULL DEFAULT 'BANK_TRANSFER',
-    "reference" TEXT,
-    "receiptNumber" TEXT,
-    "notes" TEXT,
-    "attachmentUrl" TEXT,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "receipts_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "organizations" (
-    "id" TEXT NOT NULL,
-    "name" TEXT NOT NULL DEFAULT 'My Agency',
-    "slug" TEXT,
-    "email" TEXT,
-    "phone" TEXT,
-    "website" TEXT,
-    "address" TEXT,
-    "city" TEXT,
-    "country" TEXT,
-    "logoUrl" TEXT,
-    "currency" TEXT NOT NULL DEFAULT 'USD',
-    "timezone" TEXT NOT NULL DEFAULT 'UTC',
-    "dateFormat" TEXT NOT NULL DEFAULT 'MMM D, YYYY',
-    "taxRegistrations" JSONB,
-    "letterheadLogoUrl" TEXT,
-    "letterheadHeader" TEXT,
-    "letterheadFooter" TEXT,
-    "letterheadAddress" TEXT,
-    "letterheadPhone" TEXT,
-    "letterheadEmail" TEXT,
-    "letterheadWebsite" TEXT,
-    "letterheadColor" TEXT NOT NULL DEFAULT '#6366f1',
-    "letterheadTemplate" TEXT NOT NULL DEFAULT 'CLASSIC',
-    "letterheadConfig" TEXT,
-    "onboardingCompleted" BOOLEAN NOT NULL DEFAULT false,
-    "onboardedAt" TIMESTAMP(3),
-    "plan" "PlanTier" NOT NULL DEFAULT 'TRIAL',
-    "trialEndsAt" TIMESTAMP(3),
-    "uploadLimitMb" INTEGER NOT NULL DEFAULT 200,
-    "requireAssignmentApproval" BOOLEAN NOT NULL DEFAULT false,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "organizations_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
 CREATE TABLE "review_batches" (
     "id" TEXT NOT NULL,
     "token" TEXT NOT NULL,
@@ -642,9 +530,6 @@ CREATE TABLE "notifications" (
 );
 
 -- CreateIndex
-CREATE INDEX "trial_requests_status_idx" ON "trial_requests"("status");
-
--- CreateIndex
 CREATE INDEX "designations_organizationId_idx" ON "designations"("organizationId");
 
 -- CreateIndex
@@ -702,21 +587,6 @@ CREATE INDEX "task_reviews_taskId_revision_idx" ON "task_reviews"("taskId", "rev
 CREATE INDEX "change_requests_taskId_status_idx" ON "change_requests"("taskId", "status");
 
 -- CreateIndex
-CREATE INDEX "receipts_clientId_idx" ON "receipts"("clientId");
-
--- CreateIndex
-CREATE INDEX "receipts_invoiceId_idx" ON "receipts"("invoiceId");
-
--- CreateIndex
-CREATE INDEX "receipts_receivedAt_idx" ON "receipts"("receivedAt");
-
--- CreateIndex
-CREATE INDEX "receipts_organizationId_idx" ON "receipts"("organizationId");
-
--- CreateIndex
-CREATE UNIQUE INDEX "organizations_slug_key" ON "organizations"("slug");
-
--- CreateIndex
 CREATE UNIQUE INDEX "review_batches_token_key" ON "review_batches"("token");
 
 -- CreateIndex
@@ -765,78 +635,6 @@ CREATE INDEX "notifications_userId_readAt_idx" ON "notifications"("userId", "rea
 CREATE INDEX "notifications_userId_createdAt_idx" ON "notifications"("userId", "createdAt");
 
 -- CreateIndex
-CREATE INDEX "channels_organizationId_idx" ON "channels"("organizationId");
-
--- CreateIndex
-CREATE INDEX "clients_organizationId_idx" ON "clients"("organizationId");
-
--- CreateIndex
-CREATE INDEX "contracts_organizationId_idx" ON "contracts"("organizationId");
-
--- CreateIndex
-CREATE INDEX "expenses_clientId_idx" ON "expenses"("clientId");
-
--- CreateIndex
-CREATE INDEX "expenses_projectId_idx" ON "expenses"("projectId");
-
--- CreateIndex
-CREATE INDEX "expenses_organizationId_idx" ON "expenses"("organizationId");
-
--- CreateIndex
-CREATE INDEX "files_projectId_idx" ON "files"("projectId");
-
--- CreateIndex
-CREATE INDEX "files_clientId_idx" ON "files"("clientId");
-
--- CreateIndex
-CREATE INDEX "files_folderId_idx" ON "files"("folderId");
-
--- CreateIndex
-CREATE INDEX "files_status_idx" ON "files"("status");
-
--- CreateIndex
-CREATE INDEX "files_organizationId_idx" ON "files"("organizationId");
-
--- CreateIndex
-CREATE INDEX "folders_organizationId_idx" ON "folders"("organizationId");
-
--- CreateIndex
-CREATE INDEX "invoices_status_clientId_idx" ON "invoices"("status", "clientId");
-
--- CreateIndex
-CREATE INDEX "invoices_dueDate_idx" ON "invoices"("dueDate");
-
--- CreateIndex
-CREATE INDEX "invoices_organizationId_idx" ON "invoices"("organizationId");
-
--- CreateIndex
-CREATE UNIQUE INDEX "invoices_organizationId_invoiceNumber_key" ON "invoices"("organizationId", "invoiceNumber");
-
--- CreateIndex
-CREATE INDEX "projects_status_clientId_idx" ON "projects"("status", "clientId");
-
--- CreateIndex
-CREATE INDEX "projects_clientId_idx" ON "projects"("clientId");
-
--- CreateIndex
-CREATE INDEX "projects_organizationId_idx" ON "projects"("organizationId");
-
--- CreateIndex
-CREATE INDEX "task_templates_organizationId_idx" ON "task_templates"("organizationId");
-
--- CreateIndex
-CREATE INDEX "tasks_status_projectId_idx" ON "tasks"("status", "projectId");
-
--- CreateIndex
-CREATE INDEX "tasks_projectId_deletedAt_idx" ON "tasks"("projectId", "deletedAt");
-
--- CreateIndex
-CREATE INDEX "tasks_dueDate_idx" ON "tasks"("dueDate");
-
--- CreateIndex
-CREATE INDEX "tasks_organizationId_idx" ON "tasks"("organizationId");
-
--- CreateIndex
 CREATE INDEX "tasks_clientId_idx" ON "tasks"("clientId");
 
 -- CreateIndex
@@ -845,26 +643,11 @@ CREATE INDEX "tasks_contentItemId_idx" ON "tasks"("contentItemId");
 -- CreateIndex
 CREATE INDEX "tasks_organizationId_assignmentStatus_idx" ON "tasks"("organizationId", "assignmentStatus");
 
--- CreateIndex
-CREATE INDEX "users_organizationId_idx" ON "users"("organizationId");
-
--- CreateIndex
-CREATE UNIQUE INDEX "users_organizationId_email_key" ON "users"("organizationId", "email");
-
--- AddForeignKey
-ALTER TABLE "users" ADD CONSTRAINT "users_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "organizations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
 -- AddForeignKey
 ALTER TABLE "users" ADD CONSTRAINT "users_designationId_fkey" FOREIGN KEY ("designationId") REFERENCES "designations"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "clients" ADD CONSTRAINT "clients_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "organizations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "designations" ADD CONSTRAINT "designations_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "organizations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "projects" ADD CONSTRAINT "projects_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "organizations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "project_members" ADD CONSTRAINT "project_members_addedById_fkey" FOREIGN KEY ("addedById") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
@@ -907,9 +690,6 @@ ALTER TABLE "billable_items" ADD CONSTRAINT "billable_items_invoiceId_fkey" FORE
 
 -- AddForeignKey
 ALTER TABLE "tasks" ADD CONSTRAINT "tasks_contentItemId_fkey" FOREIGN KEY ("contentItemId") REFERENCES "content_items"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "tasks" ADD CONSTRAINT "tasks_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "organizations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "tasks" ADD CONSTRAINT "tasks_clientId_fkey" FOREIGN KEY ("clientId") REFERENCES "clients"("id") ON DELETE SET NULL ON UPDATE CASCADE;
@@ -975,40 +755,7 @@ ALTER TABLE "change_requests" ADD CONSTRAINT "change_requests_taskId_fkey" FOREI
 ALTER TABLE "change_requests" ADD CONSTRAINT "change_requests_requestedById_fkey" FOREIGN KEY ("requestedById") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "task_templates" ADD CONSTRAINT "task_templates_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "organizations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "invoices" ADD CONSTRAINT "invoices_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "organizations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "invoice_line_items" ADD CONSTRAINT "invoice_line_items_contentItemId_fkey" FOREIGN KEY ("contentItemId") REFERENCES "content_items"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "expenses" ADD CONSTRAINT "expenses_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "organizations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "expenses" ADD CONSTRAINT "expenses_clientId_fkey" FOREIGN KEY ("clientId") REFERENCES "clients"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "receipts" ADD CONSTRAINT "receipts_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "organizations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "receipts" ADD CONSTRAINT "receipts_clientId_fkey" FOREIGN KEY ("clientId") REFERENCES "clients"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "receipts" ADD CONSTRAINT "receipts_invoiceId_fkey" FOREIGN KEY ("invoiceId") REFERENCES "invoices"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "contracts" ADD CONSTRAINT "contracts_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "organizations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "folders" ADD CONSTRAINT "folders_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "organizations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "files" ADD CONSTRAINT "files_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "organizations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "channels" ADD CONSTRAINT "channels_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "organizations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "review_batches" ADD CONSTRAINT "review_batches_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "organizations"("id") ON DELETE CASCADE ON UPDATE CASCADE;

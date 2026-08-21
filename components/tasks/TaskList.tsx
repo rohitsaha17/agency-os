@@ -7,6 +7,8 @@ import {
   GripVertical, UserPlus, Eye, GitBranch, Check,
 } from "lucide-react";
 import { PriorityBadge } from "./PriorityBadge";
+import { useCurrentUser } from "@/lib/useCurrentUser";
+import { can } from "@/lib/permissions";
 import type { Task, TaskStatus } from "@/types";
 
 // ── Status visuals ────────────────────────────────────────────
@@ -17,6 +19,9 @@ const STATUS_DOT: Record<TaskStatus, { dot: string; label: string; ring: string 
   IN_REVIEW:   { dot: "bg-amber-400",   label: "In Review",   ring: "ring-amber-200" },
   DONE:        { dot: "bg-emerald-500", label: "Done",        ring: "ring-emerald-200" },
   BLOCKED:     { dot: "bg-red-500",     label: "Blocked",     ring: "ring-red-200" },
+  // Sent back by the reviewer. "Reassigned" rather than "Changes requested"
+  // because to the person holding it, it's a fresh piece of work to start.
+  CHANGES_REQUESTED: { dot: "bg-orange-500", label: "Reassigned", ring: "ring-orange-200" },
 };
 
 const STATUS_ROW_LEFT: Record<TaskStatus, string> = {
@@ -25,9 +30,12 @@ const STATUS_ROW_LEFT: Record<TaskStatus, string> = {
   IN_REVIEW:   "border-l-amber-400",
   DONE:        "border-l-emerald-400",
   BLOCKED:     "border-l-red-400",
+  CHANGES_REQUESTED: "border-l-orange-400",
 };
 
-const STATUS_ORDER: TaskStatus[] = ["TODO", "IN_PROGRESS", "IN_REVIEW", "DONE", "BLOCKED"];
+const STATUS_ORDER: TaskStatus[] = [
+  "TODO", "IN_PROGRESS", "CHANGES_REQUESTED", "IN_REVIEW", "DONE", "BLOCKED",
+];
 
 /**
  * Does this deadline actually carry a time?
@@ -68,7 +76,12 @@ function initials(name: string) {
  * you pick it. The row's left border recolours from the same map the moment
  * the choice is made.
  */
-function StatusDot({ status, onPick }: { status: TaskStatus; onPick: (s: TaskStatus) => void }) {
+function StatusDot({ status, onPick, canPick }: {
+  status: TaskStatus;
+  onPick: (s: TaskStatus) => void;
+  /** Planners choose a status directly; everyone else advances via the panel. */
+  canPick: boolean;
+}) {
   const { dot, label, ring } = STATUS_DOT[status];
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
@@ -114,6 +127,16 @@ function StatusDot({ status, onPick }: { status: TaskStatus; onPick: (s: TaskSta
       window.removeEventListener("resize", reposition);
     };
   }, [open]);
+
+  if (!canPick) {
+    return (
+      <span
+        title={label}
+        aria-label={`Status: ${label}`}
+        className={`w-3.5 h-3.5 rounded-full flex-shrink-0 ring-2 ${ring} ${dot}`}
+      />
+    );
+  }
 
   return (
     <>
@@ -207,6 +230,8 @@ interface TaskRowProps {
 }
 
 function TaskRow({ task, depth, onOpen, onStatusChange, onAddSubtask, draggingId, dropTarget, onDragStart, onDragOver, onDragEnd, onDrop }: TaskRowProps) {
+  const { user: me } = useCurrentUser();
+  const canPickStatus = can(me, "content.plan");
   const [expanded, setExpanded] = useState(true);
   const hasChildren = (task.children?.length ?? 0) > 0;
   const childCount = task.children?.length ?? 0;
@@ -252,7 +277,7 @@ function TaskRow({ task, depth, onOpen, onStatusChange, onAddSubtask, draggingId
         </div>
 
         {/* Status dot */}
-        <StatusDot status={task.status} onPick={(s) => onStatusChange(task.id, s)} />
+        <StatusDot status={task.status} canPick={canPickStatus} onPick={(s) => onStatusChange(task.id, s)} />
 
         {/* Title + subtask progress */}
         <div className="flex-1 min-w-0">

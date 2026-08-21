@@ -31,6 +31,7 @@ type PrismaTask = {
   manager: { id: string; name: string } | null;
   approverId: string | null;
   approver: { id: string; name: string } | null;
+  revision: number;
   assignees: { userId: string; user: { id: string; organizationId: string; name: string; email: string; avatarUrl: string | null; role: string } }[];
   // v2 fields
   topic: string | null; content: string | null;
@@ -71,6 +72,8 @@ function buildTree(flat: PrismaTask[]): Task[] {
       manager: t.manager,
       approverId: t.approverId,
       approver: t.approver,
+      // Which round this is — the panel says "Start again (round 2)".
+      revision: t.revision,
       assignees: t.assignees.map((a) => ({ userId: a.userId, user: { ...a.user, isActive: true, organizationId: a.user.organizationId, role: a.user.role as import("@/types").UserRole } })),
       children: [],
       createdAt: t.createdAt.toISOString(),

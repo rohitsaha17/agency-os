@@ -10,9 +10,11 @@ export type ServiceType =
   | "branding" | "logo" | "uiux" | "video" | "photography"
   | "content" | "email_marketing" | "paid_ads" | "app_development"
   | "pr" | "other";
-export type TaskStatus       = "TODO" | "IN_PROGRESS" | "IN_REVIEW" | "DONE" | "BLOCKED";
+// CHANGES_REQUESTED exists in the schema and is written by the review loop.
+// It was missing here, so the reassigned state could never render.
+export type TaskStatus       = "TODO" | "IN_PROGRESS" | "IN_REVIEW" | "DONE" | "BLOCKED" | "CHANGES_REQUESTED";
 export type Priority         = "LOW" | "MEDIUM" | "HIGH" | "URGENT";
-export type ProjectRole      = "EDITOR" | "VIEWER";
+export type ProjectRole      = "EDITOR" | "VIEWER" | "SMM" | "CONTRIBUTOR";
 export type PricingType      = "FIXED" | "RETAINER" | "PER_ITEM";
 export type DiscountType     = "PERCENT" | "AMOUNT";
 

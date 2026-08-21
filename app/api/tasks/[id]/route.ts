@@ -18,6 +18,17 @@ type Params = { params: Promise<{ id: string }> };
  */
 const PROGRESS_FIELDS = new Set(["status", "cascadeToChildren"]);
 
+/**
+ * The only status an assignee may set directly.
+ *
+ * Everything else in the loop is the result of an action with a payload, and
+ * has its own route: IN_REVIEW comes from /submit (which requires proof), DONE
+ * from /approve, CHANGES_REQUESTED from /change-requests. Letting a plain
+ * PATCH write those would be a way to hand work in with no evidence, or to
+ * approve your own, so it doesn't.
+ */
+const ASSIGNEE_SETTABLE_STATUS = new Set(["IN_PROGRESS"]);
+
 const TASK_INCLUDE = {
   manager: { select: { id: true, name: true } },
   assignees: {
@@ -86,6 +97,20 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         throw new ApiError(
           "You can move this task along, but its brief is set by whoever planned it. "
           + `Ask them to change: ${planned.join(", ")}.`,
+          403,
+        );
+      }
+      if (existing.status === "DONE") {
+        throw new ApiError(
+          "This task has been approved and closed. Ask an admin or the reviewer to reopen it.",
+          403,
+        );
+      }
+      if (status !== undefined && !ASSIGNEE_SETTABLE_STATUS.has(status)) {
+        throw new ApiError(
+          status === "IN_REVIEW"
+            ? "Use Mark completed so the work goes in with its details attached."
+            : `Only the reviewer can move this task to ${String(status).toLowerCase().replace(/_/g, " ")}.`,
           403,
         );
       }

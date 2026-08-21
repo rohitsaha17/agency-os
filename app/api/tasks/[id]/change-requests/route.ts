@@ -54,20 +54,25 @@ export async function POST(req: NextRequest, { params }: Params) {
         data: { taskId: id, requestedById: user.id, note: note.trim() },
         include: { requestedBy: { select: { id: true, name: true } } },
       }),
-      prisma.task.update({ where: { id }, data: { status: "IN_PROGRESS" } }),
+      // CHANGES_REQUESTED, not IN_PROGRESS. Sending work back doesn't put it
+      // back in progress — nobody has picked it up yet. It reads as
+      // "Reassigned" and waits for the assignee to deliberately start again,
+      // which is also what makes the next round countable.
+      prisma.task.update({
+        where: { id },
+        data: { status: "CHANGES_REQUESTED", revision: { increment: 1 }, submittedAt: null },
+      }),
     ]);
 
-    if (task.status !== "IN_PROGRESS") {
-      await logStatus({
-        organizationId: user.organizationId,
-        entityType: "TASK",
-        entityId: id,
-        from: task.status,
-        to: "IN_PROGRESS",
-        userId: user.id,
-        note: `changes requested: ${note.trim().slice(0, 120)}`,
-      });
-    }
+    await logStatus({
+      organizationId: user.organizationId,
+      entityType: "TASK",
+      entityId: id,
+      from: task.status,
+      to: "CHANGES_REQUESTED",
+      userId: user.id,
+      note: `changes requested: ${note.trim().slice(0, 120)}`,
+    });
     await notifyMany(
       task.assignees.map((a) => a.userId).filter((uid) => uid !== user.id),
       {

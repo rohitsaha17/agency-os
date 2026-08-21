@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import {
   X, Trash2, ExternalLink,
   MessageSquare, Settings2,
-  CheckCircle2, Circle, Timer, Eye, EyeOff, Ban, AlertCircle, Play,
+  CheckCircle2, Circle, Timer, Eye, EyeOff, Ban, AlertCircle, Play, RefreshCw,
   Activity, Paperclip, Send, Users, Loader2,
 } from "lucide-react";
 import { PriorityBadge } from "./PriorityBadge";
@@ -80,6 +80,7 @@ const STATUS_OPTIONS: { value: TaskStatus; label: string; icon: React.ReactNode;
   { value: "IN_REVIEW",   label: "In Review",   icon: <Eye className="w-3.5 h-3.5 text-amber-500" />,            color: "text-amber-600"  },
   { value: "DONE",        label: "Done",        icon: <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />, color: "text-emerald-600" },
   { value: "BLOCKED",     label: "Blocked",     icon: <Ban className="w-3.5 h-3.5 text-red-500" />,              color: "text-red-600"    },
+  { value: "CHANGES_REQUESTED", label: "Reassigned", icon: <RefreshCw className="w-3.5 h-3.5 text-orange-500" />, color: "text-orange-600" },
 ];
 
 const PRIORITY_OPTIONS: { value: Priority; label: string }[] = [
@@ -326,21 +327,39 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
     onUpdated({ ...task, status: "DONE" });
   };
 
+  /**
+   * Sending work back.
+   *
+   * Goes through /review, not /change-requests: only the review route records
+   * a round, and the round trail is the thing the Discussion tab shows. It
+   * reopens the task as CHANGES_REQUESTED — "Reassigned" — so the assignee has
+   * to pick it back up deliberately rather than finding it already in progress.
+   *
+   * /review only accepts a task that was actually submitted. A task that never
+   * reached review falls back to the older route, which just records the note.
+   */
   const submitChangeRequest = async () => {
     if (!changeNote.trim()) return;
     setSubmittingCR(true);
     try {
-      const res = await fetch(`/api/tasks/${task.id}/change-requests`, {
+      let res = await fetch(`/api/tasks/${task.id}/review`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ note: changeNote }),
+        body: JSON.stringify({ decision: "CHANGES_REQUESTED", comments: changeNote }),
       });
+      if (res.status === 409) {
+        res = await fetch(`/api/tasks/${task.id}/change-requests`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ note: changeNote }),
+        });
+      }
       if (res.ok) {
-        setStatus("IN_PROGRESS");
+        setStatus("CHANGES_REQUESTED");
         setShowChangeReq(false);
         setChangeNote("");
         setHistory(null); // refetch lazily
-        onUpdated({ ...task, status: "IN_PROGRESS" });
+        onUpdated({ ...task, status: "CHANGES_REQUESTED" });
       }
     } finally {
       setSubmittingCR(false);
@@ -370,17 +389,21 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
         <div className="px-5 py-4 border-b border-gray-200 flex-shrink-0">
           <div className="flex items-start gap-3">
             <div className="relative group mt-0.5 flex-shrink-0">
-              <button title={`Status: ${status}`}>
-                {STATUS_OPTIONS.find((s) => s.value === status)?.icon}
+              <button title={STATUS_OPTIONS.find((o) => o.value === status)?.label ?? status}>
+                {STATUS_OPTIONS.find((o) => o.value === status)?.icon}
               </button>
-              <div className="absolute top-6 left-0 z-10 bg-white border border-gray-200 rounded-xl shadow-lg py-1 min-w-[150px] hidden group-hover:block">
-                {STATUS_OPTIONS.map((opt) => (
-                  <button key={opt.value} onClick={() => handleStatusChange(opt.value)}
-                    className={`w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-gray-50 transition-colors ${status === opt.value ? `font-semibold ${opt.color}` : "text-gray-700"}`}>
-                    {opt.icon} {opt.label}
-                  </button>
-                ))}
-              </div>
+              {/* Only a planner reaches in and sets a status. The assignee moves
+                  the task with the single action button below. */}
+              {canPlan && (
+                <div className="absolute top-6 left-0 z-10 bg-white border border-gray-200 rounded-xl shadow-lg py-1 min-w-[160px] hidden group-hover:block">
+                  {STATUS_OPTIONS.map((opt) => (
+                    <button key={opt.value} onClick={() => handleStatusChange(opt.value)}
+                      className={`w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-gray-50 transition-colors ${status === opt.value ? `font-semibold ${opt.color}` : "text-gray-700"}`}>
+                      {opt.icon} {opt.label}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             <input value={title} readOnly={!canPlan}
@@ -423,10 +446,19 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
           </div>
 
           {/*
-            The task's state is driven by what you actually did, not by picking
-            a status off a list. Not started -> Start task. Underway -> Mark
-            finished, which asks for the proof and hands it to the reviewer.
-            Waiting on a review says so and offers nothing to press.
+            One button, and it always knows where the task is.
+
+            A task is To Do the moment it exists — nobody marks that. From
+            there the person holding it presses Start, then Mark completed,
+            which collects the proof and submits. Submitting is what puts it In
+            Review; the assignee never sets that status, and can't, because
+            skipping the dialog would mean handing work in with no evidence.
+            Approved is the end of the line for them — Done is not a state they
+            can leave.
+
+            A reviewer sending work back reopens it as Reassigned, so it reads
+            as a fresh piece of work rather than something half-finished, and
+            it takes a deliberate Start again to pick it back up.
           */}
           <div className="mt-2.5 ml-7 flex items-center gap-2 flex-wrap">
             {status === "TODO" && (
@@ -436,17 +468,30 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
                 Start task
               </button>
             )}
+            {status === "CHANGES_REQUESTED" && (
+              <button onClick={() => handleStatusChange("IN_PROGRESS")}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-orange-600 hover:bg-orange-700 rounded-lg transition-colors">
+                <RefreshCw className="w-3 h-3" />
+                Start again{task.revision && task.revision > 1 ? ` (round ${task.revision})` : ""}
+              </button>
+            )}
             {status === "IN_PROGRESS" && (
               <button onClick={() => setShowSubmit(true)}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors">
                 <Send className="w-3 h-3" />
-                Mark finished
+                Mark completed
               </button>
             )}
             {status === "IN_REVIEW" && (
               <span className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg">
                 <Eye className="w-3 h-3" />
-                Waiting on review
+                Sent for approval
+              </span>
+            )}
+            {status === "DONE" && (
+              <span className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg">
+                <CheckCircle2 className="w-3 h-3" />
+                Approved and complete
               </span>
             )}
             {status === "BLOCKED" && (

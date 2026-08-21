@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Plus, X, ArrowRight, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Plus, X, ArrowRight, AlertTriangle, CheckCircle2, RefreshCw } from "lucide-react";
 import type { Task, TaskStatus } from "@/types";
 import { Select } from "@/components/ui/Select";
 
@@ -19,6 +19,7 @@ const STATUS_ICON: Record<TaskStatus, React.ReactNode> = {
   IN_PROGRESS: <span className="w-3.5 h-3.5 rounded-full bg-blue-500 inline-block" />,
   IN_REVIEW:   <span className="w-3.5 h-3.5 rounded-full bg-yellow-500 inline-block" />,
   BLOCKED:     <AlertTriangle className="w-3.5 h-3.5 text-red-500" />,
+  CHANGES_REQUESTED: <RefreshCw className="w-3.5 h-3.5 text-orange-500" />,
   TODO:        <span className="w-3.5 h-3.5 rounded-full border-2 border-gray-300 inline-block" />,
 };
 

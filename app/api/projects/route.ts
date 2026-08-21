@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
-import { jsonFor } from "@/lib/api-permissions";
+import { jsonFor, requireCapability } from "@/lib/api-permissions";
 import { apiError, handleApiError, ApiError } from "@/lib/api-errors";
 import { parsePagination, paginationMeta } from "@/lib/pagination";
 import { checkRateLimit, WRITE_RATE_LIMITS } from "@/lib/rate-limit";
@@ -108,6 +108,11 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const user = await requireAuth(req);
+    // Starting a project is a planning act — SMM and above. This had no check
+    // at all, so anyone signed in could open one. The price on it is still
+    // gated separately by projects.pricing below, so an SMM can set up the
+    // work without setting what it costs.
+    requireCapability(user, "content.plan");
 
     const rl = checkRateLimit(req, `projects:create:${user.id}`, WRITE_RATE_LIMITS.heavy);
     if (!rl.allowed) {

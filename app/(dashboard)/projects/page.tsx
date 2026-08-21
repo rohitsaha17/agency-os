@@ -7,6 +7,8 @@ import { ProjectCard } from "@/components/projects/ProjectCard";
 import { Button } from "@/components/ui/Button";
 import type { Project, ProjectStatus, ProjectType, ClientSummary } from "@/types";
 import { Select } from "@/components/ui/Select";
+import { useCurrentUser } from "@/lib/useCurrentUser";
+import { can } from "@/lib/permissions";
 
 const STATUS_FILTERS: { label: string; value: ProjectStatus | "ALL" }[] = [
   { label: "All", value: "ALL" },
@@ -25,6 +27,8 @@ const TYPE_FILTERS: { label: string; value: ProjectType | "ALL" }[] = [
 type ProjectWithProgress = Project & { progress: number };
 
 export default function ProjectsPage() {
+  const { user: currentUser } = useCurrentUser();
+  const canStartProject = can(currentUser, "content.plan");
   const [projects, setProjects] = useState<ProjectWithProgress[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -89,9 +93,13 @@ export default function ProjectsPage() {
             <h1 className="text-xl font-semibold text-gray-900">Projects</h1>
             <p className="text-sm text-gray-500 mt-0.5">Track all your agency work in one place</p>
           </div>
-          <Link href="/projects/new">
-            <Button icon={<Plus className="w-4 h-4" />}>New Project</Button>
-          </Link>
+          {/* Starting a project is a planning act — SMM and above. Matches
+              the check on POST /api/projects. */}
+          {canStartProject && (
+            <Link href="/projects/new">
+              <Button icon={<Plus className="w-4 h-4" />}>New Project</Button>
+            </Link>
+          )}
         </div>
       </div>
 
@@ -213,9 +221,11 @@ export default function ProjectsPage() {
             <p className="text-xs text-gray-400 mt-1">
               {search || statusFilter !== "ALL" || typeFilter !== "ALL" || filterClientId
                 ? "Try adjusting your search or filters"
-                : "Create your first project to start tracking work"}
+                : canStartProject
+                  ? "Create your first project to start tracking work"
+                  : "Projects you're working on will appear here."}
             </p>
-            {!search && statusFilter === "ALL" && typeFilter === "ALL" && !filterClientId && (
+            {canStartProject && !search && statusFilter === "ALL" && typeFilter === "ALL" && !filterClientId && (
               <Link href="/projects/new" className="mt-4">
                 <Button size="sm" icon={<Plus className="w-3.5 h-3.5" />}>
                   New Project

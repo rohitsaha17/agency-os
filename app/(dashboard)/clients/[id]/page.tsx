@@ -1190,9 +1190,11 @@ export default function ClientDetailPage() {
           <div className="max-w-2xl space-y-4">
             <div className="flex items-center justify-between">
               <p className="text-sm text-gray-500">{client.projects.length} project{client.projects.length !== 1 ? "s" : ""}</p>
-              <Button size="sm" icon={<Plus className="w-3.5 h-3.5" />} onClick={() => setProjectModalOpen(true)}>
-                New Project
-              </Button>
+              {canManageChannels && (
+                <Button size="sm" icon={<Plus className="w-3.5 h-3.5" />} onClick={() => setProjectModalOpen(true)}>
+                  New Project
+                </Button>
+              )}
             </div>
 
             {client.projects.length === 0 ? (

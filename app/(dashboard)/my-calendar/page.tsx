@@ -65,25 +65,40 @@ const KIND_META: Record<Kind, { label: string; chip: string; dot: string }> = {
   event:    { label: "Events",    chip: "bg-amber-50 border-amber-200 text-amber-800",       dot: "bg-amber-500" },
 };
 
-const HOUR_H = 48; // px per hour in the time grid
-const ALL_KINDS: Kind[] = ["task", "content", "personal", "event"];
-
-function startOfDay(d: Date) { const n = new Date(d); n.setHours(0, 0, 0, 0); return n; }
-function keyOf(d: Date) { return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`; }
-function fmtHour(h: number) {
-  const suffix = h < 12 ? "AM" : "PM";
-  const hour = h % 12 === 0 ? 12 : h % 12;
-  return `${hour} ${suffix}`;
-}
-/** Minutes from midnight for a timed entry, or null when it's all-day. */
+/**
+ * A calendar day as YYYY-MM-DD in LOCAL time.
+ *
+ * Not toISOString().slice(0,10) — that converts to UTC first, so clicking
+ * "22 Aug" anywhere east of Greenwich after early evening pre-fills the 21st.
+ */
+/**
+ * What time of day this entry is due, in minutes, or null for "sometime that
+ * day". A personal reminder carries an explicit time; a task carries the time
+ * on its deadline.
+ */
 function minutesOf(e: Entry): number | null {
   if (e.kind === "personal" && e.time) {
     const [h, m] = e.time.split(":").map(Number);
     if (Number.isFinite(h)) return h * 60 + (m || 0);
   }
+  if (e.kind !== "personal" && e.date) {
+    const d = new Date(e.date);
+    // Exactly midnight UTC is a date-only value, not a dawn deadline.
+    if (!(d.getUTCHours() === 0 && d.getUTCMinutes() === 0)) {
+      return d.getHours() * 60 + d.getMinutes();
+    }
+  }
   return null;
 }
 
+function toDateKey(d: Date) {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+const ALL_KINDS: Kind[] = ["task", "content", "personal", "event"];
+
+function startOfDay(d: Date) { const n = new Date(d); n.setHours(0, 0, 0, 0); return n; }
+function keyOf(d: Date) { return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`; }
 export default function MyCalendarPage() {
   const now = useMemo(() => new Date(), []);
   const { user: currentUser } = useCurrentUser();
@@ -98,7 +113,6 @@ export default function MyCalendarPage() {
   const [viewMenu, setViewMenu] = useState(false);
   const [visibleKinds, setVisibleKinds] = useState<Set<Kind>>(new Set(ALL_KINDS));
   const [miniMonth, setMiniMonth] = useState<Date>(new Date());
-  const gridRef = useRef<HTMLDivElement>(null);
 
   const isSenior =
     currentUser?.role === "ADMIN" || currentUser?.role === "OWNER" ||
@@ -158,13 +172,6 @@ export default function MyCalendarPage() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
-
-  /* ── Auto-scroll the time grid to ~7am on mount/view change ── */
-  useEffect(() => {
-    if ((view === "day" || view === "week") && gridRef.current) {
-      gridRef.current.scrollTop = 7 * HOUR_H;
-    }
-  }, [view]);
 
   const shown = useMemo(() => entries.filter((e) => visibleKinds.has(e.kind)), [entries, visibleKinds]);
   const byDay = useMemo(() => {
@@ -253,91 +260,95 @@ export default function MyCalendarPage() {
     );
   };
 
-  /* Time grid used by Day + Week */
-  const TimeGrid = ({ days }: { days: Date[] }) => {
-    const nowMin = new Date().getHours() * 60 + new Date().getMinutes();
+  /**
+   * Day and Week, as lists rather than a timetable.
+   *
+   * These were an hourly grid — twenty-four rows per column, of which maybe two
+   * ever held anything. A deadline of "Friday 6pm" doesn't occupy 6pm to 6:45pm
+   * the way a meeting does; it's a moment to be ready by. Rendering it as a
+   * block on a timetable spread five items across a page of empty cells and
+   * made the week harder to read than the month.
+   *
+   * So: Week gives each day a column and lists what's due in it. Day is the
+   * same thing with one column. Times still show, on the items that have one.
+   * Month is untouched — a month grid is already a list per day.
+   */
+  const AgendaGrid = ({ days }: { days: Date[] }) => {
+    // Timed items first, in clock order, then the ones with no particular hour.
+    const ordered = (d: Date) =>
+      [...entriesOn(d)].sort((a, b) => {
+        const ma = minutesOf(a), mb = minutesOf(b);
+        if (ma === null && mb === null) return 0;
+        if (ma === null) return 1;
+        if (mb === null) return -1;
+        return ma - mb;
+      });
+
+    const single = days.length === 1;
+
     return (
       <div className="flex flex-col h-full min-h-0 bg-white border border-gray-200 rounded-2xl overflow-hidden">
-        {/* Day headers + all-day row */}
-        <div className="flex border-b border-gray-200 flex-shrink-0">
-          <div className="w-16 flex-shrink-0 border-r border-gray-100 flex items-end justify-end pr-2 pb-1">
-            <span className="text-[10px] text-gray-400">GMT{-new Date().getTimezoneOffset() / 60 >= 0 ? "+" : ""}{-new Date().getTimezoneOffset() / 60}</span>
-          </div>
-          <div className="flex-1 grid" style={{ gridTemplateColumns: `repeat(${days.length}, minmax(0,1fr))` }}>
-            {days.map((d, i) => {
-              const allDay = entriesOn(d).filter((e) => minutesOf(e) === null);
-              return (
-                <div key={i} className={`border-l border-gray-100 px-1 pt-2 pb-1 ${isToday(d) ? "bg-indigo-50/40" : ""}`}>
-                  <div className="text-center mb-1">
-                    <p className="text-[10px] font-medium text-gray-400 uppercase">{d.toLocaleDateString("en-US", { weekday: "short" })}</p>
-                    <button onClick={() => { setAnchor(d); setView("day"); }}
-                      className={`inline-flex w-8 h-8 items-center justify-center text-base font-semibold rounded-full transition-colors ${
-                        isToday(d) ? "bg-indigo-600 text-white" : "text-gray-700 hover:bg-gray-100"
-                      }`}>
-                      {d.getDate()}
-                    </button>
-                  </div>
-                  <div className="min-h-[22px] max-h-24 overflow-y-auto">
-                    {allDay.map((e) => chip(e, { compact: true }))}
-                  </div>
+        <div className="flex-1 grid min-h-0" style={{ gridTemplateColumns: `repeat(${days.length}, minmax(0,1fr))` }}>
+          {days.map((d, i) => {
+            const items = ordered(d);
+            return (
+              <div key={i} className={`flex flex-col min-h-0 ${i > 0 ? "border-l border-gray-100" : ""} ${isToday(d) ? "bg-indigo-50/30" : ""}`}>
+                {/* Day header */}
+                <div className="flex-shrink-0 px-2 pt-3 pb-2 border-b border-gray-100 text-center">
+                  <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">
+                    {d.toLocaleDateString("en-US", { weekday: single ? "long" : "short" })}
+                  </p>
+                  <button onClick={() => { setAnchor(d); setView("day"); }}
+                    className={`inline-flex w-8 h-8 items-center justify-center text-base font-semibold rounded-full transition-colors mt-0.5 ${
+                      isToday(d) ? "bg-indigo-600 text-white" : "text-gray-700 hover:bg-gray-100"
+                    }`}>
+                    {d.getDate()}
+                  </button>
+                  {items.length > 0 && (
+                    <p className="text-[10px] text-gray-400 mt-0.5">
+                      {items.length} {items.length === 1 ? "item" : "items"}
+                    </p>
+                  )}
                 </div>
-              );
-            })}
-          </div>
-        </div>
 
-        {/* Hour rows */}
-        <div ref={gridRef} className="flex-1 overflow-y-auto min-h-0">
-          <div className="flex relative" style={{ height: 24 * HOUR_H }}>
-            {/* Hour labels */}
-            <div className="w-16 flex-shrink-0 border-r border-gray-100">
-              {Array.from({ length: 24 }, (_, h) => (
-                <div key={h} style={{ height: HOUR_H }} className="relative">
-                  <span className="absolute -top-1.5 right-2 text-[10px] text-gray-400">{h === 0 ? "" : fmtHour(h)}</span>
+                {/* That day's work */}
+                <div className="flex-1 overflow-y-auto p-1.5 space-y-1">
+                  {items.length === 0 ? (
+                    <button
+                      onClick={() => { setAddDate(toDateKey(d)); setAddOpen(true); }}
+                      className="w-full h-full min-h-[80px] rounded-lg text-[11px] text-gray-300 hover:text-indigo-500 hover:bg-indigo-50/50 transition-colors"
+                    >
+                      {single ? "Nothing due today" : "—"}
+                    </button>
+                  ) : (
+                    <>
+                      {items.map((e) => {
+                        const mins = minutesOf(e);
+                        return (
+                          <div key={`${e.kind}-${e.id}`} className={single ? "flex items-start gap-3" : ""}>
+                            {single && (
+                              <span className="w-16 flex-shrink-0 pt-0.5 text-[11px] tabular-nums text-gray-400 text-right">
+                                {mins === null
+                                  ? "All day"
+                                  : new Date(e.date).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+                              </span>
+                            )}
+                            <div className="flex-1 min-w-0">{chip(e, { compact: !single })}</div>
+                          </div>
+                        );
+                      })}
+                      <button
+                        onClick={() => { setAddDate(toDateKey(d)); setAddOpen(true); }}
+                        className="w-full py-1.5 rounded-lg text-[11px] text-gray-300 hover:text-indigo-500 hover:bg-indigo-50/50 transition-colors"
+                      >
+                        + Add
+                      </button>
+                    </>
+                  )}
                 </div>
-              ))}
-            </div>
-            {/* Day columns */}
-            <div className="flex-1 grid" style={{ gridTemplateColumns: `repeat(${days.length}, minmax(0,1fr))` }}>
-              {days.map((d, i) => {
-                const timed = entriesOn(d).filter((e) => minutesOf(e) !== null);
-                return (
-                  <div key={i} className={`relative border-l border-gray-100 ${isToday(d) ? "bg-indigo-50/20" : ""}`}
-                    onClick={() => { setAddDate(d.toISOString().slice(0, 10)); setAddOpen(true); }}>
-                    {Array.from({ length: 24 }, (_, h) => (
-                      <div key={h} style={{ height: HOUR_H }} className="border-b border-gray-50" />
-                    ))}
-                    {/* Current-time line */}
-                    {isToday(d) && (
-                      <div className="absolute inset-x-0 z-10 pointer-events-none" style={{ top: (nowMin / 60) * HOUR_H }}>
-                        <div className="h-[2px] bg-red-500" />
-                        <div className="w-2 h-2 rounded-full bg-red-500 -mt-[5px] -ml-1" />
-                      </div>
-                    )}
-                    {/* Timed entries */}
-                    {timed.map((e) => {
-                      const startMin = minutesOf(e)!;
-                      const endMin = e.endDate
-                        ? (() => { const d2 = new Date(e.endDate); return d2.getHours() * 60 + d2.getMinutes(); })()
-                        : startMin + 45;
-                      const height = Math.max(22, ((endMin - startMin) / 60) * HOUR_H - 2);
-                      const meta = KIND_META[e.kind];
-                      return (
-                        <a key={`${e.kind}-${e.id}`} href={e.link ?? "#"}
-                          onClick={(ev) => ev.stopPropagation()}
-                          title={e.title}
-                          className={`absolute left-1 right-1 rounded-md border px-1.5 py-0.5 overflow-hidden ${meta.chip}`}
-                          style={{ top: (startMin / 60) * HOUR_H + 1, height }}>
-                          <p className="text-[10px] font-semibold truncate">{e.title}</p>
-                          {height > 30 && <p className="text-[9px] opacity-70">{e.time ?? new Date(e.date).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</p>}
-                        </a>
-                      );
-                    })}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     );
@@ -563,9 +574,9 @@ export default function MyCalendarPage() {
               </div>
             </div>
           ) : view === "day" ? (
-            <TimeGrid days={[anchor]} />
+            <AgendaGrid days={[anchor]} />
           ) : view === "week" ? (
-            <TimeGrid days={weekDays} />
+            <AgendaGrid days={weekDays} />
           ) : view === "month" ? (
             <div className="h-full bg-white border border-gray-200 rounded-2xl overflow-hidden">
               <MonthGrid

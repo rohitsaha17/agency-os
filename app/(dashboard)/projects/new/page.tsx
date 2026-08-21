@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { ProjectForm } from "@/components/projects/ProjectForm";
+import { RequireCapability } from "@/components/layout/RequireCapability";
 
 function NewProjectContent() {
   const searchParams = useSearchParams();
@@ -30,9 +31,13 @@ function NewProjectContent() {
 }
 
 export default function NewProjectPage() {
+  // The button is hidden for anyone below SMM, but the URL is still typeable —
+  // without this they'd fill in the whole form and meet a 403 on save.
   return (
-    <Suspense fallback={<div className="flex items-center justify-center h-full"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500" /></div>}>
-      <NewProjectContent />
-    </Suspense>
+    <RequireCapability capability="content.plan" what="Creating a project">
+      <Suspense fallback={<div className="flex items-center justify-center h-full"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500" /></div>}>
+        <NewProjectContent />
+      </Suspense>
+    </RequireCapability>
   );
 }

@@ -12,7 +12,9 @@ import {
   MonthGrid, MONTH_NAMES, isSameDay, getWeekDays, isToday, getDaysInGrid,
 } from "@/components/calendar/MonthGrid";
 import { useWheelPeriod } from "@/components/calendar/useWheelPeriod";
+import Link from "next/link";
 import { useCurrentUser } from "@/lib/useCurrentUser";
+import { can } from "@/lib/permissions";
 import { broadcastChange, useLiveRefresh } from "@/lib/live";
 import { toast } from "@/lib/toast";
 import { CreativeTypeDot } from "@/components/content/CreativeTypeDot";
@@ -103,6 +105,9 @@ function keyOf(d: Date) { return `${d.getFullYear()}-${d.getMonth()}-${d.getDate
 export default function MyCalendarPage() {
   const now = useMemo(() => new Date(), []);
   const { user: currentUser } = useCurrentUser();
+  // Same capability the sidebar gates /calendar on, so the link never points
+  // somewhere the person can't go.
+  const canSeeTeamCalendar = can(currentUser, "content.plan");
   const [view, setView] = useState<View>("week");
   const [anchor, setAnchor] = useState<Date>(new Date());
   const [entries, setEntries] = useState<Entry[]>([]);
@@ -408,9 +413,24 @@ export default function MyCalendarPage() {
     return (
       <div className="bg-white border border-gray-200 rounded-2xl h-full overflow-y-auto">
         {rows.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
+          <div className="flex flex-col items-center justify-center py-20 text-center px-6">
             <CalendarDays className="w-10 h-10 text-gray-200 mb-3" />
             <p className="text-sm text-gray-500">Nothing scheduled in the next 30 days.</p>
+            {/* This page only ever shows YOUR work. Empty here doesn't mean
+                empty everywhere, and saying nothing about that reads as the
+                calendar being broken. */}
+            <p className="text-xs text-gray-400 mt-1.5 max-w-xs">
+              This calendar shows only what is assigned to you.
+            </p>
+            {canSeeTeamCalendar && (
+              <Link
+                href="/calendar"
+                className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-indigo-600 hover:text-indigo-800"
+              >
+                See the team calendar
+                <ChevronRight className="w-3.5 h-3.5" />
+              </Link>
+            )}
           </div>
         ) : rows.map(([k, list]) => {
           const d = new Date(list[0].date);

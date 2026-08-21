@@ -63,6 +63,15 @@ export interface MonthGridProps {
   cellCount?: (day: Date) => number;
   /** Cell body below the day number. */
   renderCell: (day: Date, ctx: { inMonth: boolean; today: boolean; selected: boolean }) => React.ReactNode;
+  /**
+   * Phone cell body, when a full chip won't fit.
+   *
+   * A month of 42 cells across a 375px screen gives each day about 50px of
+   * width — enough for a number and a dot, not for a title, a client initial
+   * and a status. Supplying this switches phones to dots and puts the detail
+   * in the panel underneath, where there is room to read it.
+   */
+  renderCellMobile?: (day: Date, ctx: { inMonth: boolean; today: boolean; selected: boolean }) => React.ReactNode;
   /** Optional full-width strip ABOVE the day number (event banners). */
   renderStrip?: (day: Date, ctx: { inMonth: boolean }) => React.ReactNode;
   /**
@@ -75,7 +84,7 @@ export interface MonthGridProps {
 
 export function MonthGrid({
   view, year, month, weekStart, selected, loading,
-  onDayClick, cellCount, renderCell, renderStrip, fill,
+  onDayClick, cellCount, renderCell, renderCellMobile, renderStrip, fill,
 }: MonthGridProps) {
   const days = view === "month" ? getDaysInGrid(year, month) : getWeekDays(weekStart ?? new Date());
   const rows = days.length / 7;
@@ -137,10 +146,18 @@ export function MonthGrid({
               } ${
                 fill
                   ? "min-h-0 overflow-hidden"
-                  : view === "week" ? "min-h-[200px]" : "min-h-[80px] sm:min-h-[110px]"
+                  : view === "week"
+                    ? "min-h-[200px]"
+                    : renderCellMobile
+                      // Dots need a number's height and no more, so the whole
+                      // month fits above the fold and the agenda gets the rest.
+                      ? "min-h-[46px] sm:min-h-[110px]"
+                      : "min-h-[80px] sm:min-h-[110px]"
               } px-1.5 pb-1 pt-1 ${
                 isSelected
-                  ? "ring-2 ring-inset ring-indigo-500 dark:ring-indigo-400 z-10"
+                  ? renderCellMobile
+                    ? "sm:ring-2 sm:ring-inset sm:ring-indigo-500 dark:sm:ring-indigo-400 z-10"
+                    : "ring-2 ring-inset ring-indigo-500 dark:ring-indigo-400 z-10"
                   : ""
               }`}
             >
@@ -152,16 +169,24 @@ export function MonthGrid({
                 <span className={`h-6 min-w-6 px-1.5 flex items-center justify-center text-xs font-semibold rounded-full tabular-nums transition-shadow ${
                   todayCell
                     ? "bg-indigo-600 text-white shadow-sm shadow-indigo-600/40 ring-2 ring-white/70 dark:ring-slate-900"
-                    : inMonth
-                      ? "text-gray-700 dark:text-slate-200"
-                      : "text-gray-400 dark:text-slate-600 font-medium"
+                    : isSelected
+                      // A filled circle on the day you tapped: on a phone the
+                      // grid and the agenda are far apart on screen, and this
+                      // is what ties them together.
+                      ? "bg-gray-900 text-white dark:bg-slate-100 dark:text-slate-900"
+                      : inMonth
+                        ? "text-gray-700 dark:text-slate-200"
+                        : "text-gray-400 dark:text-slate-600 font-medium"
                 }`}>
                   {label}
                 </span>
                 {count > 0 && (
                   // Was text-gray-300, which was invisible against a white
                   // cell and pointless against a dark one.
-                  <span className="absolute right-0 top-1/2 -translate-y-1/2 min-w-[16px] h-4 px-1 flex items-center justify-center rounded-full text-[10px] font-semibold tabular-nums bg-gray-100 text-gray-500 dark:bg-white/[0.08] dark:text-slate-400">
+                  <span className={`absolute right-0 top-1/2 -translate-y-1/2 min-w-[16px] h-4 px-1 items-center justify-center rounded-full text-[10px] font-semibold tabular-nums bg-gray-100 text-gray-500 dark:bg-white/[0.08] dark:text-slate-400 ${
+                    // With dots underneath, a count as well is saying it twice.
+                    renderCellMobile ? "hidden sm:flex" : "flex"
+                  }`}>
                     {count}
                   </span>
                 )}
@@ -176,9 +201,20 @@ export function MonthGrid({
 
               {/* Cell body scrolls inside its own cell so the grid never
                   pushes the page taller than the viewport. */}
-              <div data-scrollable className={fill ? "flex-1 min-h-0 overflow-y-auto" : ""}>
-                {inMonth && renderCell(day, { inMonth, today: todayCell, selected: isSelected })}
-              </div>
+              {renderCellMobile ? (
+                <>
+                  <div className="sm:hidden flex-shrink-0">
+                    {inMonth && renderCellMobile(day, { inMonth, today: todayCell, selected: isSelected })}
+                  </div>
+                  <div data-scrollable className={`hidden sm:block ${fill ? "flex-1 min-h-0 overflow-y-auto" : ""}`}>
+                    {inMonth && renderCell(day, { inMonth, today: todayCell, selected: isSelected })}
+                  </div>
+                </>
+              ) : (
+                <div data-scrollable className={fill ? "flex-1 min-h-0 overflow-y-auto" : ""}>
+                  {inMonth && renderCell(day, { inMonth, today: todayCell, selected: isSelected })}
+                </div>
+              )}
             </div>
           );
         })}

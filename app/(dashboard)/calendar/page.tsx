@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 import {
   ChevronLeft, ChevronRight, Calendar as CalIcon,
-  FolderKanban, CheckSquare, Filter, X, Users, Plus, Zap, PartyPopper,
+  FolderKanban, CheckSquare, Filter, X, Users, Plus, Zap, PartyPopper, Search,
 } from "lucide-react";
 import type { CalendarEvent, ContentStatus, Task } from "@/types";
 import { useCurrentUser } from "@/lib/useCurrentUser";
@@ -107,6 +107,15 @@ export default function CalendarPage() {
   const [events, setEvents] = useState<CalendarEvent[]>([]); // legacy layers
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Date | null>(null);
+
+  // Open on today. The panel used to start empty, so the calendar loaded with
+  // a blank column on desktop and no agenda at all on a phone — you had to
+  // tap something before the page said anything. Set after mount rather than
+  // in the initial state: `new Date()` during a server render can disagree
+  // with the client's across midnight, and that is a hydration mismatch.
+  useEffect(() => {
+    setSelected((cur) => cur ?? new Date());
+  }, []);
   // v3 Phase 0 (defect 4): clicking a content chip opens THAT item in the
   // side panel instead of navigating away to the client page.
   const [selectedItem, setSelectedItem] = useState<MasterItem | null>(null);
@@ -123,6 +132,7 @@ export default function CalendarPage() {
   const [filterUserId, setFilterUserId] = useState("");
   const [filterProjectId, setFilterProjectId] = useState("");
   const [filterClientId, setFilterClientId] = useState("");
+  const [search, setSearch] = useState("");
   const [filterPriority, setFilterPriority] = useState("");
   const [filterTypeId, setFilterTypeId] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
@@ -131,7 +141,7 @@ export default function CalendarPage() {
 
   // Filter options
   const [users, setUsers] = useState<FilterOption[]>([]);
-  const [projects, setProjects] = useState<FilterOption[]>([]);
+  const [projects, setProjects] = useState<(FilterOption & { clientId?: string })[]>([]);
   const [clients, setClients] = useState<FilterOption[]>([]);
   const [types, setTypes] = useState<{ id: string; name: string; icon: string | null }[]>([]);
 
@@ -139,13 +149,20 @@ export default function CalendarPage() {
   const activeFilterCount = [
     filterUserId, filterProjectId, filterClientId, filterPriority,
     filterTypeId, filterStatus, extraOnly ? "1" : "", adHocOnly ? "1" : "",
+    search.trim(),
   ].filter(Boolean).length;
 
   useEffect(() => {
     if (canFilterByUser) {
       fetch("/api/users").then(r => r.json()).then(d => setUsers(Array.isArray(d) ? d.map((u: FilterOption) => ({ id: u.id, name: u.name })) : []));
     }
-    fetch("/api/projects?status=ACTIVE,DRAFT,ON_HOLD").then(r => r.json()).then(d => setProjects(Array.isArray(d) ? d.map((p: FilterOption) => ({ id: p.id, name: p.name })) : []));
+    // clientId is kept, not dropped: picking a project should fill in the
+    // client it belongs to, and picking a client should narrow the projects.
+    fetch("/api/projects?status=ACTIVE,DRAFT,ON_HOLD").then(r => r.json()).then(d => setProjects(
+      Array.isArray(d) ? d.map((p: { id: string; name: string; clientId?: string }) => ({
+        id: p.id, name: p.name, clientId: p.clientId ?? "",
+      })) : [],
+    ));
     fetch("/api/clients").then(r => r.json()).then(d => setClients(Array.isArray(d) ? d.map((c: FilterOption) => ({ id: c.id, name: c.name })) : []));
     fetch("/api/creative-types").then(r => r.json()).then(d => { if (Array.isArray(d)) setTypes(d); });
   }, [canFilterByUser]);
@@ -200,7 +217,35 @@ export default function CalendarPage() {
   const clearFilters = () => {
     setFilterUserId(""); setFilterProjectId(""); setFilterClientId(""); setFilterPriority("");
     setFilterTypeId(""); setFilterStatus(""); setExtraOnly(false); setAdHocOnly(false);
+    setSearch("");
   };
+
+  /**
+   * Picking a project fills in the client it belongs to.
+   *
+   * The two filters are ANDed on the server, so choosing a project while a
+   * different client was selected returned an empty month and no explanation.
+   * A project has exactly one client, so there is nothing to ask about.
+   */
+  const chooseProject = (id: string) => {
+    setFilterProjectId(id);
+    const owner = projects.find((p) => p.id === id)?.clientId;
+    if (owner) setFilterClientId(owner);
+  };
+
+  /** Choosing a client drops a project belonging to somebody else. */
+  const chooseClient = (id: string) => {
+    setFilterClientId(id);
+    if (id && filterProjectId) {
+      const current = projects.find((p) => p.id === filterProjectId);
+      if (current?.clientId && current.clientId !== id) setFilterProjectId("");
+    }
+  };
+
+  /** Projects narrow to the chosen client — the rest can't match anyway. */
+  const visibleProjects = filterClientId
+    ? projects.filter((p) => !p.clientId || p.clientId === filterClientId)
+    : projects;
 
   // Scroll inside the grid to move between months/weeks (Google-style)
   const gridWrapRef = useRef<HTMLDivElement>(null);
@@ -249,7 +294,29 @@ export default function CalendarPage() {
       .map((s) => ({ label: CONTENT_STATUS_META[s].label, cls: CONTENT_STATUS_META[s].chip }));
   }, [colorBy, items, colorMaps]);
 
-  const itemsOn = useCallback((day: Date) => items.filter((i) => isSameDay(new Date(i.date), day)), [items]);
+  /**
+   * Text search across the month already loaded.
+   *
+   * Client-side on purpose: the month is in memory, so typing narrows the
+   * grid as you type instead of waiting on a round trip per keystroke. It
+   * searches the things you'd actually search by — what the piece is, who
+   * it's for, and which project it belongs to.
+   */
+  const searchedItems = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter((i) =>
+      i.topic.toLowerCase().includes(q)
+      || i.client.name.toLowerCase().includes(q)
+      || (i.project?.name ?? "").toLowerCase().includes(q)
+      || i.creativeType.name.toLowerCase().includes(q)
+    );
+  }, [items, search]);
+
+  const itemsOn = useCallback(
+    (day: Date) => searchedItems.filter((i) => isSameDay(new Date(i.date), day)),
+    [searchedItems],
+  );
   const eventsOn = useCallback((day: Date) => orgEvents.filter((e) => {
     const start = new Date(e.date);
     const end = e.endDate ? new Date(e.endDate) : start;
@@ -380,16 +447,36 @@ export default function CalendarPage() {
                 size="sm"
               />
             )}
+            {/* Search first: it's the fastest way to find one thing, and
+                everything after it is for narrowing rather than finding. */}
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search topic, client, project…"
+                className="w-full sm:w-56 pl-8 pr-7 py-1.5 text-xs bg-white border border-gray-200 rounded-lg text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-400"
+              />
+              {search && (
+                <button
+                  onClick={() => setSearch("")}
+                  aria-label="Clear search"
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 text-gray-400 hover:text-gray-700"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
             <Select
               value={filterClientId}
-              onChange={(v) => setFilterClientId(v)}
+              onChange={chooseClient}
               options={[{ value: "", label: "All Clients" }, ...clients.map((c) => ({ value: c.id, label: `${c.name}` }))]}
               size="sm"
             />
             <Select
               value={filterProjectId}
-              onChange={(v) => setFilterProjectId(v)}
-              options={[{ value: "", label: "All Projects" }, ...projects.map((p) => ({ value: p.id, label: `${p.name}` }))]}
+              onChange={chooseProject}
+              options={[{ value: "", label: "All Projects" }, ...visibleProjects.map((p) => ({ value: p.id, label: `${p.name}` }))]}
               size="sm"
             />
             <Select
@@ -482,6 +569,35 @@ export default function CalendarPage() {
                 </div>
               );
             }}
+            /* Phones: a dot per item, coloured by creative type, with the
+               detail in the agenda below. Three dots is the useful limit —
+               past that it's a smudge, so the rest becomes a count. */
+            renderCellMobile={(day) => {
+              const dayItems = itemsOn(day);
+              const evs = eventsOn(day);
+              const legacy = (showTasks || showProjects) ? legacyOn(day) : [];
+              const total = dayItems.length + evs.length + legacy.length;
+              if (total === 0) return null;
+              return (
+                <div className="flex items-center justify-center gap-[3px] pt-[3px]">
+                  {dayItems.slice(0, 3).map((i) => (
+                    <span
+                      key={i.id}
+                      className="w-[5px] h-[5px] rounded-full"
+                      style={{ backgroundColor: i.creativeType.color ?? "#6366f1" }}
+                    />
+                  ))}
+                  {dayItems.length === 0 && (evs.length > 0 || legacy.length > 0) && (
+                    <span className="w-[5px] h-[5px] rounded-full bg-gray-400 dark:bg-slate-500" />
+                  )}
+                  {total > 3 && (
+                    <span className="text-[8px] leading-none text-gray-400 dark:text-slate-500 font-semibold">
+                      +{total - 3}
+                    </span>
+                  )}
+                </div>
+              );
+            }}
             renderCell={(day) => {
               const dayItems = itemsOn(day);
               const legacy = (showTasks || showProjects) ? legacyOn(day) : [];
@@ -560,7 +676,12 @@ export default function CalendarPage() {
 
         {/* ── Side panel — one content item, or the whole day ── */}
         {selected && (
-          <div className="lg:w-80 flex-shrink-0 border-t lg:border-t-0 lg:border-l border-gray-200 bg-white overflow-y-auto max-h-[50vh] lg:max-h-none">
+          <div className="lg:w-80 flex-shrink-0 border-t lg:border-t-0 lg:border-l border-gray-200 bg-white overflow-y-auto max-h-[52vh] lg:max-h-none rounded-t-2xl lg:rounded-none shadow-[0_-8px_24px_-12px_rgba(15,23,42,0.18)] lg:shadow-none">
+            {/* Grab handle — phones only. It reads as a sheet you can flick
+                through rather than as the page simply continuing. */}
+            <div className="lg:hidden sticky top-0 z-10 bg-white pt-2 pb-1 flex justify-center">
+              <span className="w-9 h-1 rounded-full bg-gray-200" />
+            </div>
             {selectedItem ? (
               /* v3 Phase 0 (defect 4): a chip opens its own item here */
               <div className="p-4 sm:p-5">
@@ -640,9 +761,24 @@ export default function CalendarPage() {
                 <h3 className="text-sm font-semibold text-gray-900">
                   {selected.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
                 </h3>
-                <button onClick={() => setSelected(null)} className="text-gray-400 hover:text-gray-600">
-                  <X className="w-4 h-4" />
-                </button>
+                {isSameDay(selected, new Date()) ? (
+                  <span className="text-xs font-medium text-indigo-600">Today</span>
+                ) : (
+                  // Getting back to today took scrolling the month and finding
+                  // the cell. One tap instead.
+                  <button
+                    onClick={() => {
+                      const now = new Date();
+                      setYear(now.getFullYear());
+                      setMonth(now.getMonth());
+                      setSelectedItem(null);
+                      setSelected(now);
+                    }}
+                    className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
+                  >
+                    Today
+                  </button>
+                )}
               </div>
 
               {/* Events */}

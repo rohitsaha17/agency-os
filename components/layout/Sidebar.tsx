@@ -48,7 +48,10 @@ const navItems: {
       { href: "/approvals",    label: "Approvals",    icon: ShieldCheck,   need: "tasks.review"      },
       { href: "/my-calendar",  label: "My Calendar",  icon: CalendarClock, need: null                },
       { href: "/messages",     label: "Messages",     icon: MessageSquare, need: null                },
-      { href: "/calendar",     label: "Calendar",     icon: Calendar,      need: "content.plan"      },
+      // "Calendar" next to "My Calendar" gave no clue which was which, so a
+      // manager looking for the reel somebody else was scheduling opened the
+      // personal one, found nothing, and concluded the calendar was broken.
+      { href: "/calendar",     label: "Team Calendar", icon: Calendar,     need: "content.plan"      },
       { href: "/files",        label: "Files",        icon: HardDrive,     need: null                },
       { href: "/reports",      label: "Reports",      icon: BarChart3,     need: "reports.delivery"  },
     ],

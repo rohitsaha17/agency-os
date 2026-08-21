@@ -8,7 +8,7 @@ import {
   Calendar, CalendarClock, Receipt, Settings,
   HardDrive, TrendingDown, Scroll, Menu, X,
   Sun, MessageSquare, LogOut, BarChart3,
-  ChevronsLeft, ChevronsRight, Search,
+  PanelLeftClose, PanelLeftOpen,
 } from "lucide-react";
 import { ThemeToggle, ThemeToggleIcon } from "@/components/ui/ThemeToggle";
 import { BrandLogo } from "@/components/ui/BrandLogo";
@@ -94,18 +94,18 @@ function NavItem({
           transition-all duration-150 group overflow-hidden
           ${collapsed ? "justify-center px-0 py-2.5" : "gap-3 px-3 py-2.5"}
           ${active
-            ? "bg-white/[0.06] text-white"
+            ? "bg-indigo-600 text-white shadow-sm shadow-indigo-900/40"
             : "text-slate-400 hover:text-slate-100 hover:bg-white/[0.05]"
           }
           ${soon ? "cursor-default opacity-60" : ""}
         `}
       >
-        {/* Active left indicator bar */}
+        {/* Accent on the trailing edge of the selected pill */}
         <span
           className={`
-            absolute left-0 inset-y-[20%] w-[3px] rounded-r-full
+            absolute right-0 inset-y-[22%] w-[3px] rounded-l-full
             transition-all duration-200
-            ${active ? "bg-indigo-400 opacity-100" : "opacity-0"}
+            ${active ? "bg-indigo-300 opacity-100" : "opacity-0"}
           `}
         />
 
@@ -113,12 +113,12 @@ function NavItem({
         <span className="relative flex-shrink-0">
           <Icon
             className={`w-4 h-4 transition-colors duration-150
-              ${active ? "text-indigo-400" : "text-slate-500 group-hover:text-slate-300"}
+              ${active ? "text-white" : "text-slate-500 group-hover:text-slate-300"}
             `}
           />
           {/* Collapsed: badge becomes a dot on the icon */}
           {collapsed && badge != null && badge > 0 && (
-            <span className="absolute -top-1 -right-1.5 min-w-[14px] h-[14px] flex items-center justify-center px-0.5 text-[9px] font-bold leading-none text-white bg-indigo-500 rounded-full ring-2 ring-slate-900">
+            <span className={`absolute -top-1 -right-1.5 min-w-[14px] h-[14px] flex items-center justify-center px-0.5 text-[9px] font-bold leading-none text-white rounded-full ring-2 ${active ? "bg-white/25 ring-indigo-600" : "bg-indigo-500 ring-slate-900"}`}>
               {badge > 9 ? "9+" : badge}
             </span>
           )}
@@ -197,20 +197,14 @@ function NavContent({
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      {/* Global Search — collapsed shows a compact icon trigger */}
-      <div className={`pt-3 pb-1 flex-shrink-0 ${collapsed ? "px-3" : "px-2.5"}`}>
-        {collapsed ? (
-          <button
-            title="Search (⌘K)"
-            onClick={() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true, bubbles: true }))}
-            className="w-full flex items-center justify-center py-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] transition-colors"
-          >
-            <Search className="w-4 h-4" />
-          </button>
-        ) : (
-          <GlobalSearch />
-        )}
-      </div>
+      <UserCard appUser={appUser} collapsed={collapsed} />
+
+      {/*
+        The search box is gone from the nav, but search isn't: GlobalSearch
+        still mounts (hidden) so Cmd/Ctrl+K opens it. Dropping the component
+        entirely would have taken the shortcut with it, silently.
+      */}
+      <GlobalSearch hideTrigger />
 
       {/* Navigation */}
       <nav className={`flex-1 overflow-y-auto py-2 space-y-5 ${collapsed ? "px-3" : "px-2.5"}`}>
@@ -258,11 +252,6 @@ function NavContent({
             >
               <Settings className="w-4 h-4" />
             </Link>
-            <div className="flex justify-center pt-1" title={appUser?.name ?? "Signed out"}>
-              <div className="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center text-white text-xs font-bold shadow-sm ring-1 ring-indigo-400/30">
-                {appUser ? appUser.name.charAt(0).toUpperCase() : "·"}
-              </div>
-            </div>
             <button
               onClick={async () => {
                 try { await fetch("/api/auth/logout", { method: "POST" }); } catch { /* ignore */ }
@@ -296,34 +285,86 @@ function NavContent({
               {settingsLabel}
             </Link>
 
-            {/* User row */}
-            <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg mt-1">
-              <div className="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0 shadow-sm ring-1 ring-indigo-400/30">
-                {appUser ? appUser.name.charAt(0).toUpperCase() : "·"}
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-semibold text-slate-200 truncate leading-tight">
-                  {appUser?.name ?? "Signed out"}
-                </p>
-                <p className="text-[10px] text-slate-500 truncate leading-tight mt-0.5">
-                  {appUser?.email ?? "Vibrnd Studio Flow"}
-                </p>
-              </div>
-              <button
-                onClick={async () => {
-                  try { await fetch("/api/auth/logout", { method: "POST" }); } catch { /* ignore */ }
-                  window.location.href = "/login";
-                }}
-                title="Log out"
-                className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-white/[0.06] transition-colors flex-shrink-0"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-              </button>
-            </div>
+            {/* Sign out */}
+            <button
+              onClick={async () => {
+                try { await fetch("/api/auth/logout", { method: "POST" }); } catch { /* ignore */ }
+                window.location.href = "/login";
+              }}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-400 hover:text-red-400 hover:bg-white/[0.05] transition-all duration-150"
+            >
+              <LogOut className="w-4 h-4 text-slate-500" />
+              Log out
+            </button>
           </>
         )}
       </div>
     </div>
+  );
+}
+
+const ROLE_LABEL: Record<string, string> = {
+  OWNER: "Owner", ADMIN: "Admin", MANAGER: "Manager",
+  SMM: "SMM", TEAM: "Team", MEMBER: "Team",
+};
+
+/**
+ * Who is signed in, at the top of the rail rather than buried in the footer.
+ *
+ * The name and what they are is the context for everything below it — an SMM
+ * and an editor see different navs, and the card says which one you're
+ * looking at.
+ */
+function UserCard({ appUser, collapsed }: {
+  appUser?: { name: string; email: string; role?: string } | null;
+  collapsed?: boolean;
+}) {
+  const initials = appUser
+    ? appUser.name.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase()
+    : "·";
+  const role = appUser?.role ? ROLE_LABEL[appUser.role] ?? appUser.role : null;
+
+  if (collapsed) {
+    return (
+      <div className="flex justify-center px-3 pb-2 flex-shrink-0" title={appUser?.name ?? "Signed out"}>
+        <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center text-white text-xs font-bold shadow-sm ring-2 ring-white/10">
+          {initials}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="px-2.5 pb-3 flex-shrink-0">
+      <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white/[0.04] border border-white/[0.06]">
+        <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0 shadow-sm ring-2 ring-white/10">
+          {initials}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-[13px] font-semibold text-slate-100 truncate leading-tight">
+            {appUser?.name ?? "Signed out"}
+          </p>
+          <p className="text-[11px] text-slate-500 truncate leading-tight mt-0.5">
+            {role ?? appUser?.email ?? "Vibrnd Studio Flow"}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Widen or narrow the rail. Lives in the header beside the bell. */
+function CollapseToggle({ collapsed, onToggle }: { collapsed?: boolean; onToggle: () => void }) {
+  const label = collapsed ? "Expand sidebar" : "Collapse sidebar";
+  return (
+    <button
+      onClick={onToggle}
+      title={label}
+      aria-label={label}
+      className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.08] transition-colors"
+    >
+      {collapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
+    </button>
   );
 }
 
@@ -440,9 +481,16 @@ export function Sidebar() {
         {/* Subtle top border accent */}
         <div className="absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-indigo-500/40 to-transparent" />
 
-        {/* Logo / Brand + notification bell */}
+        {/*
+          Brand, bell and the collapse toggle share one row.
+
+          The toggle used to be a small circle hanging off the outside edge of
+          the rail, overlapping page content and looking like a dropped
+          artefact. It's a normal icon button in the header now, sitting with
+          the other two controls.
+        */}
         <div className={`h-16 flex items-center border-b border-white/[0.06] flex-shrink-0 ${
-          collapsed ? "justify-center px-2" : "justify-between px-5"
+          collapsed ? "flex-col justify-center gap-0 px-2" : "justify-between px-4"
         }`}>
           {collapsed ? (
             <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-lg flex items-center justify-center shadow-sm ring-1 ring-indigo-400/20" title="Vibrnd Studio Flow">
@@ -451,29 +499,23 @@ export function Sidebar() {
           ) : (
             <>
               <Logo />
-              <NotificationBell />
+              <div className="flex items-center gap-0.5">
+                <NotificationBell />
+                <CollapseToggle collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)} />
+              </div>
             </>
           )}
         </div>
 
-        {/* Collapsed: bell moves under the mark so it stays reachable */}
+        {/* Collapsed: the two controls stack under the mark so both stay reachable */}
         {collapsed && (
-          <div className="flex justify-center pt-2 flex-shrink-0">
+          <div className="flex flex-col items-center gap-1 pt-2 pb-1 flex-shrink-0">
             <NotificationBell />
+            <CollapseToggle collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)} />
           </div>
         )}
 
         <NavContent pathname={pathname} appUser={appUser} unreadCount={unreadCount} collapsed={collapsed} />
-
-        {/* Collapse / expand handle */}
-        <button
-          onClick={() => setCollapsed((c) => !c)}
-          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          className="absolute -right-3 top-20 w-6 h-6 rounded-full bg-slate-800 border border-white/10 text-slate-400 hover:text-white hover:bg-slate-700 shadow-md flex items-center justify-center transition-colors z-40"
-        >
-          {collapsed ? <ChevronsRight className="w-3.5 h-3.5" /> : <ChevronsLeft className="w-3.5 h-3.5" />}
-        </button>
       </aside>
 
       {/* ── Mobile / tablet top bar ───────────────────────────── */}

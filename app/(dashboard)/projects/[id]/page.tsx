@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   ChevronLeft, ChevronRight, Plus, Calendar, Calendar as CalIcon, DollarSign, CheckSquare,
@@ -134,12 +134,13 @@ function ProgressRing({ progress }: { progress: number }) {
 }
 
 export default function ProjectDetailPage() {
+  const router = useRouter();
   const params = useParams();
   const id = params.id as string;
   const toast = useToast();
   const confirmDialog = useConfirm();
   const { user: currentUser } = useCurrentUser();
-  const canManageChannels = currentUser?.role === "ADMIN" || currentUser?.role === "MANAGER";
+  const canManageChannels = can(currentUser, "content.plan");
   // What the money side of a project looks like depends on who's looking.
   // Contracts, invoices and tax are the agency's commercial business — admin
   // and manager only. Planning is the SMM's. Everyone else gets the work.
@@ -655,6 +656,15 @@ export default function ProjectDetailPage() {
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="bg-white border-b border-gray-200 px-4 sm:px-6 lg:px-8 py-4 sm:py-5 flex-shrink-0">
+        {/* Back, then the trail. The breadcrumb says where you are; this says
+            how to leave, and matches the client page. */}
+        <button
+          onClick={() => router.back()}
+          className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 transition-colors mb-3"
+        >
+          <ChevronLeft className="w-4 h-4" /> Back
+        </button>
+
         <nav className="flex items-center gap-2 text-sm text-gray-500 mb-2">
           <Link href="/projects" className="hover:text-gray-800 transition-colors">Projects</Link>
           <ChevronRight className="w-3.5 h-3.5" />
@@ -1192,7 +1202,7 @@ export default function ProjectDetailPage() {
                 <p className="text-sm text-gray-500 mb-1">No channels for this project yet</p>
                 <p className="text-xs text-gray-400 mb-4">Create a channel to start collaborating</p>
 
-                {!showCreateChannel ? (
+                {!canManageChannels ? null : !showCreateChannel ? (
                   <button
                     onClick={() => setShowCreateChannel(true)}
                     className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
@@ -1312,12 +1322,14 @@ export default function ProjectDetailPage() {
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   )}
-                  <button
-                    onClick={() => setShowCreateChannel(!showCreateChannel)}
-                    className="ml-auto flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors"
-                  >
-                    <Plus className="w-3.5 h-3.5" /> New Channel
-                  </button>
+                  {canManageChannels && (
+                    <button
+                      onClick={() => setShowCreateChannel(!showCreateChannel)}
+                      className="ml-auto flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> New Channel
+                    </button>
+                  )}
                 </div>
 
                 {/* Inline channel creation */}

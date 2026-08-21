@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
+import { requireCapability } from "@/lib/api-permissions";
+import { can } from "@/lib/permissions";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 
 type Params = { params: Promise<{ id: string }> };
@@ -40,6 +42,8 @@ export async function POST(req: NextRequest, { params }: Params) {
   const { id: channelId } = await params;
   try {
     const user = await requireAuth(req);
+    // Who is in a channel is the channel owner's call.
+    requireCapability(user, "content.plan");
     await assertChannelInOrg(channelId, user.organizationId);
 
     const { userIds, role } = await req.json();
@@ -76,6 +80,8 @@ export async function DELETE(req: NextRequest, { params }: Params) {
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get("userId");
     if (!userId) throw new ApiError("userId required", 400);
+    // Anyone may leave a channel; removing someone else is the owner's call.
+    if (userId !== user.id) requireCapability(user, "content.plan");
     await prisma.channelMember.delete({ where: { channelId_userId: { channelId, userId } } });
     return NextResponse.json({ success: true });
   } catch (err) {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
+import { requireCapability } from "@/lib/api-permissions";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 
 const CHANNEL_SELECT = {
@@ -57,6 +58,10 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const user = await requireAuth(req);
+    // Opening a channel is a structural decision about where a conversation
+    // lives, so it sits with the people who run the work — SMM and above.
+    // This had no gate at all: anyone signed in could create one.
+    requireCapability(user, "content.plan");
     const { name, description, type, projectId, clientId, memberIds } = await req.json();
     if (!name?.trim()) throw new ApiError("Channel name is required", 400);
 

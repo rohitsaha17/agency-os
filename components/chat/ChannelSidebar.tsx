@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { useCurrentUser } from "@/lib/useCurrentUser";
+import { can } from "@/lib/permissions";
 import {
   Hash, Lock, Users, ChevronDown, ChevronRight, Plus,
   Search, Building2, FolderKanban, MessageCircle, Globe,
@@ -101,6 +103,8 @@ interface ChannelSidebarProps {
 export function ChannelSidebar({
   channels, activeChannelId, onSelectChannel, onCreateChannel, loading = false,
 }: ChannelSidebarProps) {
+  const { user: me } = useCurrentUser();
+  const canCreate = can(me, "content.plan");
   const [search, setSearch] = useState("");
 
   const filtered = search
@@ -137,13 +141,16 @@ export function ChannelSidebar({
       {/* Header */}
       <div className="h-14 flex items-center px-4 border-b border-slate-700/50 flex-shrink-0">
         <span className="text-white font-semibold text-sm flex-1">Messages</span>
-        <button
-          onClick={onCreateChannel}
-          className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.08] transition-colors"
-          title="Create channel"
-        >
-          <Plus className="w-4 h-4" />
-        </button>
+        {/* Opening a channel is a planner's call — see POST /api/channels. */}
+        {canCreate && (
+          <button
+            onClick={onCreateChannel}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.08] transition-colors"
+            title="Create channel"
+          >
+            <Plus className="w-4 h-4" />
+          </button>
+        )}
       </div>
 
       {/* Search */}

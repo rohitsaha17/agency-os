@@ -222,7 +222,9 @@ export default function ClientDetailPage() {
   const toast   = useToast();
   const confirm = useConfirm();
   const { user: currentUser } = useCurrentUser();
-  const canManageChannels = can(currentUser, "clients.manage");
+  // Opening a channel goes with running the work, not with owning the client
+  // record — an SMM plans this client's content and needs somewhere to run it.
+  const canManageChannels = can(currentUser, "content.plan");
   // v3: capability-driven, not role-driven. The API strips the same fields.
   const seesMoney = can(currentUser, "financials.view");
   const seesContacts = canViewContacts(currentUser);
@@ -1366,7 +1368,7 @@ export default function ClientDetailPage() {
               <div className="bg-white border border-gray-200 rounded-xl p-10 text-center">
                 <MessageSquare className="w-8 h-8 text-gray-300 mx-auto mb-2" />
                 <p className="text-sm text-gray-500">No channels for this client yet.</p>
-                {!showCreateChannel ? (
+                {!canManageChannels ? null : !showCreateChannel ? (
                   <button
                     onClick={() => setShowCreateChannel(true)}
                     className="mt-3 inline-flex items-center gap-1.5 text-sm text-indigo-600 hover:text-indigo-700 font-medium"
@@ -1430,13 +1432,15 @@ export default function ClientDetailPage() {
                 <div className="w-56 flex-shrink-0 bg-white border border-gray-200 rounded-xl overflow-hidden flex flex-col">
                   <div className="px-3 py-2.5 border-b border-gray-100 flex items-center justify-between">
                     <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Channels</p>
-                    <button
-                      onClick={() => setShowCreateChannel(!showCreateChannel)}
-                      className="text-indigo-600 hover:text-indigo-700"
-                      title="New Channel"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                    </button>
+                    {canManageChannels && (
+                      <button
+                        onClick={() => setShowCreateChannel(!showCreateChannel)}
+                        className="text-indigo-600 hover:text-indigo-700"
+                        title="New Channel"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
                   {showCreateChannel && (
                     <div className="px-3 py-2 border-b border-gray-100 space-y-2">

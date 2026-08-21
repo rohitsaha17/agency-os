@@ -26,7 +26,14 @@ const TYPE_META: Record<ResultType, { label: string; icon: React.ReactNode; colo
   message: { label: "Message", icon: <MessageSquare className="w-3.5 h-3.5" />, color: "text-sky-600 bg-sky-50" },
 };
 
-export function GlobalSearch() {
+export function GlobalSearch({ hideTrigger = false }: {
+  /**
+   * Mount the Cmd/Ctrl+K handler and the dialog without drawing the search
+   * box. The nav no longer carries a search field, but losing the shortcut
+   * along with it would be a silent regression.
+   */
+  hideTrigger?: boolean;
+} = {}) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -122,6 +129,7 @@ export function GlobalSearch() {
   let flatIndex = 0;
 
   if (!open) {
+    if (hideTrigger) return null;
     return (
       <button
         onClick={() => setOpen(true)}

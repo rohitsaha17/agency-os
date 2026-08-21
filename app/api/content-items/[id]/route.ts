@@ -4,6 +4,7 @@ import { requireAuth } from "@/lib/auth";
 import { requireCapability } from "@/lib/api-permissions";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 import { can } from "@/lib/permissions";
+import { isSettled, settledReason } from "@/lib/content-status";
 import { createContentWorkTask, syncPlanningTask } from "@/lib/auto-tasks";
 
 type Params = { params: Promise<{ id: string }> };
@@ -48,18 +49,36 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   try {
     const user = await requireAuth(req);
     const { id } = await params;
-    await findItem(id, user.organizationId);
+    const existing = await findItem(id, user.organizationId);
+    const body = await req.json();
     const {
       date, creativeTypeId, topic, description, referenceUrl, referenceFileId,
       isExtra, isAdHoc, projectId, countAgainstPrevMonth,
       // v3: billing intent, the cycle, and assigning from the plan
       billingIntent, cycleId, assigneeId, taskDueAt, taskPriority,
-    } = await req.json();
+    } = body;
 
     // v3: an SMM flags work but never un-flags an extra — turning a billable
     // extra back into included work is a pricing decision, so it needs
     // projects.pricing (docs/V3_CONTEXT.md §2).
     const canOverrideBilling = can(user, "projects.pricing");
+
+    /**
+     * An approved or posted item is a record, not a form. Rewriting the brief
+     * after approval would leave the recorded decision describing something
+     * that no longer exists.
+     *
+     * The status field itself is exempt: that is how a piece legitimately
+     * moves on — approved to scheduled, scheduled to posted.
+     */
+    if (isSettled(existing.status)) {
+      const editing = Object.keys(body).filter(
+        (k) => !["status", "billingIntent"].includes(k),
+      );
+      if (editing.length > 0) {
+        throw new ApiError(settledReason(existing.status), 409);
+      }
+    }
 
     if (creativeTypeId) {
       const type = await prisma.creativeType.findFirst({

@@ -24,6 +24,7 @@ import type { ContentStatus } from "@/types";
 import { CreativeTypeDot } from "@/components/content/CreativeTypeDot";
 import { Select } from "@/components/ui/Select";
 import { matchingCrafts } from "@/lib/craft-match";
+import { isSettled, settledReason } from "@/lib/content-status";
 
 // ── shapes the plan endpoint returns ──
 
@@ -516,6 +517,13 @@ function PlanItemDialog({
   const [extraPrompt, setExtraPrompt] = useState<{ used: number; quota: number } | null>(null);
 
   /**
+   * Approved and beyond is settled: the fields become a read-out of what was
+   * agreed. PATCH refuses these edits anyway, so offering them was a form
+   * whose Save button was always going to fail.
+   */
+  const settled = isSettled(item?.status);
+
+  /**
    * A photo shoot wants a photographer, not the whole team. Narrow the picker
    * to the crafts that suit this creative type, with a way back to the full
    * list — nobody should be unable to assign because a designation was named
@@ -564,11 +572,21 @@ function PlanItemDialog({
         onClick={(e) => e.stopPropagation()}>
         <div className="px-5 py-4 border-b border-gray-100">
           <h3 className="text-sm font-semibold text-gray-900">
-            {item ? "Edit content" : "Add content"}
+            {settled ? "Content details" : item ? "Edit content" : "Add content"}
           </h3>
         </div>
 
         <div className="p-5 space-y-4">
+          {/* Approved work is a record of what was agreed. Saying so beats
+              presenting an edit form whose Save is going to be refused. */}
+          {settled && (
+            <div className="bg-gray-50 border border-gray-200 rounded-xl p-3">
+              <p className="text-xs text-gray-600 flex items-start gap-2">
+                <Lock className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-gray-400" />
+                <span>{settledReason(item?.status)}</span>
+              </p>
+            </div>
+          )}
           {/* Quota-full confirmation — the SMM decides, having been told */}
           {extraPrompt && (
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
@@ -596,7 +614,7 @@ function PlanItemDialog({
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1.5">Date</label>
               <input type="date" value={form.date}
-                onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
+                onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} readOnly={settled}
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
             </div>
             <div>
@@ -605,14 +623,14 @@ function PlanItemDialog({
                 value={form.creativeTypeId}
                 onChange={(v) => setForm((f) => ({ ...f, creativeTypeId: v }))}
                 options={[{ value: "", label: "Pick a type…" }, ...types.map((t) => ({ value: t.id, label: String(`${t.icon ? `${t.icon} ` : ""}${t.name}`) }))]}
-              />
+               disabled={settled}/>
             </div>
           </div>
 
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1.5">Topic *</label>
             <input value={form.topic}
-              onChange={(e) => setForm((f) => ({ ...f, topic: e.target.value }))}
+              onChange={(e) => setForm((f) => ({ ...f, topic: e.target.value }))} readOnly={settled}
               placeholder="e.g. Diwali teaser"
               className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
           </div>
@@ -620,7 +638,7 @@ function PlanItemDialog({
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1.5">Brief</label>
             <textarea value={form.description} rows={3}
-              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} readOnly={settled}
               placeholder="What should this say, look like, reference…"
               className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none" />
           </div>
@@ -628,7 +646,7 @@ function PlanItemDialog({
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1.5">Reference</label>
             <input type="text" inputMode="url" value={form.referenceUrl}
-              onChange={(e) => setForm((f) => ({ ...f, referenceUrl: e.target.value }))}
+              onChange={(e) => setForm((f) => ({ ...f, referenceUrl: e.target.value }))} readOnly={settled}
               placeholder="https://…"
               className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
           </div>
@@ -648,10 +666,13 @@ function PlanItemDialog({
                   label: `${u.name}${u.jobTitle?.name ? ` — ${u.jobTitle.name}` : ""}`,
                 })),
               ]}
-            />
+             disabled={settled}/>
             {narrowed && (
+              /* Says which craft it filtered to and why, instead of a fixed
+                 line about shooting that was wrong the moment you picked a
+                 Reel. The list is a suggestion, so the way out is right here. */
               <p className="text-[11px] text-gray-400 mt-1">
-                Showing the people who shoot. {" "}
+                Showing people who work on {chosenType?.name.toLowerCase() ?? "this"}.{" "}
                 <button type="button" onClick={() => setShowEveryone(true)}
                   className="text-indigo-600 hover:underline">
                   Show everyone
@@ -674,7 +695,7 @@ function PlanItemDialog({
                   { value: "HIGH", label: "High" },
                   { value: "URGENT", label: "Urgent" },
                 ]}
-              />
+               disabled={settled}/>
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1.5">
                   Deadline for the editor
@@ -682,12 +703,15 @@ function PlanItemDialog({
                 <input
                   type="datetime-local"
                   value={form.taskDueAt}
-                  onChange={(e) => setForm((f) => ({ ...f, taskDueAt: e.target.value }))}
+                  onChange={(e) => setForm((f) => ({ ...f, taskDueAt: e.target.value }))} readOnly={settled}
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
+                {/* Two dates sit on this item and people conflate them, so
+                    both get named and given their job. An em-dash fragment
+                    ("In hand by — not Sep 1") read as a riddle. */}
                 <p className="text-[11px] text-gray-400 mt-1">
-                  In hand by — not{" "}
-                  {new Date(form.date + "T00:00:00").toLocaleDateString("en-US", { day: "numeric", month: "short" })}, when it goes out.
+                  When the editor must finish. It publishes{" "}
+                  {new Date(form.date + "T00:00:00").toLocaleDateString("en-US", { day: "numeric", month: "short" })}.
                 </p>
               </div>
             </div>
@@ -697,10 +721,14 @@ function PlanItemDialog({
         </div>
 
         <div className="px-5 py-4 border-t border-gray-100 flex justify-end gap-2">
-          <Button variant="secondary" size="sm" onClick={onClose}>Cancel</Button>
-          <Button size="sm" loading={saving} onClick={() => submit(false)}>
-            {item ? "Save" : "Add content"}
+          <Button variant="secondary" size="sm" onClick={onClose}>
+            {settled ? "Close" : "Cancel"}
           </Button>
+          {!settled && (
+            <Button size="sm" loading={saving} onClick={() => submit(false)}>
+              {item ? "Save" : "Add content"}
+            </Button>
+          )}
         </div>
       </div>
     </div>

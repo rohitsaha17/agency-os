@@ -19,6 +19,7 @@ import { TaskBoard } from "@/components/tasks/TaskBoard";
 import { TaskList } from "@/components/tasks/TaskList";
 import { TaskModal } from "@/components/tasks/TaskModal";
 import { PlanTab } from "@/components/projects/PlanTab";
+import { QuickInvoiceDialog } from "@/components/projects/QuickInvoiceDialog";
 import { TaskPanel } from "@/components/tasks/TaskPanel";
 import { DeliveryDialog } from "@/components/tasks/DeliveryDialog";
 import type {
@@ -31,6 +32,7 @@ import { SERVICE_TYPES, RECURRING_FREQUENCIES } from "@/components/projects/Proj
 import { useCurrentUser } from "@/lib/useCurrentUser";
 import { can } from "@/lib/permissions";
 import { formatMoney } from "@/lib/money";
+import { calcInvoiceTotal, calcInvoiceBalance } from "@/lib/format";
 import { useToast } from "@/components/ui/Toast";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { Select } from "@/components/ui/Select";
@@ -222,6 +224,7 @@ export default function ProjectDetailPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [invoicesLoading, setInvoicesLoading] = useState(false);
   const [invoicesLoaded, setInvoicesLoaded] = useState(false);
+  const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false);
 
   // Tax state
   const [clientTaxData, setClientTaxData] = useState<{ taxRegistrations: { id: string; type: string; number: string; country: string }[]; billingCurrency: string; paymentTermDays: number } | null>(null);
@@ -1529,23 +1532,21 @@ export default function ProjectDetailPage() {
           <div>
             {/* Invoice summary cards */}
             {invoices.length > 0 && (() => {
-              const totalInvoiced = invoices.reduce((sum, inv) => {
-                const lineTotal = inv.lineItems.reduce((s, li) => s + li.quantity * li.unitPrice, 0);
-                const discount = inv.discountPct ? lineTotal * (inv.discountPct / 100) : 0;
-                const afterDiscount = lineTotal - discount;
-                const tax = inv.taxPct ? afterDiscount * (inv.taxPct / 100) : 0;
-                return sum + afterDiscount + tax;
-              }, 0);
-              const totalPaid = invoices
-                .filter((inv) => inv.status === "PAID")
-                .reduce((sum, inv) => {
-                  const lineTotal = inv.lineItems.reduce((s, li) => s + li.quantity * li.unitPrice, 0);
-                  const discount = inv.discountPct ? lineTotal * (inv.discountPct / 100) : 0;
-                  const afterDiscount = lineTotal - discount;
-                  const tax = inv.taxPct ? afterDiscount * (inv.taxPct / 100) : 0;
-                  return sum + afterDiscount + tax;
-                }, 0);
-              const outstanding = totalInvoiced - totalPaid;
+              // Paid is what was RECEIVED, not what is flagged PAID. Counting
+              // only fully-settled invoices reported an advance as nothing
+              // collected and left the whole cycle fee outstanding.
+              const live = invoices.filter((inv) => inv.status !== "CANCELLED");
+              const totalInvoiced = live.reduce(
+                (sum, inv) => sum + calcInvoiceTotal(inv.lineItems, {
+                  discountRate: inv.discountPct, taxRate: inv.taxPct,
+                }).total,
+                0,
+              );
+              const totalPaid = live.reduce(
+                (sum, inv) => sum + (inv.receipts ?? []).reduce((s, r) => s + Number(r.amount), 0),
+                0,
+              );
+              const outstanding = Math.max(0, totalInvoiced - totalPaid);
               const currency = invoices[0]?.currency ?? project?.currency ?? "USD";
 
               return (
@@ -1566,11 +1567,9 @@ export default function ProjectDetailPage() {
 
             <div className="flex flex-wrap items-center justify-between gap-y-2 mb-4">
               <h3 className="text-sm font-semibold text-gray-900">Invoices</h3>
-              <Link href="/invoices">
-                <Button size="sm" variant="secondary" icon={<Plus className="w-3.5 h-3.5" />}>
-                  Create Invoice
-                </Button>
-              </Link>
+              <Button size="sm" onClick={() => setInvoiceDialogOpen(true)} icon={<Plus className="w-3.5 h-3.5" />}>
+                New Invoice
+              </Button>
             </div>
 
             {invoicesLoading ? (
@@ -1585,10 +1584,12 @@ export default function ProjectDetailPage() {
               <div className="bg-white border border-gray-200 rounded-xl p-10 text-center">
                 <Receipt className="w-8 h-8 text-gray-300 mx-auto mb-3" />
                 <p className="text-sm text-gray-500 mb-1">No invoices yet</p>
-                <p className="text-xs text-gray-400">Create an invoice from the Invoices page</p>
-                <Link href="/invoices" className="mt-4 inline-flex items-center gap-1.5 text-sm text-indigo-600 hover:text-indigo-800 font-medium">
-                  Go to Invoices <ExternalLink className="w-3.5 h-3.5" />
-                </Link>
+                <p className="text-xs text-gray-400 mb-4">
+                  Bill this project for the cycle, up front or at the end
+                </p>
+                <Button size="sm" onClick={() => setInvoiceDialogOpen(true)} icon={<Plus className="w-3.5 h-3.5" />}>
+                  New Invoice
+                </Button>
               </div>
             ) : (
               <div className="overflow-x-auto bg-white border border-gray-200 rounded-xl overflow-hidden">
@@ -1599,16 +1600,17 @@ export default function ProjectDetailPage() {
                       <th className="text-left px-5 py-3">Status</th>
                       <th className="text-left px-5 py-3">Due Date</th>
                       <th className="text-right px-5 py-3">Amount</th>
+                      <th className="text-right px-5 py-3">Paid</th>
+                      <th className="text-right px-5 py-3">Balance</th>
                       <th className="text-center px-5 py-3">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {invoices.map((inv) => {
-                      const lineTotal = inv.lineItems.reduce((s, li) => s + li.quantity * li.unitPrice, 0);
-                      const discount = inv.discountPct ? lineTotal * (inv.discountPct / 100) : 0;
-                      const afterDiscount = lineTotal - discount;
-                      const tax = inv.taxPct ? afterDiscount * (inv.taxPct / 100) : 0;
-                      const total = afterDiscount + tax;
+                      const { total } = calcInvoiceTotal(inv.lineItems, {
+                        discountRate: inv.discountPct, taxRate: inv.taxPct,
+                      });
+                      const bal = calcInvoiceBalance(total, inv.receipts ?? []);
                       const statusColors: Record<InvoiceStatus, string> = {
                         DRAFT: "bg-gray-100 text-gray-600",
                         SENT: "bg-blue-50 text-blue-700",
@@ -1622,15 +1624,30 @@ export default function ProjectDetailPage() {
                             <p className="font-medium text-gray-900">{inv.invoiceNumber}</p>
                           </td>
                           <td className="px-5 py-3">
-                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${statusColors[inv.status]}`}>
-                              {inv.status.charAt(0) + inv.status.slice(1).toLowerCase()}
-                            </span>
+                            {/* A part-paid invoice is still SENT in the enum. Saying
+                                "Sent" when half the money is in tells the reader
+                                less than the receipts already know. */}
+                            {bal.state === "partial" && inv.status !== "CANCELLED" ? (
+                              <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-amber-50 text-amber-700">
+                                Part paid
+                              </span>
+                            ) : (
+                              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${statusColors[inv.status]}`}>
+                                {inv.status.charAt(0) + inv.status.slice(1).toLowerCase()}
+                              </span>
+                            )}
                           </td>
                           <td className="px-5 py-3 text-gray-400 text-xs whitespace-nowrap">
                             {inv.dueDate ? formatDate(inv.dueDate) : "No due date"}
                           </td>
                           <td className="px-5 py-3 text-right font-semibold text-gray-900">
                             {formatCurrency(total, inv.currency)}
+                          </td>
+                          <td className="px-5 py-3 text-right text-emerald-600">
+                            {bal.paid > 0 ? formatCurrency(bal.paid, inv.currency) : <span className="text-gray-300">—</span>}
+                          </td>
+                          <td className={`px-5 py-3 text-right font-medium ${bal.balance > 0 ? "text-amber-600" : "text-gray-300"}`}>
+                            {bal.balance > 0 ? formatCurrency(bal.balance, inv.currency) : "Settled"}
                           </td>
                           <td className="px-5 py-3 text-center">
                             <Link
@@ -1760,6 +1777,26 @@ export default function ProjectDetailPage() {
         startDate={project?.startDate}
         onApplied={fetchTasks}
       />
+
+      {/* Raise an invoice without leaving the project */}
+      {project && (
+        <QuickInvoiceDialog
+          open={invoiceDialogOpen}
+          onClose={() => setInvoiceDialogOpen(false)}
+          onCreated={fetchInvoices}
+          project={{
+            id: project.id,
+            name: project.name,
+            clientId: project.clientId,
+            currency: project.currency,
+            cycleAmount: project.cycleAmount,
+            cycleStartDate: project.cycleStartDate,
+            cycleEndDate: project.cycleEndDate,
+            serviceType: project.serviceType,
+            deliverables: project.deliverables,
+          }}
+        />
+      )}
 
       {/* Task Create Modal */}
       {taskModal.open && (

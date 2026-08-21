@@ -12,6 +12,12 @@ const INCLUDE = {
   project:   { select: { id: true, name: true } },
   // Pull client inline so we avoid an N+1 fetch per invoice
   client:    { select: { id: true, name: true, companyName: true } },
+  // What has actually been received against this invoice. Without it the UI
+  // can only show the amount billed, so a part-paid invoice looks unpaid.
+  receipts:  {
+    orderBy: { receivedAt: "asc" as const },
+    select: { id: true, amount: true, receivedAt: true, method: true, reference: true },
+  },
 } as const;
 
 export async function GET(req: NextRequest) {

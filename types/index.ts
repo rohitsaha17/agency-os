@@ -758,14 +758,28 @@ export interface ContractFormData {
 
 export type InvoiceStatus = "DRAFT" | "SENT" | "PAID" | "OVERDUE" | "CANCELLED";
 
+export type LineItemKind = "PACKAGE" | "EXTRA" | "COMPLIMENTARY" | "ADHOC_TASK" | "CUSTOM";
+
 export interface InvoiceLineItem {
   id: string;
   invoiceId: string;
   description: string;
   quantity: number;
+  /** On a COMPLIMENTARY line this is what the work was worth, not what is charged. */
   unitPrice: number;
   unit: string | null;
   order: number;
+  kind?: LineItemKind;
+  isFree?: boolean;
+}
+
+/** Money received against an invoice. Several per invoice means part payment. */
+export interface InvoiceReceipt {
+  id: string;
+  amount: number;
+  receivedAt: string;
+  method: string | null;
+  reference: string | null;
 }
 
 export interface Invoice {
@@ -783,6 +797,7 @@ export interface Invoice {
   createdAt: string;
   updatedAt: string;
   lineItems: InvoiceLineItem[];
+  receipts?: InvoiceReceipt[];
   project?: { id: string; name: string } | null;
   client?: { id: string; name: string; companyName: string | null } | null;
 }

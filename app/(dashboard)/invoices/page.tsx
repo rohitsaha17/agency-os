@@ -12,7 +12,7 @@ import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useDebounce } from "@/lib/hooks";
-import { calcInvoiceTotal } from "@/lib/format";
+import { calcInvoiceTotal, calcInvoiceBalance } from "@/lib/format";
 import { formatMoney } from "@/lib/money";
 import { useCurrentUser } from "@/lib/useCurrentUser";
 import { NeedsPricingCard } from "@/components/finance/NeedsPricingCard";
@@ -44,9 +44,19 @@ function formatDate(d: string | null) {
 // Single source of truth for invoice totals — shared with the create modal.
 function calcTotal(inv: Invoice) {
   return calcInvoiceTotal(
-    inv.lineItems.map((li) => ({ quantity: Number(li.quantity), unitPrice: Number(li.unitPrice) })),
+    // kind has to survive the mapping: a COMPLIMENTARY line carries its worth
+    // in unitPrice, and dropping the kind would bill the client for the gift.
+    inv.lineItems.map((li) => ({
+      quantity: Number(li.quantity), unitPrice: Number(li.unitPrice),
+      kind: li.kind, isFree: li.isFree,
+    })),
     { discountRate: inv.discountPct ?? 0, taxRate: inv.taxPct ?? 0 },
   ).total;
+}
+
+/** What has actually been received against an invoice. */
+function calcPaid(inv: Invoice) {
+  return (inv.receipts ?? []).reduce((s, r) => s + Number(r.amount), 0);
 }
 
 // ── Empty state ────────────────────────────────────────────────
@@ -466,8 +476,12 @@ function InvoicesPageInner() {
     (i.status === "SENT" && !!i.dueDate && new Date(i.dueDate) < new Date());
   // Org-wide aggregates use the organization currency (not first-row guess).
   const displayCurrency = currentUser?.organization?.currency ?? invoices[0]?.currency ?? "USD";
-  const totalRevenue = invoices.filter((i) => i.status === "PAID").reduce((s, i) => s + calcTotal(i), 0);
-  const outstanding  = invoices.filter((i) => ["DRAFT", "SENT", "OVERDUE"].includes(i.status)).reduce((s, i) => s + calcTotal(i), 0);
+  // Revenue is money received, not invoices flagged PAID — otherwise an
+  // advance against an open invoice counts as nothing collected, and the
+  // full amount still shows as outstanding.
+  const live = invoices.filter((i) => i.status !== "CANCELLED");
+  const totalRevenue = live.reduce((s, i) => s + calcPaid(i), 0);
+  const outstanding  = live.reduce((s, i) => s + Math.max(0, calcTotal(i) - calcPaid(i)), 0);
   const overdue      = invoices.filter(isInvOverdue).length;
 
   const hasFilters = !!filterStatus || !!search || !!filterClient;
@@ -577,6 +591,7 @@ function InvoicesPageInner() {
                     <th className="text-left px-5 py-3">Project</th>
                     <th className="text-left px-5 py-3">Due Date</th>
                     <th className="text-right px-5 py-3">Amount</th>
+                    <th className="text-right px-5 py-3">Balance</th>
                     <th className="text-center px-5 py-3">Status</th>
                     <th className="px-5 py-3 text-right">Actions</th>
                   </tr>
@@ -617,6 +632,19 @@ function InvoicesPageInner() {
                         </td>
                         <td className="px-5 py-3.5 text-right font-semibold text-gray-900 tabular-nums">
                           {formatMoney(total, inv.currency)}
+                        </td>
+                        <td className="px-5 py-3.5 text-right text-sm tabular-nums">
+                          {(() => {
+                            const bal = calcInvoiceBalance(total, inv.receipts ?? []);
+                            if (bal.state === "unpaid") return <span className="text-gray-300">—</span>;
+                            if (bal.balance === 0) return <span className="text-emerald-600 font-medium">Settled</span>;
+                            // Part paid: the number that matters is what is left.
+                            return (
+                              <span className="text-amber-600 font-medium" title={`${formatMoney(bal.paid, inv.currency, { precision: 0 })} received`}>
+                                {formatMoney(bal.balance, inv.currency, { precision: 0 })} left
+                              </span>
+                            );
+                          })()}
                         </td>
                         <td className="px-5 py-3.5 text-center">
                           <Select

@@ -238,7 +238,21 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
    * What a junior keeps: status, Send for Review, files, discussion, time.
    * That's the whole of their job and none of anyone else's.
    */
-  const canPlan   = can(me, "content.plan");
+  /**
+   * You don't rewrite the work you were given — at any level.
+   *
+   * This already held for an editor's brief. It didn't hold one rung up: a
+   * PLANNING or POST task is created BY the system on an admin's action and
+   * handed to the SMM, and because an SMM holds content.plan they could edit
+   * the brief, move the deadline, hand it to a different SMM, or delete it.
+   * That's the same problem the editor lock exists to prevent, so it's the
+   * same rule: the person a task was created for moves it along; whoever runs
+   * the agency owns its terms.
+   */
+  const isSystemTask = task.kind === "PLANNING" || task.kind === "POST";
+  const isMine = (task.assignees ?? []).some((a) => a.user?.id === me?.id);
+  const runsTheAgency = can(me, "clients.manage"); // admin and manager
+  const canPlan = can(me, "content.plan") && !(isSystemTask && isMine && !runsTheAgency);
 
   /**
    * Everyone involved in this task, in the order they matter to a reader:
@@ -264,7 +278,9 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
     }
     return out;
   })();
-  const canReview = can(me, "tasks.review");
+  // Requesting changes is a verdict on someone else's work. On your own task
+  // it's a button that asks you to complain to yourself.
+  const canReview = can(me, "tasks.review") && !isMine;
 
   const hasChildren = (task.children?.length ?? 0) > 0;
 

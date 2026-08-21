@@ -74,7 +74,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const existing = await prisma.task.findFirst({
       where: { id, deletedAt: null, organizationId: user.organizationId },
       select: {
-        id: true, projectId: true, status: true, title: true,
+        id: true, projectId: true, status: true, title: true, kind: true,
         assignees: { select: { userId: true } },
       },
     });
@@ -91,12 +91,26 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       clientId, preferredAssigneeId, isAdHoc, sortOrder, reassignNote,
     } = body;
 
-    if (!can(user, "content.plan")) {
+    /**
+     * A PLANNING or POST task is created by the system for a specific person.
+     * They carry it out; they don't get to rewrite its terms, reassign it or
+     * move its deadline — even holding content.plan, as an SMM does. Only
+     * whoever runs the agency changes what was asked for.
+     */
+    const isSystemTask = existing.kind === "PLANNING" || existing.kind === "POST";
+    const isMine = existing.assignees.some((a) => a.userId === user.id);
+    const mayRewrite = can(user, "content.plan")
+      && !(isSystemTask && isMine && !can(user, "clients.manage"));
+
+    if (!mayRewrite) {
       const planned = Object.keys(body).filter((k) => !PROGRESS_FIELDS.has(k));
       if (planned.length > 0) {
         throw new ApiError(
-          "You can move this task along, but its brief is set by whoever planned it. "
-          + `Ask them to change: ${planned.join(", ")}.`,
+          isSystemTask
+            ? "This task was created for you when the project was set up. You can move "
+              + `it along, but an admin or manager owns its terms. Ask them to change: ${planned.join(", ")}.`
+            : "You can move this task along, but its brief is set by whoever planned it. "
+              + `Ask them to change: ${planned.join(", ")}.`,
           403,
         );
       }
@@ -267,6 +281,25 @@ export async function DELETE(req: NextRequest, { params }: Params) {
     // remove work they scheduled; the person doing that work cannot.
     requireCapability(user, "content.plan");
     const { id } = await params;
+
+    // ...but not the task the system handed them. Deleting your own planning
+    // or posting task is deleting the record that you were asked to do it.
+    const doomed = await prisma.task.findFirst({
+      where: { id, deletedAt: null, organizationId: user.organizationId },
+      select: { kind: true, assignees: { select: { userId: true } } },
+    });
+    if (
+      doomed
+      && (doomed.kind === "PLANNING" || doomed.kind === "POST")
+      && doomed.assignees.some((a) => a.userId === user.id)
+      && !can(user, "clients.manage")
+    ) {
+      throw new ApiError(
+        "This task was created for you and isn't yours to delete. "
+        + "Ask an admin or manager if it shouldn't be there.",
+        403,
+      );
+    }
 
     // Verify org ownership before deleting.
     const existing = await prisma.task.findFirst({

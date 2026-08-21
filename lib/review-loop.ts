@@ -11,6 +11,7 @@
  *   markPosted()     the POST task closes, content → POSTED
  */
 import { prisma } from "@/lib/prisma";
+import { isPublishable } from "@/lib/content-status";
 import { logStatus } from "@/lib/audit";
 import { notify } from "@/lib/notify";
 import { ApiError } from "@/lib/api-errors";
@@ -270,9 +271,14 @@ export async function createPostTask(opts: {
     select: {
       id: true, topic: true, date: true, clientId: true, projectId: true, cycleId: true,
       client: { select: { name: true } },
+      creativeType: { select: { name: true } },
     },
   });
   if (!item) return null;
+
+  // A shoot isn't posted — it feeds other work. Creating "Post the monthly
+  // product shoot" gives the SMM a task nobody can honestly complete.
+  if (!isPublishable(item.creativeType?.name)) return null;
 
   const existing = await prisma.task.findFirst({
     where: { contentItemId: item.id, kind: "POST", deletedAt: null },

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { X, ChevronDown, Link2, Upload, Sparkles } from "lucide-react";
+import { X, Link2, Upload, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import type { Task, TaskFormData, TaskStatus, Priority, User } from "@/types";
 import { Select } from "@/components/ui/Select";
@@ -40,7 +40,6 @@ function SelectInput({ value, onChange, options }: {
         onChange={(v) => onChange(v)}
         options={[...options.map((o) => ({ value: o.value, label: `${o.label}` }))]}
       />
-      <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
     </div>
   );
 }
@@ -409,7 +408,6 @@ export function TaskModal({
                   onChange={(v) => set("parentId", v || null)}
                   options={[{ value: "", label: "None (top-level)" }, ...parentOptions.map((o) => ({ value: o.value, label: `${o.label}` }))]}
                 />
-                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
               </div>
             </div>
           )}

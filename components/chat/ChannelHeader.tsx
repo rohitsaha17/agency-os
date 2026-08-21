@@ -3,7 +3,7 @@
 import { useState } from "react";
 import {
   Hash, Lock, Users, Building2, Info, X,
-  UserPlus, Settings, ChevronDown,
+  UserPlus, Settings,
 } from "lucide-react";
 import type { Channel, ChannelType } from "@/types";
 

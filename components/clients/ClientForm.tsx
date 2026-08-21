@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, Plus, Trash2, Link2 } from "lucide-react";
+import { Plus, Trash2, Link2 } from "lucide-react";
 import { PhoneInput } from "@/components/ui/PhoneInput";
 import { Button } from "@/components/ui/Button";
 import { BrandAssetsEditor } from "./BrandAssetsEditor";
@@ -124,7 +124,6 @@ function LinksEditor({ value, onChange }: { value: ClientLink[]; onChange: (v: C
               onChange={(v) => update(link.id, "type", v)}
               options={[...LINK_TYPES.map((t) => ({ value: t.value, label: `${t.label}` }))]}
             />
-            <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
           </div>
           <input
             type="text"
@@ -189,7 +188,6 @@ function TaxRegistrationsEditor({
               onChange={(v) => update(tax.id, "type", v)}
               options={[...TAX_TYPES.map((t) => ({ value: t, label: `${t}` }))]}
             />
-            <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
           </div>
           <input
             type="text"

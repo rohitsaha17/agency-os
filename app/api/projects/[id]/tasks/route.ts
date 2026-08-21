@@ -29,6 +29,8 @@ type PrismaTask = {
   isClientVisible: boolean; showSubtasksToClient: boolean;
   createdAt: Date; updatedAt: Date;
   manager: { id: string; name: string } | null;
+  approverId: string | null;
+  approver: { id: string; name: string } | null;
   assignees: { userId: string; user: { id: string; organizationId: string; name: string; email: string; avatarUrl: string | null; role: string } }[];
   // v2 fields
   topic: string | null; content: string | null;
@@ -67,6 +69,8 @@ function buildTree(flat: PrismaTask[]): Task[] {
       assignmentStatus: t.assignmentStatus as Task["assignmentStatus"],
       sortOrder: t.sortOrder, isAdHoc: t.isAdHoc,
       manager: t.manager,
+      approverId: t.approverId,
+      approver: t.approver,
       assignees: t.assignees.map((a) => ({ userId: a.userId, user: { ...a.user, isActive: true, organizationId: a.user.organizationId, role: a.user.role as import("@/types").UserRole } })),
       children: [],
       createdAt: t.createdAt.toISOString(),
@@ -119,6 +123,8 @@ export async function GET(req: NextRequest, { params }: Params) {
       },
       include: {
         manager: { select: { id: true, name: true } },
+        // The reviewer, so the panel can say who the work goes back to.
+        approver: { select: { id: true, name: true } },
         assignees: {
           include: {
             user: { select: { id: true, organizationId: true, name: true, email: true, avatarUrl: true, role: true } },
@@ -201,6 +207,8 @@ export async function POST(req: NextRequest, { params }: Params) {
       },
       include: {
         manager: { select: { id: true, name: true } },
+        // The reviewer, so the panel can say who the work goes back to.
+        approver: { select: { id: true, name: true } },
         assignees: {
           include: {
             user: { select: { id: true, organizationId: true, name: true, email: true, avatarUrl: true, role: true } },

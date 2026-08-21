@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import {
   ChevronRight, Plus, Calendar, AlertCircle, Timer,
   GripVertical, UserPlus, Eye, GitBranch, Check,
@@ -28,10 +29,27 @@ const STATUS_ROW_LEFT: Record<TaskStatus, string> = {
 
 const STATUS_ORDER: TaskStatus[] = ["TODO", "IN_PROGRESS", "IN_REVIEW", "DONE", "BLOCKED"];
 
+/**
+ * Does this deadline actually carry a time?
+ *
+ * Tasks created before deadlines had a clock were stored as midnight UTC.
+ * Rendered in a non-UTC timezone that reads as "5:30 AM", which looks like a
+ * deliberate dawn deadline and isn't one. Exactly-midnight-UTC means date only,
+ * whatever timezone is looking at it.
+ */
+function hasClock(d: Date) {
+  return !(d.getUTCHours() === 0 && d.getUTCMinutes() === 0);
+}
+
+/** A deadline in the list, with the clock only when one was set. */
 function formatDate(d: string | null) {
   if (!d) return null;
   const date = new Date(d);
-  return { label: date.toLocaleDateString("en-US", { month: "short", day: "numeric" }), isOverdue: date < new Date() };
+  return {
+    label: date.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+      + (hasClock(date) ? `, ${date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}` : ""),
+    isOverdue: date < new Date(),
+  };
 }
 
 function initials(name: string) {
@@ -53,49 +71,88 @@ function initials(name: string) {
 function StatusDot({ status, onPick }: { status: TaskStatus; onPick: (s: TaskStatus) => void }) {
   const { dot, label, ring } = STATUS_DOT[status];
   const [open, setOpen] = useState(false);
-  const wrap = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * The menu is rendered into document.body, not next to the dot.
+   *
+   * The task list sits in a rounded card with overflow-hidden, which clipped
+   * an absolutely-positioned menu down to a sliver — you could see the word
+   * "Move to" and nothing else. Fixed position off the trigger's rect escapes
+   * every clipping ancestor, so it doesn't matter what it's nested in.
+   */
+  const place = () => {
+    const r = btnRef.current?.getBoundingClientRect();
+    if (!r) return;
+    const height = STATUS_ORDER.length * 30 + 34;
+    const flip = r.bottom + height > window.innerHeight && r.top > height;
+    setPos({
+      top: flip ? r.top - height - 6 : r.bottom + 6,
+      left: Math.min(r.left, window.innerWidth - 190),
+    });
+  };
 
   useEffect(() => {
     if (!open) return;
     const away = (e: MouseEvent) => {
-      if (wrap.current && !wrap.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (btnRef.current?.contains(t) || menuRef.current?.contains(t)) return;
+      setOpen(false);
     };
     const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    const reposition = () => setOpen(false);
     document.addEventListener("mousedown", away);
     document.addEventListener("keydown", esc);
+    window.addEventListener("scroll", reposition, true);
+    window.addEventListener("resize", reposition);
     return () => {
       document.removeEventListener("mousedown", away);
       document.removeEventListener("keydown", esc);
+      window.removeEventListener("scroll", reposition, true);
+      window.removeEventListener("resize", reposition);
     };
   }, [open]);
 
   return (
-    <div ref={wrap} className="relative flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+    <>
       <button
-        onClick={() => setOpen((v) => !v)}
-        title={`${label} — click to change`}
+        ref={btnRef}
+        onClick={(e) => { e.stopPropagation(); if (!open) place(); setOpen((v) => !v); }}
+        title={`${label} — click to change status`}
         aria-label={`Status: ${label}`}
-        className={`w-3.5 h-3.5 rounded-full ring-2 ${ring} ${dot} hover:scale-125 transition-transform`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className={`w-3.5 h-3.5 rounded-full flex-shrink-0 ring-2 ${ring} ${dot} hover:scale-125 transition-transform`}
       />
-      {open && (
-        <div className="absolute left-0 top-6 z-30 w-44 py-1 rounded-xl bg-white dark:bg-slate-800 border border-gray-200/80 dark:border-slate-700 shadow-lg shadow-black/[0.08] dark:shadow-black/40">
+      {open && pos && createPortal(
+        <div
+          ref={menuRef}
+          role="menu"
+          style={{ position: "fixed", top: pos.top, left: pos.left }}
+          onClick={(e) => e.stopPropagation()}
+          className="z-[100] w-44 py-1 rounded-xl bg-white dark:bg-slate-800 border border-gray-200/80 dark:border-slate-700 shadow-lg shadow-black/[0.08] dark:shadow-black/40"
+        >
           <p className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
             Move to
           </p>
-          {STATUS_ORDER.map((s) => (
+          {STATUS_ORDER.map((st) => (
             <button
-              key={s}
-              onClick={() => { setOpen(false); if (s !== status) onPick(s); }}
+              key={st}
+              role="menuitem"
+              onClick={() => { setOpen(false); if (st !== status) onPick(st); }}
               className="w-full flex items-center gap-2.5 px-3 py-1.5 text-sm text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-700/70 transition-colors"
             >
-              <span className={`w-2 h-2 rounded-full flex-shrink-0 ${STATUS_DOT[s].dot}`} />
-              <span className="flex-1 text-left">{STATUS_DOT[s].label}</span>
-              {s === status && <Check className="w-3.5 h-3.5 text-indigo-500 flex-shrink-0" />}
+              <span className={`w-2 h-2 rounded-full flex-shrink-0 ${STATUS_DOT[st].dot}`} />
+              <span className="flex-1 text-left">{STATUS_DOT[st].label}</span>
+              {st === status && <Check className="w-3.5 h-3.5 text-indigo-500 flex-shrink-0" />}
             </button>
           ))}
-        </div>
+        </div>,
+        document.body,
       )}
-    </div>
+    </>
   );
 }
 

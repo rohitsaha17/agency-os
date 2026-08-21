@@ -442,6 +442,8 @@ export interface Task {
   /** v3: bumped each time the approver asks for changes */
   revision?: number;
   approverId?: string | null;
+  /** v3: the SMM who reviews this work, resolved for display. */
+  approver?: { id: string; name: string } | null;
   submittedAt?: string | null;
   approvedAt?: string | null;
 }

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, Plus, X, Building2 } from "lucide-react";
+import { Plus, X, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { useCurrentUser } from "@/lib/useCurrentUser";
 import { can } from "@/lib/permissions";
@@ -351,7 +351,6 @@ export function ProjectForm({ initialData, projectId, defaultClientId, onSuccess
               onChange={(v) => handleServiceTypeChange(v)}
               options={[...SERVICE_TYPES.map((s) => ({ value: s.value, label: String(s.label) }))]}
             />
-            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
           </div>
           {form.serviceType === "other" && (
             <input
@@ -393,7 +392,6 @@ export function ProjectForm({ initialData, projectId, defaultClientId, onSuccess
                   onChange={(v) => set("clientId", v)}
                   options={[{ value: "", label: "Select client" }, ...clients.map((c) => ({ value: c.id, label: String(c.companyName ? `${c.companyName} (${c.name})` : c.name) }))]}
                 />
-                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
               </div>
             )}
           </FormField>
@@ -427,7 +425,6 @@ export function ProjectForm({ initialData, projectId, defaultClientId, onSuccess
               onChange={(v) => set("status", v as ProjectStatus)}
               options={[...STATUS_OPTIONS.map((o) => ({ value: o.value, label: `${o.label}` }))]}
             />
-            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
           </div>
         </div>
 
@@ -439,7 +436,6 @@ export function ProjectForm({ initialData, projectId, defaultClientId, onSuccess
               onChange={(v) => set("currency", v)}
               options={[...CURRENCIES.map((c) => ({ value: c, label: `${c}` }))]}
             />
-            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
           </div>
         </div>
 
@@ -452,7 +448,6 @@ export function ProjectForm({ initialData, projectId, defaultClientId, onSuccess
                   onChange={(v) => set("recurringFrequency", v)}
                   options={[{ value: "", label: "Select frequency" }, ...RECURRING_FREQUENCIES.map((f) => ({ value: f.value, label: String(f.label) }))]}
                 />
-                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
               </div>
             </FormField>
             <FormField label="Start Date">
@@ -503,7 +498,6 @@ export function ProjectForm({ initialData, projectId, defaultClientId, onSuccess
                   onChange={(v) => setDeliverable(i, { creativeTypeId: v })}
                   options={[{ value: "", label: "Creative type…" }, ...creativeTypes.map((t) => ({ value: t.id, label: String(`${t.icon ? `${t.icon} ` : ""}${t.name}`) }))]}
                 />
-                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
               </div>
               <input
                 type="number" min="1" step="1" value={row.qtyPerCycle}

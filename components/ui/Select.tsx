@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { ChevronDown, Check } from "lucide-react";
 
 /**
@@ -64,7 +65,14 @@ export function Select({
 }: SelectProps) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
-  const [flipUp, setFlipUp] = useState(false);
+  /**
+   * The panel renders into document.body at a fixed position.
+   *
+   * Absolute positioning is clipped by any ancestor with overflow-hidden —
+   * a rounded card, a scrolling table — which cuts the list down to a sliver.
+   * Measuring the trigger and rendering to the body escapes that entirely.
+   */
+  const [rect, setRect] = useState<{ top: number; left: number; width: number; flip: boolean } | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -94,10 +102,16 @@ export function Select({
   // Open onto the current value, and decide which way the panel should go.
   const openPanel = useCallback(() => {
     if (disabled) return;
-    const rect = triggerRef.current?.getBoundingClientRect();
-    if (rect) {
+    const r = triggerRef.current?.getBoundingClientRect();
+    if (r) {
       const panelHeight = Math.min(items.length * 34 + 8, 264);
-      setFlipUp(rect.bottom + panelHeight > window.innerHeight && rect.top > panelHeight);
+      const flip = r.bottom + panelHeight > window.innerHeight && r.top > panelHeight;
+      setRect({
+        top: flip ? r.top - panelHeight - 6 : r.bottom + 6,
+        left: r.left,
+        width: r.width,
+        flip,
+      });
     }
     setActive(selectedIndex >= 0 ? selectedIndex : 0);
     setOpen(true);
@@ -107,8 +121,11 @@ export function Select({
   useEffect(() => {
     if (!open) return;
     const away = (e: MouseEvent) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (wrapRef.current?.contains(t) || listRef.current?.contains(t)) return;
+      setOpen(false);
     };
+    // The panel no longer moves with the page, so a scroll closes it.
     const scrolled = (e: Event) => {
       if (listRef.current?.contains(e.target as Node)) return;
       setOpen(false);
@@ -217,16 +234,16 @@ export function Select({
           />
         </button>
 
-        {open && (
+        {open && rect && createPortal(
           <div
             ref={listRef}
             role="listbox"
             tabIndex={-1}
-            className={`absolute left-0 z-50 min-w-full w-max max-w-[min(22rem,85vw)] max-h-64 overflow-y-auto py-1
+            style={{ position: "fixed", top: rect.top, left: rect.left, minWidth: rect.width }}
+            className="z-[100] w-max max-w-[min(22rem,85vw)] max-h-64 overflow-y-auto py-1
               rounded-xl bg-white dark:bg-slate-800
               border border-gray-200/80 dark:border-slate-700
-              shadow-lg shadow-black/[0.08] dark:shadow-black/40
-              ${flipUp ? "bottom-full mb-1.5" : "top-full mt-1.5"}`}
+              shadow-lg shadow-black/[0.08] dark:shadow-black/40"
           >
             {items.length === 0 ? (
               <p className="px-3 py-2 text-xs text-gray-400 dark:text-slate-500">No options</p>
@@ -257,7 +274,8 @@ export function Select({
                 </button>
               );
             })}
-          </div>
+          </div>,
+          document.body,
         )}
       </div>
     </div>

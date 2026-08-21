@@ -2,19 +2,17 @@
 
 import { useState, useEffect, useCallback } from "react";
 import {
-  X, ChevronDown, Trash2, ExternalLink,
-  MessageSquare, GitBranch, Clock, Settings2,
-  CheckCircle2, Circle, Timer, Eye, EyeOff, Ban, AlertCircle,
+  X, Trash2, ExternalLink,
+  MessageSquare, Settings2,
+  CheckCircle2, Circle, Timer, Eye, EyeOff, Ban, AlertCircle, Play,
   Activity, Paperclip, Send, Users, Loader2,
 } from "lucide-react";
 import { PriorityBadge } from "./PriorityBadge";
 import { CommentThread } from "./CommentThread";
-import { DependencyList } from "./DependencyList";
-import { TimeTracker } from "./TimeTracker";
 import { RoundHistory } from "@/components/tasks/RoundHistory";
-import { TaskUpdates } from "./TaskUpdates";
 import { TaskFiles } from "./TaskFiles";
 import { DeliveryDialog } from "./DeliveryDialog";
+import { SubmitWorkDialog } from "./ReviewDialogs";
 import { Select } from "@/components/ui/Select";
 import { useCurrentUser } from "@/lib/useCurrentUser";
 import { can } from "@/lib/permissions";
@@ -23,7 +21,48 @@ import type {
   TaskHistoryEntry, TaskDeliveryRecord,
 } from "@/types";
 
-type Tab = "details" | "updates" | "files" | "comments" | "dependencies" | "time" | "history";
+/**
+ * Four tabs, down from seven.
+ *
+ * "Updates" and "Discussion" were two feeds of the same thing — a typed update
+ * and a comment are the same act to the person writing one — so the round
+ * trail moved into Discussion and the separate Updates feed is gone. Depends
+ * and Time are removed for now; neither carried its weight next to the
+ * submit/review loop.
+ *
+ * Discussion is the conversation. History is the audit trail. Those are
+ * genuinely different, so they stay apart.
+ */
+type Tab = "details" | "files" | "comments" | "history";
+
+/** ISO instant -> the value a datetime-local input wants (local, no zone). */
+function toLocalInput(iso: string) {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/**
+ * Does this deadline actually carry a time?
+ *
+ * Tasks created before deadlines had a clock were stored as midnight UTC.
+ * Rendered in a non-UTC timezone that reads as "5:30 AM", which looks like a
+ * deliberate dawn deadline and isn't one. Exactly-midnight-UTC means date only,
+ * whatever timezone is looking at it.
+ */
+function hasClock(d: Date) {
+  return !(d.getUTCHours() === 0 && d.getUTCMinutes() === 0);
+}
+
+/** A deadline as people say it: "28 Aug 2026, 6:00 pm" — or just the date. */
+function formatDeadline(value: string) {
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return value;
+  const date = d.toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" });
+  return hasClock(d)
+    ? `${date}, ${d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`
+    : date;
+}
 
 function timeAgoShort(iso: string) {
   const diff = Date.now() - new Date(iso).getTime();
@@ -85,7 +124,6 @@ function AssigneePicker({ users, assigneeIds, managerId, onChangeAssignees, onCh
             options={[{ value: "", label: "Unassigned" }, ...users.map((u) => ({ value: u.id, label: `${u.name}` }))]}
             size="sm"
           />
-          <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
         </div>
       </div>
       <div>
@@ -137,7 +175,9 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
   const [description, setDescription] = useState(task.description ?? "");
   const [status, setStatus] = useState<TaskStatus>(task.status);
   const [priority, setPriority] = useState<Priority>(task.priority);
-  const [dueDate, setDueDate] = useState(task.dueDate ? task.dueDate.slice(0, 10) : "");
+  // datetime-local, not date: a deadline of "the 28th" is not the same
+  // instruction as "the 28th, 6pm", and the SMM sets the second one.
+  const [dueDate, setDueDate] = useState(task.dueDate ? toLocalInput(task.dueDate) : "");
   const [managerId, setManagerId] = useState(task.manager?.id ?? "");
   const [assigneeIds, setAssigneeIds] = useState(task.assignees.map((a) => a.userId));
   const [estimated, setEstimated] = useState(task.estimatedHours?.toString() ?? "");
@@ -152,6 +192,7 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
   const [pendingStatus, setPendingStatus] = useState<TaskStatus | null>(null);
   // ── v2 state ──
   const [showDelivery, setShowDelivery] = useState(false);
+  const [showSubmit, setShowSubmit] = useState(false);
   const [cascadeAfterDelivery, setCascadeAfterDelivery] = useState(false);
   const [deliveries, setDeliveries] = useState<TaskDeliveryRecord[]>([]);
   const [history, setHistory] = useState<TaskHistoryEntry[] | null>(null);
@@ -197,6 +238,31 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
    * That's the whole of their job and none of anyone else's.
    */
   const canPlan   = can(me, "content.plan");
+
+  /**
+   * Everyone involved in this task, in the order they matter to a reader:
+   * the people doing it, then the person it comes back to. Mirrors what the
+   * comments route notifies, so the strip can't claim someone is in the
+   * thread who never hears about it.
+   */
+  const participants = (() => {
+    const out: { id: string; name: string; role: string }[] = [];
+    for (const a of task.assignees ?? []) {
+      if (a.user) out.push({ id: a.user.id, name: a.user.name, role: "Assignee" });
+    }
+    // Prefer the resolved approver from the payload — the users list is
+    // fetched separately and may not have arrived, and a thread that silently
+    // omits the reviewer is worse than one that renders a moment late.
+    const reviewer =
+      task.approver ??
+      users.find((u) => u.id === task.approverId) ??
+      task.manager ??
+      null;
+    if (reviewer && !out.some((p) => p.id === reviewer.id)) {
+      out.push({ id: reviewer.id, name: reviewer.name, role: "Reviewer" });
+    }
+    return out;
+  })();
   const canReview = can(me, "tasks.review");
 
   const hasChildren = (task.children?.length ?? 0) > 0;
@@ -289,13 +355,10 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
   };
 
   const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
-    { id: "details",      label: "Details",    icon: <Settings2 className="w-3.5 h-3.5" /> },
-    { id: "updates",      label: "Updates",    icon: <Activity className="w-3.5 h-3.5" /> },
-    { id: "files",        label: "Files",      icon: <Paperclip className="w-3.5 h-3.5" /> },
-    { id: "comments",     label: "Discussion", icon: <MessageSquare className="w-3.5 h-3.5" /> },
-    { id: "dependencies", label: "Depends",    icon: <GitBranch className="w-3.5 h-3.5" /> },
-    { id: "time",         label: "Time",       icon: <Clock className="w-3.5 h-3.5" /> },
-    { id: "history",      label: "History",    icon: <Activity className="w-3.5 h-3.5" /> },
+    { id: "details",  label: "Details",    icon: <Settings2 className="w-3.5 h-3.5" /> },
+    { id: "files",    label: "Files",      icon: <Paperclip className="w-3.5 h-3.5" /> },
+    { id: "comments", label: "Discussion", icon: <MessageSquare className="w-3.5 h-3.5" /> },
+    { id: "history",  label: "History",    icon: <Activity className="w-3.5 h-3.5" /> },
   ];
 
   return (
@@ -335,7 +398,7 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
             {dueDate && (
               <span className={`text-xs flex items-center gap-1 ${new Date(dueDate) < new Date() && status !== "DONE" ? "text-red-500" : "text-gray-400"}`}>
                 {new Date(dueDate) < new Date() && status !== "DONE" && <AlertCircle className="w-3 h-3" />}
-                Due {new Date(dueDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                Due {formatDeadline(dueDate).replace(/, \d{4}/, "")}
               </span>
             )}
             {task.estimatedHours && (
@@ -359,12 +422,38 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
             </button>
           </div>
 
+          {/*
+            The task's state is driven by what you actually did, not by picking
+            a status off a list. Not started -> Start task. Underway -> Mark
+            finished, which asks for the proof and hands it to the reviewer.
+            Waiting on a review says so and offers nothing to press.
+          */}
           <div className="mt-2.5 ml-7 flex items-center gap-2 flex-wrap">
-            {status !== "IN_REVIEW" && status !== "DONE" && (
-              <button onClick={() => handleStatusChange("IN_REVIEW")}
-                className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg transition-colors">
+            {status === "TODO" && (
+              <button onClick={() => handleStatusChange("IN_PROGRESS")}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors">
+                <Play className="w-3 h-3" />
+                Start task
+              </button>
+            )}
+            {status === "IN_PROGRESS" && (
+              <button onClick={() => setShowSubmit(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors">
                 <Send className="w-3 h-3" />
-                Send for Review
+                Mark finished
+              </button>
+            )}
+            {status === "IN_REVIEW" && (
+              <span className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg">
+                <Eye className="w-3 h-3" />
+                Waiting on review
+              </span>
+            )}
+            {status === "BLOCKED" && (
+              <button onClick={() => handleStatusChange("IN_PROGRESS")}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors">
+                <Play className="w-3 h-3" />
+                Resume task
               </button>
             )}
             {status !== "DONE" && canReview && (
@@ -498,18 +587,23 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Status</label>
-                  <div className="relative">
-                    <Select
-                      value={status}
-                      onChange={(v) => { const s = v as TaskStatus; setStatus(s); handleStatusChange(s); }}
-                      options={[...STATUS_OPTIONS.map((o) => ({ value: o.value, label: `${o.label}` }))]}
-                      size="sm"
-                    />
-                    <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
-                  </div>
-                </div>
+                {/*
+                  The person doing the work moves it with Start task and Mark
+                  finished, above — a status list would just be a second way to
+                  do the same thing, and the one that skips asking for proof.
+                  A planner keeps the list: they need to park something as
+                  Blocked or pull it back without pretending to be the assignee.
+                */}
+                {canPlan ? (
+                  <SelectField
+                    label="Status"
+                    value={status}
+                    onChange={(v) => { const st = v as TaskStatus; setStatus(st); handleStatusChange(st); }}
+                    options={STATUS_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+                  />
+                ) : (
+                  <ReadOnlyField label="Status" value={STATUS_OPTIONS.find((o) => o.value === status)?.label ?? status} />
+                )}
                 {canPlan ? (
                   <SelectField label="Priority" value={priority} onChange={(v) => { setPriority(v as Priority); markDirty(); }} options={PRIORITY_OPTIONS} />
                 ) : (
@@ -520,14 +614,12 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
               <div>
                 {canPlan ? (
                   <>
-                    <label className="block text-xs font-medium text-gray-500 mb-1">Due Date</label>
-                    <input type="date" value={dueDate} onChange={(e) => { setDueDate(e.target.value); markDirty(); }}
+                    <label className="block text-xs font-medium text-gray-500 mb-1">Deadline</label>
+                    <input type="datetime-local" value={dueDate} onChange={(e) => { setDueDate(e.target.value); markDirty(); }}
                       className="w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
                   </>
                 ) : (
-                  <ReadOnlyField label="Due Date" value={dueDate
-                    ? new Date(`${dueDate}T00:00:00`).toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" })
-                    : "No due date"} />
+                  <ReadOnlyField label="Deadline" value={dueDate ? formatDeadline(dueDate) : "No deadline"} />
                 )}
               </div>
 
@@ -594,10 +686,37 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
             </div>
           )}
 
-          {tab === "updates" && (
+          {tab === "files" && <TaskFiles taskId={task.id} projectId={projectId} />}
+
+          {tab === "comments" && (
             <div className="space-y-5">
-              {/* v3: the round trail comes first — it's the accountability
-                  the whole submit/review loop exists to produce. */}
+              {/* Who is in this conversation. A junior shouldn't have to guess
+                  whether the SMM who briefed the work can see what they wrote
+                  here — everyone on the task is in the thread, and is notified
+                  when someone posts. */}
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-2">
+                  In this thread
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {participants.length === 0 ? (
+                    <p className="text-xs text-gray-400">Nobody is on this task yet.</p>
+                  ) : participants.map((p) => (
+                    <span key={`${p.id}-${p.role}`}
+                      className="inline-flex items-center gap-1.5 pl-1 pr-2.5 py-1 rounded-full bg-gray-50 border border-gray-200">
+                      <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 text-[9px] font-bold flex items-center justify-center">
+                        {p.name.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase()}
+                      </span>
+                      <span className="text-xs text-gray-700">{p.name}</span>
+                      <span className="text-[10px] text-gray-400">{p.role}</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* The round trail sits above the conversation: it's what the
+                  submit/review loop produced, and it's the context anyone
+                  reading the thread needs first. */}
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-2">
                   Rounds
@@ -606,16 +725,12 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
               </div>
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-2">
-                  Updates
+                  Conversation
                 </p>
-                <TaskUpdates taskId={task.id} />
+                <CommentThread taskId={task.id} />
               </div>
             </div>
           )}
-          {tab === "files"        && <TaskFiles taskId={task.id} projectId={projectId} />}
-          {tab === "comments"     && <CommentThread taskId={task.id} />}
-          {tab === "dependencies" && <DependencyList taskId={task.id} allTasks={allTasks.filter((t) => t.id !== task.id)} />}
-          {tab === "time"         && <TimeTracker taskId={task.id} estimatedHours={task.estimatedHours} loggedHours={logged} onUpdate={(est, log) => { setLogged(log); if (est !== null) setEstimated(est.toString()); }} />}
 
           {/* v2: status history */}
           {tab === "history" && (
@@ -669,6 +784,20 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
           )}
         </div>
       </div>
+
+      {/* Handing work in: proof, then the reviewer's queue. */}
+      {showSubmit && (
+        <SubmitWorkDialog
+          taskId={task.id}
+          taskTitle={task.title}
+          onClose={() => setShowSubmit(false)}
+          onSubmitted={() => {
+            setShowSubmit(false);
+            setStatus("IN_REVIEW");
+            onUpdated({ ...task, status: "IN_REVIEW" });
+          }}
+        />
+      )}
 
       {/* v2: delivery-proof dialog when completing */}
       {showDelivery && (

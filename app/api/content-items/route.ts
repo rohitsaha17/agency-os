@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
       referenceUrl, referenceFileId, isExtra, isAdHoc,
       // v3: planning happens against a project cycle, and may assign in the
       // same action (Phase 4 turns assigneeId into the junior's task).
-      cycleId, assigneeId, acknowledgeExtra,
+      cycleId, assigneeId, taskDueAt, acknowledgeExtra,
     } = await req.json();
 
     if (!clientId) throw new ApiError("Client is required", 400);
@@ -171,6 +171,10 @@ export async function POST(req: NextRequest) {
         contentItemId: item.id,
         assigneeId,
         approverId: user.id,
+        // When the work is due is a separate decision from when it goes out —
+        // creatives are usually wanted ready ahead of the slot. Falls back to
+        // publish-date-minus-two when the SMM doesn't set one.
+        dueDate: taskDueAt ? new Date(taskDueAt) : undefined,
       });
     }
 

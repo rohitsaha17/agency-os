@@ -395,6 +395,22 @@ export function PlanTab({ projectId }: { projectId: string }) {
    Add / edit one planned item — with the inline "assign to"
    that turns planning into someone's task in one action.
    ───────────────────────────────────────────────────────────── */
+/**
+ * When the editor's work is due, which is not when the content goes out.
+ *
+ * A reel scheduled for the 10th is wanted in hand before the 10th — there has
+ * to be room to review it and fix it. Two days ahead at 6pm is the house
+ * default; the SMM can move it.
+ */
+function defaultDeadline(publishIso: string) {
+  const d = new Date(publishIso);
+  d.setDate(d.getDate() - 2);
+  d.setHours(18, 0, 0, 0);
+  // datetime-local wants local time with no zone suffix.
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 function PlanItemDialog({
   projectId, clientId, cycleId, date, item, canOverrideBilling, onClose, onSaved,
 }: {
@@ -418,6 +434,7 @@ function PlanItemDialog({
     description: item?.description ?? "",
     referenceUrl: item?.referenceUrl ?? "",
     assigneeId: item?.tasks[0]?.assignees[0]?.user.id ?? "",
+    taskDueAt: defaultDeadline(item ? item.date : (date ?? new Date()).toISOString()),
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -540,6 +557,25 @@ function PlanItemDialog({
               options={[{ value: "", label: "Nobody yet" }, ...juniors.map((u) => ({ value: u.id, label: String(`${u.name}${u.jobTitle?.name ? ` — ${u.jobTitle.name}` : ""}`) }))]}
             />
           </div>
+
+          {/* Only worth asking once there's somebody to ask it of. */}
+          {form.assigneeId && (
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                Deadline for the editor
+              </label>
+              <input
+                type="datetime-local"
+                value={form.taskDueAt}
+                onChange={(e) => setForm((f) => ({ ...f, taskDueAt: e.target.value }))}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+              <p className="text-[11px] text-gray-400 mt-1">
+                When you need the work in hand — separate from{" "}
+                {new Date(form.date + "T00:00:00").toLocaleDateString("en-US", { day: "numeric", month: "short" })}, when it goes out.
+              </p>
+            </div>
+          )}
 
           {error && <p className="text-xs text-red-600">{error}</p>}
         </div>

@@ -5,7 +5,7 @@ import {
   Building2, Users, Shield, Palette, Save, Plus,
   Trash2, Edit2, Check, X, Upload, RefreshCw, Eye,
   EyeOff, Mail, Phone, Globe, MapPin, DollarSign,
-  Clock, FileText, ChevronDown, KeyRound, Loader2,
+  Clock, FileText, KeyRound, Loader2,
 } from "lucide-react";
 import type { CompanySettings, TeamUser, DesignationRole } from "@/types";
 import { useToast } from "@/components/ui/Toast";
@@ -1185,7 +1185,6 @@ function UsersTab() {
                   onChange={(v) => setNewForm((p) => ({ ...p, role: v }))}
                   options={[...ASSIGNABLE_ROLES.map((r) => ({ value: r, label: String(ROLE_LABELS[r].label) }))]}
                 />
-                <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
               </div>
               <div className="relative">
                 <Select
@@ -1193,7 +1192,6 @@ function UsersTab() {
                   onChange={(v) => setNewForm((p) => ({ ...p, designationId: v }))}
                   options={[{ value: "", label: "No designation" }, ...designations.filter((d) => d.isActive).map((d) => ({ value: d.id, label: d.name }))]}
                 />
-                <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
               </div>
             </div>
             {error && <p className="text-xs text-red-600">{error}</p>}
@@ -1422,7 +1420,6 @@ function UserRow({
             size="sm"
             disabled={!user.isActive}
           />
-          <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 pointer-events-none opacity-60" />
         </div>
       </div>
 
@@ -1435,7 +1432,6 @@ function UserRow({
             options={[...ASSIGNABLE_ROLES.map((r) => ({ value: r, label: String(ROLE_LABELS[r].label) }))]}
             disabled={!user.isActive}
           />
-          <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 pointer-events-none opacity-60" />
         </div>
       </div>
 

@@ -77,8 +77,11 @@ export async function GET(req: NextRequest, { params }: Params) {
           tasks: {
             where: { deletedAt: null },
             select: {
-              id: true, status: true,
+              id: true, status: true, priority: true, dueDate: true, revision: true,
               assignees: { select: { user: { select: { id: true, name: true } } } },
+              // Who reviews it, so the plan can say where a piece is going
+              // rather than only who it left.
+              approver: { select: { id: true, name: true } },
             },
           },
         },

@@ -56,7 +56,15 @@ interface PlanItem {
   carriedFromId: string | null;
   carryMode: "INSIDE_QUOTA" | "ABOVE_QUOTA" | null;
   creativeType: { id: string; name: string; icon: string | null; color: string | null };
-  tasks: { id: string; status: string; assignees: { user: { id: string; name: string } }[] }[];
+  tasks: {
+    id: string;
+    status: string;
+    priority: string | null;
+    dueDate: string | null;
+    revision: number;
+    assignees: { user: { id: string; name: string } }[];
+    approver: { id: string; name: string } | null;
+  }[];
 }
 
 interface PlanPayload {
@@ -329,32 +337,96 @@ export function PlanTab({ projectId }: { projectId: string }) {
           />
         </div>
       ) : (
-        <div className="bg-white border border-gray-200 rounded-xl divide-y divide-gray-100">
+        /*
+          A table, because this is the SMM's read of the whole cycle: what
+          kind of work it is, who has it, who it comes back to, and when it's
+          due. The old row carried the type as a coloured dot alone, which
+          only helps if you already know the colour key.
+
+          Wide screens get every column; a phone keeps date, type, topic and
+          status and drops the rest, since the row is tappable and the panel
+          holds the detail anyway.
+        */
+        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
           {data.items.length === 0 ? (
             <p className="text-sm text-gray-400 text-center py-10">Nothing planned in this cycle yet.</p>
-          ) : data.items.map((i) => {
-            const meta = contentStatusChip(i);
-            const assignee = i.tasks[0]?.assignees[0]?.user.name;
-            return (
-              <button key={i.id} type="button" onClick={() => setEditItem(i)}
-                className="w-full text-left flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors">
-                <span className="text-xs text-gray-400 w-14 flex-shrink-0 tabular-nums">
-                  {new Date(i.date).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })}
-                </span>
-                <CreativeTypeDot color={i.creativeType.color} />
-                <span className="text-sm text-gray-800 flex-1 truncate">{i.topic}</span>
-                {i.isExtra && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 font-medium flex-shrink-0">
-                    Extra
-                  </span>
-                )}
-                {assignee && <span className="text-xs text-gray-500 flex-shrink-0">{assignee}</span>}
-                <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full flex-shrink-0 ${meta?.chip ?? "bg-gray-100"}`}>
-                  {meta?.label ?? i.status}
-                </span>
-              </button>
-            );
-          })}
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="border-b border-gray-100 bg-gray-50/60">
+                    {[
+                      ["Date", "w-20"], ["Type", "w-32"], ["Topic", ""],
+                      ["Assigned to", "hidden md:table-cell w-36"],
+                      ["Reviewer", "hidden lg:table-cell w-36"],
+                      ["Due", "hidden lg:table-cell w-28"],
+                      ["Status", "w-28"],
+                    ].map(([label, cls]) => (
+                      <th key={label}
+                        className={`px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400 ${cls}`}>
+                        {label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {data.items.map((i) => {
+                    const meta = contentStatusChip(i);
+                    const task = i.tasks[0];
+                    const assignee = task?.assignees[0]?.user.name;
+                    const reviewer = task?.approver?.name;
+                    const due = task?.dueDate ? new Date(task.dueDate) : null;
+                    const overdue = due && due < new Date() && i.status !== "POSTED";
+                    return (
+                      <tr key={i.id} onClick={() => setEditItem(i)}
+                        className="hover:bg-gray-50 transition-colors cursor-pointer">
+                        <td className="px-4 py-3 text-xs text-gray-400 tabular-nums whitespace-nowrap">
+                          {new Date(i.date).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="inline-flex items-center gap-1.5 text-xs text-gray-600 whitespace-nowrap">
+                            <CreativeTypeDot color={i.creativeType.color} />
+                            {i.creativeType.name}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="text-sm text-gray-800 flex items-center gap-1.5">
+                            <span className="truncate">{i.topic}</span>
+                            {i.isExtra && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 font-medium flex-shrink-0">
+                                Extra
+                              </span>
+                            )}
+                            {(task?.revision ?? 1) > 1 && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-orange-50 text-orange-700 border border-orange-200 font-semibold flex-shrink-0">
+                                Round {task!.revision}
+                              </span>
+                            )}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-xs text-gray-600 hidden md:table-cell truncate">
+                          {assignee ?? <span className="text-gray-300">Nobody yet</span>}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-gray-600 hidden lg:table-cell truncate">
+                          {reviewer ?? <span className="text-gray-300">—</span>}
+                        </td>
+                        <td className={`px-4 py-3 text-xs hidden lg:table-cell whitespace-nowrap ${overdue ? "text-red-600 font-medium" : "text-gray-500"}`}>
+                          {due
+                            ? due.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+                            : <span className="text-gray-300">—</span>}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${meta?.chip ?? "bg-gray-100"}`}>
+                            {meta?.label ?? i.status}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 
@@ -383,7 +455,8 @@ export function PlanTab({ projectId }: { projectId: string }) {
         <BulkPlanDialog
           projectId={projectId}
           cycleStart={cycleStart}
-          types={(data.summary?.perType ?? []).map((r) => r.creativeType)}
+          cycleEnd={new Date(cycle.endDate)}
+          perType={data.summary?.perType ?? []}
           onClose={() => setBulkOpen(false)}
           onSaved={() => { setBulkOpen(false); setLoading(true); load(); broadcastChange("all"); }}
         />
@@ -638,22 +711,88 @@ function PlanItemDialog({
    Bulk planning — lay out N items on a cadence, fill in later.
    ───────────────────────────────────────────────────────────── */
 function BulkPlanDialog({
-  projectId, cycleStart, types, onClose, onSaved,
+  projectId, cycleStart, cycleEnd, perType, onClose, onSaved,
 }: {
   projectId: string;
   cycleStart: Date;
-  types: { id: string; name: string; icon: string | null }[];
+  /** Needed to space the slots across the cycle rather than guess. */
+  cycleEnd: Date;
+  /** The cycle's quota rows, so the count can default to what's still owed. */
+  perType: QuotaRow[];
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const types = perType.map((r) => r.creativeType);
+
+  /**
+   * How many are still owed on this creative type.
+   *
+   * The count used to default to a flat 15, which bore no relation to the
+   * project: on a 12-reel retainer with all twelve already planned, it
+   * offered to add fifteen more. The deal says how many are due, so that's
+   * the number — quota plus anything carried in, less what's planned. Still
+   * editable, because an extra shoot is a real thing.
+   */
+  const remainingFor = (typeId: string) => {
+    const row = perType.find((r) => r.creativeType.id === typeId);
+    if (!row) return 1;
+    const owed = row.quota + row.carriedInQuota - row.planned;
+    return owed > 0 ? owed : 1;
+  };
+
+  /**
+   * Spread N slots evenly across the cycle.
+   *
+   * The gap used to be a flat 2 days, so twelve reels landed in the first
+   * three weeks and six posts in the first eleven days, leaving the rest of
+   * the month empty. Dividing the cycle by the count puts them where a month
+   * of work actually sits — six deliverables over thirty days is one every
+   * five days.
+   */
+  const cycleDays = Math.max(
+    1,
+    Math.round((cycleEnd.getTime() - cycleStart.getTime()) / 86_400_000) + 1,
+  );
+  const spacingFor = (count: number) =>
+    Math.max(1, Math.floor(cycleDays / Math.max(1, count)));
+
+  const firstType = types[0]?.id ?? "";
+  const firstCount = remainingFor(firstType);
   const [form, setForm] = useState({
-    creativeTypeId: types[0]?.id ?? "",
-    count: "15",
-    intervalDays: "2",
+    creativeTypeId: firstType,
+    count: String(firstCount),
+    intervalDays: String(spacingFor(firstCount)),
     startDate: cycleStart.toISOString().slice(0, 10),
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Once someone types their own number, stop overwriting it.
+  const [countTouched, setCountTouched] = useState(false);
+  const [spacingTouched, setSpacingTouched] = useState(false);
+
+  const chooseType = (id: string) =>
+    setForm((f) => {
+      const count = countTouched ? Number(f.count) : remainingFor(id);
+      return {
+        ...f,
+        creativeTypeId: id,
+        count: String(count),
+        intervalDays: spacingTouched ? f.intervalDays : String(spacingFor(count)),
+      };
+    });
+
+  const chooseCount = (value: string) => {
+    setCountTouched(true);
+    setForm((f) => ({
+      ...f,
+      count: value,
+      // Respacing as the count changes is the whole point; only a deliberate
+      // edit to the gap itself stops it.
+      intervalDays: spacingTouched ? f.intervalDays : String(spacingFor(Number(value))),
+    }));
+  };
+
+  const owed = remainingFor(form.creativeTypeId);
 
   const submit = async () => {
     setSaving(true); setError(null);
@@ -692,22 +831,25 @@ function BulkPlanDialog({
             <label className="block text-xs font-medium text-gray-700 mb-1.5">Creative type</label>
             <Select
               value={form.creativeTypeId}
-              onChange={(v) => setForm((f) => ({ ...f, creativeTypeId: v }))}
-              options={[...types.map((t) => ({ value: t.id, label: String(`${t.icon ? `${t.icon} ` : ""}${t.name}`) }))]}
+              onChange={chooseType}
+              options={types.map((t) => ({ value: t.id, label: t.name }))}
             />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1.5">How many</label>
               <input type="number" min="1" max="60" value={form.count}
-                onChange={(e) => setForm((f) => ({ ...f, count: e.target.value }))}
+                onChange={(e) => chooseCount(e.target.value)}
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              <p className="text-[11px] text-gray-400 mt-1">
+                {owed > 0 ? `${owed} still owed this cycle` : "quota already met"}
+              </p>
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1.5">Every</label>
               <div className="flex items-center gap-1.5">
                 <input type="number" min="1" value={form.intervalDays}
-                  onChange={(e) => setForm((f) => ({ ...f, intervalDays: e.target.value }))}
+                  onChange={(e) => { setSpacingTouched(true); setForm((f) => ({ ...f, intervalDays: e.target.value })); }}
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
                 <span className="text-xs text-gray-400">days</span>
               </div>

@@ -6,6 +6,9 @@ import { Plus, X, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { useCurrentUser } from "@/lib/useCurrentUser";
 import { can } from "@/lib/permissions";
+import { raiseInvoice, inSevenDays, cycleLineDescription } from "@/lib/invoice-draft";
+import { todayKey } from "@/lib/date-key";
+import { formatMoney } from "@/lib/money";
 import type { ProjectFormData, ProjectType, ProjectStatus, ClientSummary } from "@/types";
 import { Select } from "@/components/ui/Select";
 
@@ -99,6 +102,15 @@ function FormField({ label, required, error, children }: {
   );
 }
 
+const PAYMENT_METHODS = [
+  { value: "BANK_TRANSFER", label: "Bank transfer" },
+  { value: "UPI", label: "UPI" },
+  { value: "CASH", label: "Cash" },
+  { value: "CHEQUE", label: "Cheque" },
+  { value: "CARD", label: "Card" },
+  { value: "OTHER", label: "Other" },
+];
+
 /** A titled step, so the form reads as the five decisions it actually is. */
 function Step({ n, title, hint, children }: {
   n: number; title: string; hint?: string; children: React.ReactNode;
@@ -168,6 +180,20 @@ export function ProjectForm({ initialData, projectId, defaultClientId, onSuccess
   const [team, setTeam] = useState<TeamOption[]>([]);
 
   const isEdit = Boolean(projectId);
+
+  // ── Step 6: bill it now ──
+  // Everything an invoice needs is already on this form, so making the admin
+  // create the project, open it, find the Invoices tab and retype the same
+  // numbers is work the form can just do.
+  const [billNow, setBillNow] = useState(false);
+  const [billDueDate, setBillDueDate] = useState(inSevenDays());
+  const [billTakePayment, setBillTakePayment] = useState(false);
+  const [billPayAmount, setBillPayAmount] = useState("");
+  const [billPayDate, setBillPayDate] = useState(todayKey());
+  const [billPayMethod, setBillPayMethod] = useState("BANK_TRANSFER");
+  const [billPayReference, setBillPayReference] = useState("");
+  /** Set when the project saved but the invoice didn't — the project is real. */
+  const [billWarning, setBillWarning] = useState<string | null>(null);
 
   /**
    * Opened from a client's page, or editing an existing project — either way
@@ -301,6 +327,53 @@ export function ProjectForm({ initialData, projectId, defaultClientId, onSuccess
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ ...m, planningDueAt: planningDueAt || null }),
           }).catch(() => {});
+        }
+      }
+
+      // The invoice comes after the project exists, and never blocks it: a
+      // billing failure must not lose a project the admin just filled in.
+      if (!isEdit && billNow && canPrice && Number(cycleAmount) > 0) {
+        try {
+          await raiseInvoice({
+            clientId: form.clientId,
+            projectId: data.id,
+            currency: form.currency,
+            dueDate: billDueDate,
+            issueNow: true,
+            lines: [{
+              description: cycleLineDescription({
+                name: form.name,
+                serviceType: form.serviceType,
+                cycleStartDate: cycleStartDate || form.startDate || null,
+                deliverables: cleanDeliverables.map((d) => ({
+                  qtyPerCycle: d.qtyPerCycle,
+                  creativeType: {
+                    name: creativeTypes.find((t) => t.id === d.creativeTypeId)?.name ?? "item",
+                  },
+                })),
+              }),
+              quantity: 1,
+              unitPrice: Number(cycleAmount),
+            }],
+            payment: billTakePayment && Number(billPayAmount) > 0
+              ? {
+                  amount: Number(billPayAmount),
+                  receivedAt: billPayDate,
+                  method: billPayMethod,
+                  reference: billPayReference,
+                }
+              : null,
+          });
+        } catch (e) {
+          // Say what happened rather than swallowing it. The project is
+          // created; only the invoice isn't.
+          setBillWarning(
+            `${form.name} was created, but the invoice could not be raised: ${
+              e instanceof Error ? e.message : "unknown error"
+            }. Raise it from the project's Invoices tab.`,
+          );
+          setSaving(false);
+          return;
         }
       }
 
@@ -654,6 +727,127 @@ export function ProjectForm({ initialData, projectId, defaultClientId, onSuccess
           nothing to decide here.
         </p>
       </Step>
+
+      {/* ── Bill it ──
+          Optional, and only where there's an amount to bill and someone
+          allowed to see it. Editing a project doesn't re-raise an invoice:
+          that would quietly bill a client again on a name change. */}
+      {!isEdit && canPrice && (
+        <Step
+          n={6}
+          title="Bill it now?"
+          hint="Optional. Raise the first invoice from what you've entered above — including an advance, if one is being paid."
+        >
+          {Number(cycleAmount) > 0 ? (
+            <>
+              <label className="flex items-center gap-2.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={billNow}
+                  onChange={(e) => {
+                    setBillNow(e.target.checked);
+                    if (e.target.checked && !billPayAmount) {
+                      setBillPayAmount(String(Math.round(Number(cycleAmount))));
+                    }
+                  }}
+                  className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                <span className="text-sm text-gray-800">
+                  Raise an invoice for{" "}
+                  <span className="font-semibold">
+                    {formatMoney(Number(cycleAmount), form.currency, { precision: 0 })}
+                  </span>
+                  {form.type === "RETAINER" && (
+                    <span className="text-gray-400 font-normal"> — the first cycle</span>
+                  )}
+                </span>
+              </label>
+
+              {billNow && (
+                <div className="mt-4 space-y-4 pl-1">
+                  <FormField label="Due date">
+                    <input
+                      type="date" value={billDueDate}
+                      onChange={(e) => setBillDueDate(e.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </FormField>
+
+                  <div className="rounded-xl border border-gray-200 overflow-hidden">
+                    <label className="flex items-center gap-2.5 px-4 py-3 cursor-pointer bg-gray-50">
+                      <input
+                        type="checkbox"
+                        checked={billTakePayment}
+                        onChange={(e) => setBillTakePayment(e.target.checked)}
+                        className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                      />
+                      <span className="text-sm font-medium text-gray-800">Payment received</span>
+                      <span className="text-xs text-gray-400">advance or part payment</span>
+                    </label>
+
+                    {billTakePayment && (
+                      <div className="px-4 py-4 grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-gray-200">
+                        <FormField label="Amount">
+                          <div className="flex items-center gap-2">
+                            <span className="px-3 py-2 text-sm border border-gray-300 rounded-lg bg-gray-50 text-gray-500 select-none">
+                              {form.currency}
+                            </span>
+                            <input
+                              type="number" min="0" step="0.01"
+                              value={billPayAmount}
+                              onChange={(e) => setBillPayAmount(e.target.value)}
+                              className="flex-1 min-w-0 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            />
+                          </div>
+                        </FormField>
+                        <FormField label="Received on">
+                          <input
+                            type="date" value={billPayDate}
+                            onChange={(e) => setBillPayDate(e.target.value)}
+                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          />
+                        </FormField>
+                        <FormField label="Method">
+                          <Select
+                            value={billPayMethod}
+                            onChange={setBillPayMethod}
+                            options={PAYMENT_METHODS}
+                            className="w-full"
+                          />
+                        </FormField>
+                        <FormField label="Reference">
+                          <input
+                            value={billPayReference}
+                            onChange={(e) => setBillPayReference(e.target.value)}
+                            placeholder="UTR / cheque no."
+                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          />
+                        </FormField>
+                        {Number(billPayAmount) > 0 && Number(billPayAmount) < Number(cycleAmount) && (
+                          <p className="sm:col-span-2 text-xs text-amber-600">
+                            {formatMoney(Number(cycleAmount) - Number(billPayAmount), form.currency, { precision: 0 })}{" "}
+                            will show as the balance due on the invoice.
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="text-xs text-gray-400">
+              Set an amount in step 4 and you can raise the first invoice from here.
+            </p>
+          )}
+        </Step>
+      )}
+
+      {billWarning && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
+          {billWarning}
+        </div>
+      )}
 
       <div className="flex items-center justify-end gap-3 pt-2">
         <Button type="button" variant="secondary" onClick={onCancel ?? (() => router.back())}>Cancel</Button>

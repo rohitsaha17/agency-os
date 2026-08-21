@@ -5,6 +5,7 @@
  */
 
 import type { CompanySettings } from "@/types";
+import { calcInvoiceTotal, COMPLIMENTARY_TOKEN } from "./format";
 import { formatMoney } from "@/lib/money";
 
 /* ── LetterheadConfig ────────────────────────────────────────── */
@@ -610,12 +611,14 @@ export function buildInvoiceHtml(inv: InvoicePdfData, s: CompanySettings): strin
   const billed = inv.lineItems.filter((li) => !isComplimentary(li));
   const freeLines = inv.lineItems.filter(isComplimentary);
 
-  const subtotal = billed.reduce((sum, li) => sum + li.quantity * li.unitPrice, 0);
-  // The token amounts still belong in the total, or the invoice wouldn't add up.
-  const complimentaryTotal = freeLines.reduce((sum, li) => sum + li.quantity * li.unitPrice, 0);
-  const disc     = subtotal * ((inv.discountPct ?? 0) / 100);
-  const tax      = (subtotal - disc) * ((inv.taxPct ?? 0) / 100);
-  const total    = subtotal - disc + tax + complimentaryTotal;
+  // Same arithmetic as every screen. This is the document the client actually
+  // receives, so it is the last place that should be doing its own sums.
+  const {
+    subtotal, discount: disc, tax, total,
+    complimentaryValue, complimentaryCharged, goodwillDiscount,
+  } = calcInvoiceTotal(inv.lineItems, {
+    discountRate: inv.discountPct, taxRate: inv.taxPct,
+  });
 
   const fmtStatus: Record<string, string> = {
     DRAFT: "badge-gray", SENT: "badge-blue", PAID: "badge-green",
@@ -634,12 +637,19 @@ export function buildInvoiceHtml(inv: InvoicePdfData, s: CompanySettings): strin
     </tr>
   `).join("");
 
+  // A complimentary line carries what the work was WORTH. Showing that, and
+  // then discounting it to the token, is the whole point — a bare "1" tells
+  // the client nothing about what they were given.
   const complimentaryRows = freeLines.map((li) => `
     <tr>
       <td class="desc">${esc(li.description)}</td>
       <td class="qty">${li.quantity}</td>
       <td class="price" style="color:#15803d;font-weight:600;">Complimentary</td>
-      <td class="total" style="color:#15803d;">${fmt(li.quantity * li.unitPrice, inv.currency)}</td>
+      <td class="total" style="color:#15803d;">${
+        li.unitPrice > COMPLIMENTARY_TOKEN
+          ? `<span style="text-decoration:line-through;color:#9ca3af;">${fmt(li.quantity * li.unitPrice, inv.currency)}</span> ${fmt(li.quantity * COMPLIMENTARY_TOKEN, inv.currency)}`
+          : fmt(li.quantity * COMPLIMENTARY_TOKEN, inv.currency)
+      }</td>
     </tr>
   `).join("");
 
@@ -706,6 +716,11 @@ export function buildInvoiceHtml(inv: InvoicePdfData, s: CompanySettings): strin
       <div class="totals-row"><span>Subtotal</span><span>${fmt(subtotal, inv.currency)}</span></div>
       ${disc > 0 ? `<div class="totals-row disc-row"><span>Discount (${inv.discountPct}%)</span><span>−${fmt(disc, inv.currency)}</span></div>` : ""}
       ${tax > 0  ? `<div class="totals-row tax-row"><span>Tax (${inv.taxPct}%)</span><span>+${fmt(tax, inv.currency)}</span></div>` : ""}
+      ${goodwillDiscount > 0 ? `
+        <div class="totals-row"><span>Complimentary work</span><span>${fmt(complimentaryValue, inv.currency)}</span></div>
+        <div class="totals-row disc-row"><span>Goodwill discount</span><span>−${fmt(goodwillDiscount, inv.currency)}</span></div>
+      ` : ""}
+      ${complimentaryCharged > 0 && goodwillDiscount <= 0 ? `<div class="totals-row"><span>Complimentary</span><span>${fmt(complimentaryCharged, inv.currency)}</span></div>` : ""}
       <div class="totals-grand"><span>Total Due</span><span class="grand-amount">${fmt(total, inv.currency)}</span></div>
     </div>
 

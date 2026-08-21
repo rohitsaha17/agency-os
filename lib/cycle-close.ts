@@ -29,7 +29,10 @@ export type CarryDecision =
 
 export type ExtraDecision = {
   itemId: string;
-  /** BILL → an EXTRA an admin prices. FREE → a COMPLIMENTARY at 1. */
+  /**
+   * BILL → an EXTRA the admin prices to charge.
+   * FREE → a COMPLIMENTARY the admin values, charged at the token.
+   */
   intent: "BILL" | "FREE";
 };
 
@@ -265,10 +268,14 @@ export async function closeCycle(opts: {
       label: `${free ? "Complimentary" : "Extra"} ${item.creativeType.name} — ${item.topic}`,
       kind: free ? "COMPLIMENTARY" : "EXTRA",
       contentItemId: item.id,
-      // A freebie is invoiced at 1 so the client SEES the goodwill; a
-      // billable extra has no amount until an admin sets one.
-      amount: free ? 1 : null,
-      status: free ? "READY" : "PENDING_PRICING",
+      // Neither has an amount until an admin supplies one. On an EXTRA that
+      // amount is what to charge; on a COMPLIMENTARY it is what the work was
+      // WORTH — the invoice charges the token and shows the difference as a
+      // goodwill discount, and it can only do that if somebody says what was
+      // given away. A freebie used to go straight to READY at 1, which put a
+      // bare "1" on the invoice and showed the client no goodwill at all.
+      amount: null,
+      status: "PENDING_PRICING",
     });
   }
 
@@ -331,8 +338,10 @@ export async function closeCycle(opts: {
     organizationId,
     type: "CYCLE_CLOSED",
     title: `${cycle.project.name} — ${cycle.label} cycle closed`,
+    // "extras" is no longer accurate: complimentary work needs a value too,
+    // so the invoice can show what was given away rather than a bare token.
     body: needsPricing
-      ? `${needsPricing} ${needsPricing === 1 ? "extra needs" : "extras need"} pricing`
+      ? `${needsPricing} ${needsPricing === 1 ? "item needs" : "items need"} an amount before invoicing`
       : "Ready to invoice",
     link: `/invoices?needsPricing=1`,
   });

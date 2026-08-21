@@ -225,6 +225,15 @@ export default function ProjectDetailPage() {
   const [invoicesLoading, setInvoicesLoading] = useState(false);
   const [invoicesLoaded, setInvoicesLoaded] = useState(false);
   const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false);
+  // Extras and complimentary items produced by closing a cycle, waiting to
+  // land on an invoice.
+  const [billables, setBillables] = useState<{
+    ready: { id: string; label: string; kind: string; amount: string | number | null }[];
+    needsPricing: { id: string; label: string }[];
+    readyTotal: number;
+    openInvoice: { id: string; invoiceNumber: string; status: string } | null;
+  } | null>(null);
+  const [addingBillables, setAddingBillables] = useState(false);
 
   // Tax state
   const [clientTaxData, setClientTaxData] = useState<{ taxRegistrations: { id: string; type: string; number: string; country: string }[]; billingCurrency: string; paymentTermDays: number } | null>(null);
@@ -339,11 +348,36 @@ export default function ProjectDetailPage() {
     } finally { setChatMessagesLoading(false); }
   }, []);
 
+  /** Put the closed cycle's extras onto the invoice that already exists. */
+  const addBillablesToInvoice = useCallback(async () => {
+    if (!billables?.openInvoice || billables.ready.length === 0) return;
+    setAddingBillables(true);
+    try {
+      const res = await fetch(`/api/invoices/${billables.openInvoice.id}/add-billables`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ billableItemIds: billables.ready.map((b) => b.id) }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error?.message || data.error || "Could not add them");
+      toast.success(`Added ${data.added} item${data.added === 1 ? "" : "s"} to ${billables.openInvoice.invoiceNumber}`);
+      fetchInvoices();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not add them");
+    } finally {
+      setAddingBillables(false);
+    }
+    // fetchInvoices is defined below; referencing it here is fine at call time.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [billables, toast]);
+
   const fetchInvoices = useCallback(async () => {
     setInvoicesLoading(true);
     try {
       const res = await fetch(`/api/invoices?projectId=${id}`);
       if (res.ok) setInvoices(await res.json());
+      const br = await fetch(`/api/projects/${id}/billables`).catch(() => null);
+      if (br?.ok) setBillables(await br.json());
       setInvoicesLoaded(true);
     } finally { setInvoicesLoading(false); }
   }, [id]);
@@ -1564,6 +1598,48 @@ export default function ProjectDetailPage() {
                 </div>
               );
             })()}
+
+            {/* Work from a closed cycle that hasn't been billed. Said here,
+                where the cycle was closed, rather than only in the invoice
+                builder on another screen. */}
+            {billables && (billables.ready.length > 0 || billables.needsPricing.length > 0) && (
+              <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-amber-900">
+                      {billables.ready.length > 0
+                        ? `${billables.ready.length} item${billables.ready.length === 1 ? "" : "s"} from a closed cycle, worth ${formatCurrency(billables.readyTotal, project?.currency ?? "INR")}, not yet billed`
+                        : `${billables.needsPricing.length} item${billables.needsPricing.length === 1 ? "" : "s"} from a closed cycle still need pricing`}
+                    </p>
+                    {billables.ready.length > 0 && (
+                      <p className="text-xs text-amber-700 mt-0.5 truncate">
+                        {billables.ready.map((b) => b.label).join(" · ")}
+                      </p>
+                    )}
+                    {billables.ready.length > 0 && billables.needsPricing.length > 0 && (
+                      <p className="text-xs text-amber-700 mt-0.5">
+                        {billables.needsPricing.length} more still need a price before they can go on.
+                      </p>
+                    )}
+                  </div>
+                  {billables.ready.length > 0 && (
+                    billables.openInvoice ? (
+                      <Button
+                        size="sm"
+                        onClick={addBillablesToInvoice}
+                        loading={addingBillables}
+                      >
+                        Add to {billables.openInvoice.invoiceNumber}
+                      </Button>
+                    ) : (
+                      <Button size="sm" onClick={() => setInvoiceDialogOpen(true)}>
+                        Raise an invoice
+                      </Button>
+                    )
+                  )}
+                </div>
+              </div>
+            )}
 
             <div className="flex flex-wrap items-center justify-between gap-y-2 mb-4">
               <h3 className="text-sm font-semibold text-gray-900">Invoices</h3>

@@ -22,6 +22,9 @@ import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
 import { calcInvoiceTotal, calcInvoiceBalance, formatMoney } from "@/lib/format";
 import { todayKey } from "@/lib/date-key";
+import {
+  raiseInvoice, PartialInvoiceError, cycleLineDescription, inSevenDays,
+} from "@/lib/invoice-draft";
 import type { ProjectDeliverable } from "@/types";
 
 interface DraftLine {
@@ -56,21 +59,6 @@ const PAYMENT_METHODS = [
   { value: "OTHER", label: "Other" },
 ];
 
-/** "12 Reels, 6 Posts, 1 Photo Shoot" — what the cycle fee actually buys. */
-function describeDeliverables(deliverables: ProjectDeliverable[] | undefined): string {
-  if (!deliverables?.length) return "";
-  return deliverables
-    .map((d) => `${d.qtyPerCycle} ${d.creativeType.name}${d.qtyPerCycle === 1 ? "" : "s"}`)
-    .join(", ");
-}
-
-/** Default due date: 7 days out, which is the usual net-7 an agency runs on. */
-function inSevenDays(): string {
-  const d = new Date();
-  d.setDate(d.getDate() + 7);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
 export function QuickInvoiceDialog({ open, onClose, onCreated, project }: Props) {
   const currency = project.currency ?? "INR";
   const cycleAmount = project.cycleAmount != null ? String(project.cycleAmount) : "";
@@ -95,19 +83,8 @@ export function QuickInvoiceDialog({ open, onClose, onCreated, project }: Props)
   // doesn't leave half-typed lines behind for the next one.
   useEffect(() => {
     if (!open) return;
-    const summary = describeDeliverables(project.deliverables);
-    const period = project.cycleStartDate
-      ? new Date(project.cycleStartDate).toLocaleDateString(undefined, { month: "long", year: "numeric" })
-      : "";
     setLines([
-      {
-        description: [
-          project.serviceType === "ONE_TIME" ? project.name : `${project.name}${period ? ` — ${period}` : ""}`,
-          summary,
-        ].filter(Boolean).join(" · "),
-        quantity: "1",
-        unitPrice: cycleAmount,
-      },
+      { description: cycleLineDescription(project), quantity: "1", unitPrice: cycleAmount },
     ]);
     setDueDate(inSevenDays());
     setDiscountPct("");
@@ -148,68 +125,32 @@ export function QuickInvoiceDialog({ open, onClose, onCreated, project }: Props)
     setSaving(true);
     setError(null);
     try {
-      const res = await fetch("/api/invoices", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          clientId: project.clientId,
-          projectId: project.id,
-          dueDate: dueDate || null,
-          currency,
-          discountPct: discountPct === "" ? null : discountPct,
-          taxPct: taxPct === "" ? null : taxPct,
-          notes: notes.trim() || null,
-          lineItems: lines.map((l, i) => ({
-            description: l.description.trim(),
-            quantity: parseFloat(l.quantity) || 1,
-            unitPrice: parseFloat(l.unitPrice) || 0,
-            order: i,
-            kind: "PACKAGE",
-          })),
-        }),
+      await raiseInvoice({
+        clientId: project.clientId,
+        projectId: project.id,
+        currency,
+        dueDate,
+        discountPct,
+        taxPct,
+        notes,
+        issueNow,
+        lines: lines.map((l) => ({
+          description: l.description.trim(),
+          quantity: parseFloat(l.quantity) || 1,
+          unitPrice: parseFloat(l.unitPrice) || 0,
+        })),
+        payment: paidNow > 0
+          ? { amount: paidNow, receivedAt: payDate, method: payMethod, reference: payReference }
+          : null,
       });
-      if (!res.ok) {
-        throw new Error((await res.json().catch(() => ({}))).error || "Could not create the invoice");
-      }
-      const invoice = await res.json();
-
-      // Issuing and paying are separate calls, so a failure in either is
-      // reported against an invoice that already exists rather than losing
-      // the whole thing. The invoice is the part worth keeping.
-      if (issueNow || paidNow > 0) {
-        await fetch(`/api/invoices/${invoice.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status: "SENT" }),
-        }).catch(() => {});
-      }
-
-      if (paidNow > 0) {
-        const pr = await fetch("/api/receipts", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            clientId: project.clientId,
-            invoiceId: invoice.id,
-            amount: paidNow,
-            currency,
-            receivedAt: payDate,
-            method: payMethod,
-            reference: payReference.trim() || null,
-          }),
-        });
-        if (!pr.ok) {
-          // Say exactly what did and didn't happen — an invoice that exists
-          // with the payment missing is recoverable, but only if you know.
-          throw new Error(
-            `Invoice ${invoice.invoiceNumber} was created, but the payment could not be recorded. Add it from the invoice.`,
-          );
-        }
-      }
 
       onCreated();
       onClose();
     } catch (e) {
+      if (e instanceof PartialInvoiceError) {
+        // The invoice landed; only the receipt didn't. Refresh so it shows.
+        onCreated();
+      }
       setError(e instanceof Error ? e.message : "Something went wrong");
     } finally {
       setSaving(false);

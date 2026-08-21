@@ -11,6 +11,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { IndianRupee, Gift, Check, X, AlertCircle } from "lucide-react";
 import { formatMoney } from "@/lib/money";
+import { COMPLIMENTARY_TOKEN } from "@/lib/format";
 import { toast } from "@/lib/toast";
 
 interface BillableItem {
@@ -58,7 +59,7 @@ export function NeedsPricingCard({ currency = "USD" }: { currency?: string }) {
         body: JSON.stringify({ amount }),
       });
       if (!res.ok) { toast.error("Couldn't save that amount"); return; }
-      toast.success("Priced — ready to invoice");
+      toast.success("Set — ready to invoice");
       setDraft((d) => { const n = { ...d }; delete n[id]; return n; });
       load();
     } finally { setSaving(null); }
@@ -82,7 +83,10 @@ export function NeedsPricingCard({ currency = "USD" }: { currency?: string }) {
             {items.length} item{items.length === 1 ? "" : "s"} need pricing
           </p>
           <p className="text-xs text-amber-700">
-            Flagged at cycle close. Set an amount and each becomes invoiceable.
+            Flagged at cycle close. On an extra the amount is what to charge;
+            on a complimentary item it is what the work was worth — the client
+            is charged {formatMoney(COMPLIMENTARY_TOKEN, currency, { precision: 0 })} and
+            sees the rest as a goodwill discount.
           </p>
         </div>
       </div>
@@ -90,6 +94,8 @@ export function NeedsPricingCard({ currency = "USD" }: { currency?: string }) {
       <div className="divide-y divide-gray-100">
         {items.map((it) => {
           const meta = KIND_META[it.kind] ?? KIND_META.EXTRA;
+          const isGift = it.kind === "COMPLIMENTARY";
+          const worth = parseFloat(draft[it.id] ?? "") || 0;
           return (
             <div key={it.id} className="flex items-center gap-3 px-4 py-3 flex-wrap">
               <div className="flex-1 min-w-[200px]">
@@ -105,6 +111,13 @@ export function NeedsPricingCard({ currency = "USD" }: { currency?: string }) {
                 {meta.icon}{meta.label}
               </span>
 
+              {isGift && worth > COMPLIMENTARY_TOKEN && (
+                <span className="text-[11px] text-emerald-700 flex-shrink-0 whitespace-nowrap">
+                  shows as −{formatMoney(worth - COMPLIMENTARY_TOKEN, currency, { precision: 0 })} discount,
+                  charged {formatMoney(COMPLIMENTARY_TOKEN, currency, { precision: 0 })}
+                </span>
+              )}
+
               <div className="flex items-center gap-1.5 flex-shrink-0">
                 <span className="text-xs text-gray-400 select-none">{currency}</span>
                 <input
@@ -112,7 +125,10 @@ export function NeedsPricingCard({ currency = "USD" }: { currency?: string }) {
                   value={draft[it.id] ?? ""}
                   onChange={(e) => setDraft((d) => ({ ...d, [it.id]: e.target.value }))}
                   onKeyDown={(e) => { if (e.key === "Enter") price(it.id); }}
-                  placeholder="0.00"
+                  placeholder={isGift ? "worth" : "0.00"}
+                  title={isGift
+                    ? "What this was worth. The invoice charges the token and shows the rest as a discount."
+                    : "What to charge for this extra."}
                   className="w-24 px-2 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
                 <button onClick={() => price(it.id)} disabled={saving === it.id}
                   title="Save amount"

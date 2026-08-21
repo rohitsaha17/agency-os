@@ -164,6 +164,25 @@ export function canAssignTo(actor: HasRole | null | undefined, targetRole: strin
   return SCOPE_TARGETS[assignScope(actor)].includes(normalizeRole(targetRole));
 }
 
+/**
+ * May `actor` put this task on `target`'s plate?
+ *
+ * Same as canAssignTo, plus the case the role table can't express: yourself.
+ * Every scope excludes the actor's own tier — juniorsOnly doesn't list SMM,
+ * smmAndBelow doesn't list MANAGER — because those describe who you may
+ * DELEGATE to. Writing your own to-do isn't delegation, and everyone can do
+ * it, so it's answered here rather than by widening the scopes and
+ * accidentally letting an SMM assign sideways to another SMM.
+ */
+export function canAssignToUser(
+  actor: HasRole | null | undefined,
+  target: { id?: string | null; role?: string | null },
+): boolean {
+  if (!actor) return false;
+  if (actor.id && target.id && actor.id === target.id) return true;
+  return canAssignTo(actor, target.role ?? "TEAM");
+}
+
 /** The whole matrix, for Settings ▸ Roles to render from code. */
 export function capabilityMatrix() {
   return {

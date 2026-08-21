@@ -13,7 +13,7 @@ import type { Task, TaskStatus } from "@/types";
 
 // ── Status visuals ────────────────────────────────────────────
 
-const STATUS_DOT: Record<TaskStatus, { dot: string; label: string; ring: string }> = {
+export const STATUS_DOT: Record<TaskStatus, { dot: string; label: string; ring: string }> = {
   TODO:        { dot: "bg-gray-300",    label: "To Do",       ring: "ring-gray-200" },
   IN_PROGRESS: { dot: "bg-blue-500",    label: "In Progress", ring: "ring-blue-200" },
   IN_REVIEW:   { dot: "bg-amber-400",   label: "In Review",   ring: "ring-amber-200" },
@@ -76,7 +76,7 @@ function initials(name: string) {
  * you pick it. The row's left border recolours from the same map the moment
  * the choice is made.
  */
-function StatusDot({ status, onPick, canPick }: {
+export function StatusDot({ status, onPick, canPick }: {
   status: TaskStatus;
   onPick: (s: TaskStatus) => void;
   /** Planners choose a status directly; everyone else advances via the panel. */

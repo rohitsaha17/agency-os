@@ -13,10 +13,11 @@ import { CalendarTasksSwitch } from "@/components/calendar/CalendarTasksSwitch";
 import { useCurrentUser } from "@/lib/useCurrentUser";
 import { can } from "@/lib/permissions";
 import { TaskPanel } from "@/components/tasks/TaskPanel";
+import { StatusDot } from "@/components/tasks/TaskList";
 import { SubmitWorkDialog, RequestChangesDialog, MarkPostedDialog } from "@/components/tasks/ReviewDialogs";
 import { broadcastChange, useLiveRefresh } from "@/lib/live";
 import { toast } from "@/lib/toast";
-import type { Task } from "@/types";
+import type { Task, TaskStatus } from "@/types";
 import { Select } from "@/components/ui/Select";
 
 // ── Types ────────────────────────────────────────────────────
@@ -176,6 +177,8 @@ const DELIVERY_LABEL: Record<string, string> = {
 
 function TasksBoardInner() {
   const { user: currentUser } = useCurrentUser();
+  // Only planners set a status directly — same rule as the project board.
+  const canPickStatus = can(currentUser, "content.plan");
   const searchParams = useSearchParams();
 
   const [items, setItems] = useState<PersonalRow[]>([]);
@@ -251,6 +254,36 @@ function TasksBoardInner() {
   useEffect(() => { if (showApprovals) fetchApprovals(); }, [showApprovals, fetchApprovals]);
 
   // ── Actions ────────────────────────────────────────────────
+
+  /**
+   * A planner moving assigned work from the list.
+   *
+   * DONE still routes through the dialog that asks for proof — completing a
+   * task without evidence is the thing the review loop exists to prevent, and
+   * that holds whether you got here from the board or from this page.
+   */
+  const handleOrgStatus = async (t: Task, next: TaskStatus) => {
+    if (next === t.status) return;
+    if (next === "DONE") {
+      if (t.kind === "CONTENT_WORK") { setSubmitFor(t); return; }
+      if (t.kind === "POST") { setPostFor(t); return; }
+      setDeliveryFor({ id: t.id, title: t.title });
+      return;
+    }
+    setOrgTasks((prev) => prev.map((x) => (x.id === t.id ? { ...x, status: next } : x)));
+    const res = await fetch(`/api/tasks/${t.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: next }),
+    });
+    if (!res.ok) {
+      setOrgTasks((prev) => prev.map((x) => (x.id === t.id ? { ...x, status: t.status } : x)));
+      const d = await res.json().catch(() => null);
+      toast.error(d?.error?.message ?? "Couldn't update that task");
+      return;
+    }
+    broadcastChange("all");
+  };
 
   const togglePersonal = async (p: PersonalRow) => {
     setItems((prev) => prev.map((x) => (x.id === p.id ? { ...x, done: !p.done } : x)));
@@ -342,22 +375,23 @@ function TasksBoardInner() {
     const done = t.status === "DONE";
     return (
       <div key={`org-${t.id}`} className="group flex items-start gap-2.5 px-3 py-2 hover:bg-gray-50 rounded-xl transition-colors">
-        <button className="mt-0.5 flex-shrink-0"
-          title={
-            t.kind === "POST" ? "Mark as posted"
-            : t.kind === "CONTENT_WORK" ? "Submit for approval"
-            : "Complete"
-          }
-          onClick={() => {
-            if (done) return;
-            // v3: content work is SUBMITTED for review, a posting task is
-            // marked live, and anything else completes the v2 way.
-            if (t.kind === "CONTENT_WORK") setSubmitFor(t);
-            else if (t.kind === "POST") setPostFor(t);
-            else setDeliveryFor({ id: t.id, title: t.title });
-          }}>
-          {done ? <CheckCircle2 className="w-4.5 h-4.5 text-indigo-500" /> : <Circle className="w-4.5 h-4.5 text-gray-300 hover:text-indigo-400" />}
-        </button>
+        {/*
+          The same control as the project board, deliberately. This used to be
+          a tick that jumped a task straight to complete, so the same dot meant
+          "finish this" here and "change status" there. Assigned work moves the
+          one way it moves everywhere: a planner picks a status, everyone else
+          opens the task and presses Start / Mark completed.
+
+          Personal items keep the tick — see renderPersonalRow. Ticking your own
+          reminder off IS the whole interaction there, and that one is right.
+        */}
+        <div className="mt-1 flex-shrink-0">
+          <StatusDot
+            status={t.status}
+            canPick={canPickStatus}
+            onPick={(next) => handleOrgStatus(t, next)}
+          />
+        </div>
         <div className="flex-1 min-w-0">
           <button onClick={() => setOpenTask(t)}
             className={`block w-full text-left text-sm leading-snug ${done ? "line-through text-gray-400" : "text-gray-800 hover:text-indigo-700"}`}>
@@ -558,14 +592,16 @@ function TasksBoardInner() {
                 )}
               </button>
             )}
-            {/* v3: a junior assigns to nobody — their scope is selfOnly
-                (docs/V3_CONTEXT.md §2), so delegation simply isn't offered. */}
-            {can(currentUser, "tasks.assign") && (
-              <button onClick={() => setShowOrgTaskModal(true)}
-                className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-500 transition-colors">
-                <Repeat className="w-4 h-4" /> Delegate a team task
-              </button>
-            )}
+            {/*
+              Everyone gets this, because everyone has someone to give a task
+              to — an editor has themselves. The picker inside is filtered to
+              whoever the person may actually assign, so the button says the
+              same thing to all of them and the scope does the talking.
+            */}
+            <button onClick={() => setShowOrgTaskModal(true)}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-500 transition-colors">
+              <Plus className="w-4 h-4" /> New task
+            </button>
           </div>
         </div>
       </div>

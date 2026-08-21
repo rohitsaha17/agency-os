@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { taskVisibilityScope } from "@/lib/api-permissions";
+import { canAssignToUser } from "@/lib/permissions";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 import { parsePagination, paginationMeta, DEFAULT_PAGE_SIZE } from "@/lib/pagination";
 import { logStatus } from "@/lib/audit";
@@ -133,6 +134,24 @@ export async function POST(req: NextRequest) {
         where: { id: { in: peopleIds }, organizationId: user.organizationId },
       });
       if (count !== new Set(peopleIds).size) throw new ApiError("One or more users not found", 404);
+
+      /**
+       * Who you may hand work to, by role: an editor writes their own to-dos,
+       * an SMM briefs juniors, a manager reaches SMMs and juniors, an admin
+       * reaches anyone. The UI only offers the names you're allowed, but the
+       * list arrives from the client, so it's checked here.
+       */
+      const targets = await prisma.user.findMany({
+        where: { id: { in: peopleIds }, organizationId: user.organizationId },
+        select: { id: true, name: true, role: true },
+      });
+      const refused = targets.filter((t) => !canAssignToUser(user, t));
+      if (refused.length) {
+        throw new ApiError(
+          `You can't assign work to ${refused.map((t) => t.name).join(", ")}.`,
+          403,
+        );
+      }
     }
 
     const requireApproval = await assignmentRequiresApproval(user.organizationId);

@@ -1,10 +1,12 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { X, Link2, Upload, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import type { Task, TaskFormData, TaskStatus, Priority, User } from "@/types";
 import { Select } from "@/components/ui/Select";
+import { useCurrentUser } from "@/lib/useCurrentUser";
+import { canAssignToUser } from "@/lib/permissions";
 
 const STATUS_OPTIONS: { value: TaskStatus; label: string }[] = [
   { value: "TODO", label: "To Do" },
@@ -59,6 +61,13 @@ interface TaskModalProps {
   onSaved: (task: Task) => void;
 }
 
+/** ISO instant -> the value a datetime-local input wants (local, no zone). */
+function toLocalInput(iso: string) {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export function TaskModal({
   projectId, global, defaultStatus, parentTask, editTask, allTasks = [], prefill, onClose, onSaved,
 }: TaskModalProps) {
@@ -74,7 +83,7 @@ export function TaskModal({
       description: editTask.description ?? "",
       status: editTask.status,
       priority: editTask.priority,
-      dueDate: editTask.dueDate ? editTask.dueDate.slice(0, 10) : "",
+      dueDate: editTask.dueDate ? toLocalInput(editTask.dueDate) : "",
       parentId: editTask.parentId,
       managerId: editTask.manager?.id ?? null,
       assigneeIds: editTask.assignees.map((a) => a.userId),
@@ -89,6 +98,22 @@ export function TaskModal({
     }),
   });
   const [users, setUsers] = useState<User[]>([]);
+  const { user: me } = useCurrentUser();
+
+  /**
+   * Only the people this person may actually hand work to: an editor sees
+   * themselves, an SMM adds juniors, a manager adds SMMs, an admin sees
+   * everyone. POST /api/tasks enforces the same rule — this is the courtesy
+   * layer, so a name the API would refuse never gets offered.
+   *
+   * Filtered here rather than when fetching, because `me` arrives from its own
+   * request: filtering on arrival ran while `me` was still null, which matched
+   * nobody and left the picker permanently empty.
+   */
+  const assignableUsers = useMemo<User[]>(
+    () => users.filter((u) => canAssignToUser(me, u)),
+    [users, me],
+  );
   const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
   const [projects, setProjects] = useState<{ id: string; name: string; clientId?: string; client?: { id: string } }[]>([]);
   const [pickedProjectId, setPickedProjectId] = useState<string>("");
@@ -211,39 +236,54 @@ export function TaskModal({
             <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">{error}</div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
+          {isGeneral ? (
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1.5">Topic</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1.5">Title</label>
               <input
-                autoFocus type="text" value={form.topic ?? ""}
-                onChange={(e) => set("topic", e.target.value)}
-                placeholder="e.g. Diwali teaser"
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                Task Title <span className="text-gray-400 font-normal">(defaults to topic)</span>
-              </label>
-              <input
-                type="text" value={form.title}
+                autoFocus type="text" value={form.title}
                 onChange={(e) => set("title", e.target.value)}
                 placeholder="What needs to be done?"
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
             </div>
-          </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1.5">Topic</label>
+                  <input
+                    autoFocus type="text" value={form.topic ?? ""}
+                    onChange={(e) => set("topic", e.target.value)}
+                    placeholder="e.g. Diwali teaser"
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                    Task Title <span className="text-gray-400 font-normal">(defaults to topic)</span>
+                  </label>
+                  <input
+                    type="text" value={form.title}
+                    onChange={(e) => set("title", e.target.value)}
+                    placeholder="What needs to be done?"
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
 
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1.5">Content / Brief</label>
-            <textarea
-              value={form.content ?? ""} onChange={(e) => set("content", e.target.value)}
-              rows={3} placeholder="Caption, copy, or brief for this deliverable…"
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
-            />
-          </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1.5">Content / Brief</label>
+                <textarea
+                  value={form.content ?? ""} onChange={(e) => set("content", e.target.value)}
+                  rows={3} placeholder="Caption, copy, or brief for this deliverable…"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                />
+              </div>
+            </>
+          )}
 
-          {/* Reference: URL or file */}
+          {/* Reference: URL or file — a deliverable thing, not a to-do thing */}
+          {!isGeneral && (
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <label className="block text-xs font-medium text-gray-700">Reference</label>
@@ -276,6 +316,7 @@ export function TaskModal({
               </div>
             )}
           </div>
+          )}
 
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1.5">Description</label>
@@ -319,37 +360,44 @@ export function TaskModal({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className={isGeneral ? "" : "grid grid-cols-2 gap-3"}>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1.5">Delivery Due Date</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                {isGeneral ? "Due" : "Delivery Due Date"}
+              </label>
               <input
-                type="date" value={form.dueDate} onChange={(e) => set("dueDate", e.target.value)}
+                type="datetime-local" value={form.dueDate} onChange={(e) => set("dueDate", e.target.value)}
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
             </div>
+            {/* Estimating hours is a delivery conversation, not a to-do. */}
+            {!isGeneral && (
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1.5">Est. Hours</label>
+                <input
+                  type="number" min="0" step="0.5" value={form.estimatedHours}
+                  onChange={(e) => set("estimatedHours", e.target.value)}
+                  placeholder="e.g. 4"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+            )}
+          </div>
+
+          {!isGeneral && (
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1.5">Est. Hours</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1.5">Extra Note</label>
               <input
-                type="number" min="0" step="0.5" value={form.estimatedHours}
-                onChange={(e) => set("estimatedHours", e.target.value)}
-                placeholder="e.g. 4"
+                type="text" value={form.extraNote ?? ""}
+                onChange={(e) => set("extraNote", e.target.value)}
+                placeholder="Anything the assignee should know…"
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
             </div>
-          </div>
+          )}
 
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1.5">Extra Note</label>
-            <input
-              type="text" value={form.extraNote ?? ""}
-              onChange={(e) => set("extraNote", e.target.value)}
-              placeholder="Anything the assignee should know…"
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-          </div>
-
-          {/* Preferred assignee + Manager */}
-          {users.length > 0 && (
+          {/* Routing and review are project machinery — a to-do has neither. */}
+          {!isGeneral && assignableUsers.length > 0 && (
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1.5">
@@ -358,7 +406,7 @@ export function TaskModal({
                 <SelectInput
                   value={form.preferredAssigneeId ?? ""}
                   onChange={(v) => set("preferredAssigneeId", v)}
-                  options={[{ value: "", label: "No preference" }, ...users.map((u) => ({ value: u.id, label: u.name }))]}
+                  options={[{ value: "", label: "No preference" }, ...assignableUsers.map((u) => ({ value: u.id, label: u.name }))]}
                 />
                 {form.preferredAssigneeId && (
                   <p className="text-[11px] text-amber-600 mt-1">
@@ -371,7 +419,7 @@ export function TaskModal({
                 <SelectInput
                   value={form.managerId ?? ""}
                   onChange={(v) => set("managerId", v || null)}
-                  options={[{ value: "", label: "Unassigned" }, ...users.map((u) => ({ value: u.id, label: u.name }))]}
+                  options={[{ value: "", label: "Unassigned" }, ...assignableUsers.map((u) => ({ value: u.id, label: u.name }))]}
                 />
               </div>
             </div>
@@ -382,7 +430,7 @@ export function TaskModal({
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1.5">Assignees</label>
               <div className="flex flex-wrap gap-1.5">
-                {users.map((u) => (
+                {assignableUsers.map((u) => (
                   <button
                     key={u.id} type="button" onClick={() => toggleAssignee(u.id)}
                     className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${

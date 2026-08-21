@@ -11,6 +11,7 @@
 import { prisma } from "@/lib/prisma";
 import { notify } from "@/lib/notify";
 import { logStatus } from "@/lib/audit";
+import { cycleSummary } from "@/lib/cycle-quota";
 
 /**
  * "New client onboarded — plan <project>".
@@ -26,6 +27,11 @@ export async function createPlanningTask(opts: {
   projectId: string;
   userId: string;
   createdById?: string | null;
+  /**
+   * When the plan is wanted by. Set by whoever assigns the SMM; falls back to
+   * two days out, which is a guess and shouldn't pretend otherwise.
+   */
+  planningDueDate?: Date | null;
 }): Promise<string | null> {
   const { organizationId, projectId, userId } = opts;
 
@@ -64,8 +70,11 @@ export async function createPlanningTask(opts: {
     ? `Plan the content for ${project.client.name}. This project owes ${deliverables}${perCycle}.`
     : `Plan the content for ${project.client.name}. No deliverables are set on this project yet.`;
 
-  const dueDate = new Date();
-  dueDate.setDate(dueDate.getDate() + 2);
+  const dueDate = opts.planningDueDate ?? (() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 2);
+    return d;
+  })();
 
   const task = await prisma.task.create({
     data: {
@@ -212,4 +221,67 @@ export async function createContentWorkTask(opts: {
   });
 
   return task.id;
+}
+
+/**
+ * Keep a project's PLANNING task honest about how far the plan has got.
+ *
+ * The task the SMM sees is "plan this project", and what "done" means is not a
+ * judgement call — it's whether the cycle's quota has been filled. So the task
+ * reports progress as planned-against-quota (12/15) and closes itself when the
+ * quota is met, rather than asking someone to remember to tick it.
+ *
+ * Called after anything that changes a cycle's plan. Cheap, and safe to call
+ * when there's no planning task: it simply does nothing.
+ */
+export async function syncPlanningTask(projectId: string, organizationId: string) {
+  const task = await prisma.task.findFirst({
+    where: { projectId, kind: "PLANNING", deletedAt: null },
+    select: { id: true, status: true, progress: true, cycleId: true },
+  });
+  if (!task) return;
+
+  // The cycle being planned: the task's own, else the project's current open one.
+  const cycleId = task.cycleId ?? (await prisma.projectCycle.findFirst({
+    where: { projectId, status: "OPEN" },
+    orderBy: { startDate: "asc" },
+    select: { id: true },
+  }))?.id;
+  if (!cycleId) return;
+
+  const summary = await cycleSummary(cycleId, organizationId);
+  if (!summary) return;
+
+  const { quota, planned } = summary.totals;
+  // No quota means nothing to measure against; leave the task alone rather
+  // than declaring a project with no deliverables "fully planned".
+  if (quota <= 0) return;
+
+  const pct = Math.min(100, Math.round((planned / quota) * 100));
+  const complete = planned >= quota;
+
+  if (task.progress === pct && (complete ? task.status === "DONE" : task.status !== "DONE")) {
+    return; // nothing changed
+  }
+
+  await prisma.task.update({
+    where: { id: task.id },
+    data: {
+      progress: pct,
+      // Reopen if items were removed after it closed — the plan is short again.
+      status: complete ? "DONE" : task.status === "DONE" ? "IN_PROGRESS" : task.status,
+    },
+  });
+
+  if (complete && task.status !== "DONE") {
+    await logStatus({
+      organizationId,
+      entityType: "TASK",
+      entityId: task.id,
+      from: task.status,
+      to: "DONE",
+      userId: null,
+      note: `plan complete — ${planned}/${quota} planned`,
+    });
+  }
 }

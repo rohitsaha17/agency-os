@@ -8,7 +8,7 @@ import {
   Calendar, CalendarClock, Receipt, Settings,
   HardDrive, TrendingDown, Scroll, Menu, X,
   Sun, MessageSquare, LogOut, BarChart3,
-  PanelLeftClose, PanelLeftOpen,
+  PanelLeftClose, PanelLeftOpen, ShieldCheck,
 } from "lucide-react";
 import { ThemeToggle, ThemeToggleIcon } from "@/components/ui/ThemeToggle";
 import { BrandLogo } from "@/components/ui/BrandLogo";
@@ -43,6 +43,9 @@ const navItems: {
     group: "Work",
     links: [
       { href: "/tasks",        label: "Tasks",        icon: CheckSquare,   need: null                },
+      // Reviewing is its own job with its own queue, so it gets its own entry
+      // rather than hiding behind a button on the tasks page.
+      { href: "/approvals",    label: "Approvals",    icon: ShieldCheck,   need: "tasks.review"      },
       { href: "/my-calendar",  label: "My Calendar",  icon: CalendarClock, need: null                },
       { href: "/messages",     label: "Messages",     icon: MessageSquare, need: null                },
       { href: "/calendar",     label: "Calendar",     icon: Calendar,      need: "content.plan"      },

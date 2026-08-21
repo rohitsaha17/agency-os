@@ -60,7 +60,8 @@ export async function POST(req: NextRequest, { params }: Params) {
     });
     if (!project) throw new ApiError("Project not found", 404);
 
-    const { userId, role } = await req.json();
+    // planningDueAt: optional, set by whoever assigns the SMM.
+    const { userId, role, planningDueAt } = await req.json();
     if (!userId) throw new ApiError("userId is required", 400);
     const memberRole = role === "SMM" ? "SMM" : "CONTRIBUTOR";
 
@@ -83,6 +84,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     let planningTaskId: string | null = null;
     if (memberRole === "SMM") {
       planningTaskId = await createPlanningTask({
+        planningDueDate: planningDueAt ? new Date(planningDueAt) : null,
         organizationId: project.organizationId,
         projectId: id,
         userId,

@@ -232,6 +232,9 @@ export function ProjectForm({ initialData, projectId, defaultClientId, onSuccess
    * covering (docs/V3_CONTEXT.md §2). A junior can't — they don't hold
    * content.plan — so offering them here would only lead to a 403 later.
    */
+  // When the SMM's plan is due. Sent through to the planning task they get.
+  const [planningDueAt, setPlanningDueAt] = useState("");
+
   const smmCandidates = team.filter((u) =>
     ["SMM", "ADMIN", "MANAGER", "OWNER"].includes(u.role),
   );
@@ -274,6 +277,7 @@ export function ProjectForm({ initialData, projectId, defaultClientId, onSuccess
         cycleEndDate: openEnded ? null : (cycleEndDate || form.endDate || null),
         deliverables: cleanDeliverables,
         members,
+        planningDueAt: planningDueAt || null,
       };
       const res = await fetch(isEdit ? `/api/projects/${projectId}` : "/api/projects", {
         method: isEdit ? "PATCH" : "POST",
@@ -295,7 +299,7 @@ export function ProjectForm({ initialData, projectId, defaultClientId, onSuccess
           await fetch(`/api/projects/${projectId}/members`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(m),
+            body: JSON.stringify({ ...m, planningDueAt: planningDueAt || null }),
           }).catch(() => {});
         }
       }
@@ -627,6 +631,24 @@ export function ProjectForm({ initialData, projectId, defaultClientId, onSuccess
             })}
           </div>
         )}
+        {/* Only worth asking once somebody has been picked to do it. */}
+        {members.some((m) => m.role === "SMM") && (
+          <div className="mt-4">
+            <label className="block text-xs font-medium text-gray-700 mb-1.5">
+              Plan wanted by <span className="font-normal text-gray-400">— optional</span>
+            </label>
+            <input
+              type="datetime-local"
+              value={planningDueAt}
+              onChange={(e) => setPlanningDueAt(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+            <p className="text-[11px] text-gray-400 mt-1">
+              The deadline on their planning task. Left empty, it defaults to two days out.
+            </p>
+          </div>
+        )}
+
         <p className="text-[11px] text-gray-400 mt-3">
           Editors, photographers and the rest are assigned per item while planning —
           nothing to decide here.

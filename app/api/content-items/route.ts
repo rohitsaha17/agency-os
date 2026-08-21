@@ -6,7 +6,7 @@ import { handleApiError, ApiError } from "@/lib/api-errors";
 import { logStatus } from "@/lib/audit";
 import { cycleForDate } from "@/lib/cycles";
 import { quotaCheck } from "@/lib/cycle-quota";
-import { createContentWorkTask } from "@/lib/auto-tasks";
+import { createContentWorkTask, syncPlanningTask } from "@/lib/auto-tasks";
 
 const ITEM_INCLUDE = {
   creativeType: true,
@@ -179,6 +179,10 @@ export async function POST(req: NextRequest) {
         dueDate: taskDueAt ? new Date(taskDueAt) : undefined,
       });
     }
+
+    // The plan just moved: recount it so "12/15" and the task's own status
+    // stay true without anyone maintaining them.
+    if (item.projectId) await syncPlanningTask(item.projectId, user.organizationId);
 
     const fresh = await prisma.contentItem.findUnique({
       where: { id: item.id },

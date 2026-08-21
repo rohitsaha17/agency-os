@@ -126,6 +126,8 @@ export async function POST(req: NextRequest) {
       // v3: the project IS the commercial unit
       cycleAmount, cycleUnit, cycleStartDate, cycleEndDate,
       deliverables, members,
+      // When the SMM's plan is wanted by; optional.
+      planningDueAt,
     } = body;
 
     if (!clientId?.trim()) throw new ApiError("Client is required", 400);
@@ -255,6 +257,7 @@ export async function POST(req: NextRequest) {
         projectId: project.id,
         userId,
         createdById: user.id,
+        planningDueDate: planningDueAt ? new Date(planningDueAt) : null,
       });
     }
 

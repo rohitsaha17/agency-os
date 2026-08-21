@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { syncPlanningTask } from "@/lib/auto-tasks";
 import { requireAuth } from "@/lib/auth";
 import { requireCapability } from "@/lib/api-permissions";
 import { handleApiError, ApiError } from "@/lib/api-errors";
@@ -96,6 +97,8 @@ export async function POST(req: NextRequest, { params }: Params) {
         note: "planned in bulk",
       });
     }
+
+    await syncPlanningTask(id, user.organizationId);
 
     return NextResponse.json(
       {

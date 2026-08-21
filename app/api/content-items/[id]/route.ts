@@ -4,7 +4,7 @@ import { requireAuth } from "@/lib/auth";
 import { requireCapability } from "@/lib/api-permissions";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 import { can } from "@/lib/permissions";
-import { createContentWorkTask } from "@/lib/auto-tasks";
+import { createContentWorkTask, syncPlanningTask } from "@/lib/auto-tasks";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -117,8 +117,11 @@ export async function DELETE(req: NextRequest, { params }: Params) {
     const user = await requireAuth(req);
     requireCapability(user, "content.plan");
     const { id } = await params;
-    await findItem(id, user.organizationId);
+    const doomed = await findItem(id, user.organizationId);
     await prisma.contentItem.delete({ where: { id } });
+    // Removing an item can take the plan back under quota, which should
+    // reopen the planning task rather than leave it falsely closed.
+    if (doomed?.projectId) await syncPlanningTask(doomed.projectId, user.organizationId);
     return NextResponse.json({ success: true });
   } catch (error) {
     return handleApiError(error, "DELETE /api/content-items/[id]");

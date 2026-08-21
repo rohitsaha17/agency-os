@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useEffect, useState, useCallback, useMemo, useRef, Suspense } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   Plus, Star, CheckCircle2, Circle, ChevronDown, ChevronRight, ChevronUp,
   MoreVertical, ListTodo, Clock, ShieldCheck, X, FolderKanban, Repeat,
@@ -176,6 +177,7 @@ const DELIVERY_LABEL: Record<string, string> = {
 // ── Page ─────────────────────────────────────────────────────
 
 function TasksBoardInner() {
+  const router = useRouter();
   const { user: currentUser } = useCurrentUser();
   // Only planners set a status directly — same rule as the project board.
   const canPickStatus = can(currentUser, "content.plan");
@@ -231,14 +233,41 @@ function TasksBoardInner() {
   // Live: pick up calendar-side edits (and teammates' changes) instantly
   useLiveRefresh(["tasks", "calendar"], () => { if (currentUser) fetchAll(); });
 
+  /**
+   * Honour a deep-link exactly once.
+   *
+   * This effect depends on orgTasks, and useLiveRefresh refetches every 25
+   * seconds — which hands it a brand-new array each time and re-runs it. With
+   * ?tab=approvals still sitting in the URL, the Approvals panel reopened on
+   * every poll, so closing it bought you 25 seconds. Same for ?task=<id>
+   * reopening a drawer you'd just dismissed.
+   *
+   * The param is consumed once and then stripped from the URL, so a reload or
+   * a back-navigation doesn't re-trigger it either.
+   */
+  const consumedDeepLink = useRef(false);
   useEffect(() => {
-    if (searchParams.get("tab") === "approvals" && isHead) setShowApprovals(true);
-    // v3: notifications and the calendar deep-link to /tasks?task=<id>
+    if (consumedDeepLink.current) return;
+
+    const tab = searchParams.get("tab");
     const wanted = searchParams.get("task");
+    if (!tab && !wanted) return;
+
+    // A task link can't resolve until the list has loaded; wait rather than
+    // burning the one shot on an empty array.
+    if (wanted && orgTasks.length === 0) return;
+
+    if (tab === "approvals" && isHead) { router.replace("/approvals"); return; }
     if (wanted) {
       const t = orgTasks.find((x) => x.id === wanted);
       if (t) setOpenTask(t);
     }
+
+    consumedDeepLink.current = true;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("tab");
+    url.searchParams.delete("task");
+    window.history.replaceState({}, "", url.pathname + url.search);
   }, [searchParams, isHead, orgTasks]);
 
   const fetchApprovals = useCallback(async () => {
@@ -283,6 +312,18 @@ function TasksBoardInner() {
       return;
     }
     broadcastChange("all");
+  };
+
+  /**
+   * Where a task row leads. Most open the drawer; a planning task opens the
+   * project's Plan tab, because that IS the task.
+   */
+  const openTaskOrPlan = (t: Task) => {
+    if (t.kind === "PLANNING" && t.projectId) {
+      router.push(`/projects/${t.projectId}?tab=plan`);
+      return;
+    }
+    setOpenTask(t);
   };
 
   const togglePersonal = async (p: PersonalRow) => {
@@ -393,7 +434,15 @@ function TasksBoardInner() {
           />
         </div>
         <div className="flex-1 min-w-0">
-          <button onClick={() => setOpenTask(t)}
+          {/*
+            "Plan this project" opens the plan, not a form about the plan.
+            A PLANNING task has no brief to read and nothing to type into it —
+            the work is entirely on the project's Plan tab, and the task closes
+            itself once the quota is filled. Sending it to a task drawer made
+            the SMM press Start, read a description the system wrote, then go
+            find the plan anyway.
+          */}
+          <button onClick={() => openTaskOrPlan(t)}
             className={`block w-full text-left text-sm leading-snug ${done ? "line-through text-gray-400" : "text-gray-800 hover:text-indigo-700"}`}>
             {t.title}
           </button>
@@ -408,6 +457,16 @@ function TasksBoardInner() {
               <FolderKanban className="w-2.5 h-2.5" />
               {(t as Task & { project?: { name?: string } }).project?.name ?? t.client?.name ?? "Assigned to you"}
             </span>
+            {/* A planning task measures itself: how much of the cycle is planned. */}
+            {t.kind === "PLANNING" && typeof t.progress === "number" && (
+              <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full border ${
+                t.progress >= 100
+                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                  : "bg-violet-50 text-violet-700 border-violet-200"
+              }`}>
+                {t.progress}% planned
+              </span>
+            )}
             {chip && !done && (
               <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border ${
                 chip.late ? "bg-red-50 border-red-200 text-red-600" : "bg-gray-50 border-gray-200 text-gray-600"
@@ -581,8 +640,10 @@ function TasksBoardInner() {
           </div>
           <div className="flex items-center gap-2">
             <CalendarTasksSwitch active="tasks" />
+            {/* Approvals is its own page now — a review needs the brief and
+                the submission side by side, which a drawer never had room for. */}
             {isHead && (
-              <button onClick={() => setShowApprovals(true)}
+              <Link href="/approvals"
                 className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg transition-colors">
                 <ShieldCheck className="w-3.5 h-3.5" /> Approvals
                 {approvals && approvals.submitted.length + approvals.assignments.length > 0 && (
@@ -590,7 +651,7 @@ function TasksBoardInner() {
                     {approvals.submitted.length + approvals.assignments.length}
                   </span>
                 )}
-              </button>
+              </Link>
             )}
             {/*
               Everyone gets this, because everyone has someone to give a task

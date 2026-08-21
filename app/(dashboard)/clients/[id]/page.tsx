@@ -818,7 +818,7 @@ export default function ClientDetailPage() {
   ];
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex-1 flex flex-col min-h-0">
       {/* Header */}
       <div className="bg-white border-b border-gray-200 px-4 sm:px-6 lg:px-8 py-4 sm:py-5">
         <Link href="/clients" className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 transition-colors mb-4">
@@ -1049,7 +1049,7 @@ export default function ClientDetailPage() {
         {/* ── CONTACTS ── */}
         {tab === "contacts" && (
           <div className="w-full space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-y-2">
               <p className="text-sm text-gray-500">{client.contacts.length} contact{client.contacts.length !== 1 ? "s" : ""}</p>
               <Button size="sm" icon={<Plus className="w-3.5 h-3.5" />} onClick={() => setContactModal({ open: true })}>
                 Add Contact
@@ -1166,13 +1166,13 @@ export default function ClientDetailPage() {
               {client.taxRegistrations && client.taxRegistrations.length > 0 ? (
                 <div className="space-y-3">
                   {/* Header */}
-                  <div className="grid grid-cols-3 gap-3 px-1">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 px-1">
                     {["Type", "Number", "Country / Region"].map((h) => (
                       <p key={h} className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</p>
                     ))}
                   </div>
                   {client.taxRegistrations.map((tax) => (
-                    <div key={tax.id} className="grid grid-cols-3 gap-3 bg-gray-50 rounded-xl px-4 py-3 items-center">
+                    <div key={tax.id} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 bg-gray-50 rounded-xl px-4 py-3 items-center">
                       <span className="text-xs font-mono font-semibold text-indigo-700 bg-indigo-50 px-2 py-1 rounded w-fit">{tax.type}</span>
                       <span className="text-sm font-mono text-gray-800">{tax.number}</span>
                       <span className="text-sm text-gray-600">{tax.country}</span>
@@ -1195,7 +1195,7 @@ export default function ClientDetailPage() {
         {/* ── PROJECTS ── */}
         {tab === "projects" && (
           <div className="w-full space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-y-2">
               <p className="text-sm text-gray-500">{client.projects.length} project{client.projects.length !== 1 ? "s" : ""}</p>
               {canManageChannels && (
                 <Button size="sm" icon={<Plus className="w-3.5 h-3.5" />} onClick={() => setProjectModalOpen(true)}>
@@ -1218,7 +1218,7 @@ export default function ClientDetailPage() {
                   <Link
                     key={project.id}
                     href={`/projects/${project.id}`}
-                    className="bg-white border border-gray-200 rounded-xl px-5 py-4 flex items-center justify-between hover:border-indigo-300 hover:bg-indigo-50/30 transition-colors group"
+                    className="bg-white border border-gray-200 rounded-xl px-5 py-4 flex flex-wrap items-center justify-between gap-y-2 hover:border-indigo-300 hover:bg-indigo-50/30 transition-colors group"
                   >
                     <div>
                       <p className="text-sm font-medium text-gray-900 group-hover:text-indigo-700 transition-colors">{project.name}</p>
@@ -1261,7 +1261,7 @@ export default function ClientDetailPage() {
           return (
             <div className="w-full space-y-4">
               {/* Summary cards */}
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {[
                   { label: "Total Invoiced", value: totalInvoiced, icon: DollarSign, color: "text-gray-700" },
                   { label: "Paid", value: totalPaid, icon: CheckCircle2, color: "text-emerald-600" },
@@ -1279,7 +1279,7 @@ export default function ClientDetailPage() {
                 ))}
               </div>
 
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-y-2">
                 <p className="text-sm text-gray-500">{invoices.length} invoice{invoices.length !== 1 ? "s" : ""}</p>
                 <Link href={`/invoices?clientId=${id}`}>
                   <Button size="sm" icon={<Plus className="w-3.5 h-3.5" />}>New Invoice</Button>
@@ -1439,7 +1439,7 @@ export default function ClientDetailPage() {
               <div className="flex gap-4 h-[500px]">
                 {/* Channel list sidebar */}
                 <div className="w-56 flex-shrink-0 bg-white border border-gray-200 rounded-xl overflow-hidden flex flex-col">
-                  <div className="px-3 py-2.5 border-b border-gray-100 flex items-center justify-between">
+                  <div className="px-3 py-2.5 border-b border-gray-100 flex flex-wrap items-center justify-between gap-y-2">
                     <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Channels</p>
                     {canManageChannels && (
                       <button
@@ -1620,7 +1620,7 @@ export default function ClientDetailPage() {
         {/* ── CONTRACTS ── */}
         {tab === "contracts" && (
           <div className="w-full space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-y-2">
               <p className="text-sm text-gray-500">{clientContracts.length} contract{clientContracts.length !== 1 ? "s" : ""}</p>
               <Button size="sm" icon={<Plus className="w-3.5 h-3.5" />} onClick={() => setContractModalOpen(true)}>New Contract</Button>
             </div>
@@ -1968,7 +1968,7 @@ export default function ClientDetailPage() {
               className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Amount *</label>
               <input
@@ -1988,7 +1988,7 @@ export default function ClientDetailPage() {
               />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Category</label>
               <Select
@@ -2036,7 +2036,7 @@ export default function ClientDetailPage() {
       <Modal open={receiptModalOpen} onClose={() => setReceiptModalOpen(false)} title={receiptEditing ? "Edit Receipt" : "Record Receipt"} width="max-w-md">
         <form onSubmit={handleSaveReceipt} className="space-y-4">
           {receiptError && <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">{receiptError}</p>}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Amount *</label>
               <input
@@ -2055,7 +2055,7 @@ export default function ClientDetailPage() {
               />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Received On</label>
               <input
@@ -2082,7 +2082,7 @@ export default function ClientDetailPage() {
               options={[{ value: "", label: "— None —" }, ...invoices.map((inv) => ({ value: inv.id, label: `${inv.invoiceNumber}` }))]}
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Reference</label>
               <input
@@ -2194,7 +2194,7 @@ export default function ClientDetailPage() {
 
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-2">Contract Type</label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
               {CONTRACT_TYPES.map((t) => (
                 <button key={t.value} type="button" onClick={() => setClientContractForm((f) => ({ ...f, type: t.value }))}
                   className={`py-2 px-3 rounded-lg border-2 text-xs font-medium transition-colors ${
@@ -2207,7 +2207,7 @@ export default function ClientDetailPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">Start Date</label>
               <input type="date" value={clientContractForm.startDate} onChange={(e) => setClientContractForm((f) => ({ ...f, startDate: e.target.value }))}
@@ -2222,7 +2222,7 @@ export default function ClientDetailPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">Contract Value</label>
               <input type="number" step="0.01" value={clientContractForm.value} onChange={(e) => setClientContractForm((f) => ({ ...f, value: e.target.value }))}
@@ -2242,7 +2242,7 @@ export default function ClientDetailPage() {
 
           {/* Parties */}
           <div>
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex flex-wrap items-center justify-between gap-y-2 mb-2">
               <label className="text-xs font-medium text-gray-500">Signing Parties</label>
               <button type="button" onClick={() => setClientContractParties((p) => [...p, { ...EMPTY_CLIENT_PARTY }])}
                 className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-medium"
@@ -2253,7 +2253,7 @@ export default function ClientDetailPage() {
             <div className="space-y-3">
               {clientContractParties.map((party, i) => (
                 <div key={i} className="border border-gray-200 rounded-xl p-3 bg-gray-50">
-                  <div className="flex items-center justify-between mb-2">
+                  <div className="flex flex-wrap items-center justify-between gap-y-2 mb-2">
                     <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Party {i + 1}</span>
                     {clientContractParties.length > 1 && (
                       <button type="button" onClick={() => setClientContractParties((p) => p.filter((_, idx) => idx !== i))}
@@ -2274,7 +2274,7 @@ export default function ClientDetailPage() {
                       </button>
                     ))}
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {party.partyType === "CLIENT" && (
                       <div>
                         <label className="block text-xs text-gray-400 mb-1">Client (pre-filled)</label>

@@ -432,7 +432,7 @@ const TEMPLATE_OPTIONS: TemplateOption[] = [
 function TemplateThumbnail({ tpl, accent, headerBg }: { tpl: LHTemplate; accent: string; headerBg: string }) {
   if (tpl === "CLASSIC") return (
     <div className="w-full h-16 flex flex-col rounded overflow-hidden border border-gray-200">
-      <div className="flex-shrink-0 h-5 px-2 flex items-center justify-between" style={{ borderBottom: `2px solid ${accent}` }}>
+      <div className="flex-shrink-0 h-5 px-2 flex flex-wrap items-center justify-between gap-y-2" style={{ borderBottom: `2px solid ${accent}` }}>
         <div className="flex items-center gap-1"><div className="h-3 w-3 rounded" style={{ background: accent }} /><div className="h-1.5 rounded bg-gray-300 w-8" /></div>
         <div className="h-1 rounded bg-gray-200 w-8" />
       </div>
@@ -444,7 +444,7 @@ function TemplateThumbnail({ tpl, accent, headerBg }: { tpl: LHTemplate; accent:
     <div className="w-full h-16 flex flex-col rounded overflow-hidden border border-gray-200">
       <div className="flex-shrink-0 h-5 flex" style={{ borderBottom: "1px solid #e5e7eb" }}>
         <div className="w-1.5 flex-shrink-0" style={{ background: accent }} />
-        <div className="flex-1 px-2 flex items-center justify-between">
+        <div className="flex-1 px-2 flex flex-wrap items-center justify-between gap-y-2">
           <div><div className="h-1.5 rounded bg-gray-300 w-10 mb-0.5" /><div className="h-0.5 rounded w-4" style={{ background: accent }} /></div>
           <div className="h-1 rounded bg-gray-200 w-8" />
         </div>
@@ -466,7 +466,7 @@ function TemplateThumbnail({ tpl, accent, headerBg }: { tpl: LHTemplate; accent:
   );
   if (tpl === "BOLD") return (
     <div className="w-full h-16 flex flex-col rounded overflow-hidden border border-gray-200">
-      <div className="flex-shrink-0 h-6 px-2.5 flex items-center justify-between" style={{ background: headerBg }}>
+      <div className="flex-shrink-0 h-6 px-2.5 flex flex-wrap items-center justify-between gap-y-2" style={{ background: headerBg }}>
         <div className="flex items-center gap-1.5"><div className="h-3 w-3 rounded-sm bg-white/30" /><div className="h-1.5 rounded bg-white/60 w-10" /></div>
         <div className="h-1 rounded bg-white/30 w-8" />
       </div>
@@ -497,7 +497,7 @@ function TemplateThumbnail({ tpl, accent, headerBg }: { tpl: LHTemplate; accent:
   // EXECUTIVE
   return (
     <div className="w-full h-16 flex flex-col rounded overflow-hidden border border-gray-200">
-      <div className="flex-shrink-0 h-6 px-2.5 flex items-center justify-between" style={{ background: headerBg }}>
+      <div className="flex-shrink-0 h-6 px-2.5 flex flex-wrap items-center justify-between gap-y-2" style={{ background: headerBg }}>
         <div className="flex items-center gap-1.5"><div className="h-3 w-3 rounded-sm bg-white/20" /><div className="h-2 rounded w-10" style={{ background: accent, opacity: 0.9 }} /></div>
         <div className="space-y-0.5"><div className="h-1 rounded bg-white/20 w-8" /><div className="h-1 rounded bg-white/20 w-6" /></div>
       </div>
@@ -612,7 +612,7 @@ function LetterheadPreview({
 
   if (template === "BOLD") return (
     <div className="border border-gray-200 rounded-xl overflow-hidden shadow-sm bg-white text-xs">
-      <div className="px-4 py-3 flex items-center justify-between gap-3" style={{ background: hBg }}>
+      <div className="px-4 py-3 flex flex-wrap items-center justify-between gap-y-2 gap-3" style={{ background: hBg }}>
         <div className={`flex items-center gap-2 ${logoJustify}`}><LogoEl light />{agencyNameEl && <div style={{ color: cfg.headerTextColor === "light" ? "#fff" : "#111" }} className="font-bold text-[12px]">{name}</div>}</div>
         <ContactBlock light />
       </div>
@@ -664,7 +664,7 @@ function LetterheadPreview({
   // EXECUTIVE
   return (
     <div className="border border-gray-200 rounded-xl overflow-hidden shadow-sm bg-white text-xs">
-      <div className="px-4 py-3 flex items-center justify-between gap-3" style={{ background: hBg }}>
+      <div className="px-4 py-3 flex flex-wrap items-center justify-between gap-y-2 gap-3" style={{ background: hBg }}>
         <div className={`flex items-center gap-2.5 ${logoJustify}`}>
           <LogoEl light />
           <div>
@@ -859,7 +859,7 @@ function LetterheadTab({
             </div>
 
             {/* Logo position + size */}
-            <div className="mt-4 grid grid-cols-2 gap-4 pt-4 border-t border-gray-100">
+            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-gray-100">
               <div>
                 <p className="text-xs font-medium text-gray-700 mb-2">Logo Position</p>
                 <div className="flex gap-1.5">
@@ -900,7 +900,7 @@ function LetterheadTab({
                   <div className="mt-1 flex-shrink-0"><Toggle checked={cfg.showAddress} onChange={v => setCfgK("showAddress", v)} label="Show" /></div>
                 </div>
               </Field>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Field label="Phone">
                   <Input value={form.letterheadPhone ?? ""} onChange={e => set("letterheadPhone", e.target.value)} placeholder="+971 50 000 0000" />
                   <div className="mt-1.5"><Toggle checked={cfg.showPhone} onChange={v => setCfgK("showPhone", v)} label="Show phone" /></div>
@@ -987,7 +987,7 @@ function LetterheadTab({
               <Field label="Footer Text">
                 <Input value={form.letterheadFooter ?? ""} onChange={e => set("letterheadFooter", e.target.value)} placeholder="Thank you for your business." />
               </Field>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <p className="text-xs font-medium text-gray-700 mb-2">Text Alignment</p>
                   <div className="flex gap-1.5">
@@ -1013,7 +1013,7 @@ function LetterheadTab({
         {/* ── Live Preview ── */}
         <div className="lg:col-span-2 lg:sticky lg:top-4 self-start">
           <div className="bg-white border border-gray-200 rounded-2xl p-4">
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex flex-wrap items-center justify-between gap-y-2 mb-3">
               <p className="text-xs font-semibold text-gray-700">Live Preview</p>
               <span className="text-[10px] text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full capitalize">
                 {template.charAt(0) + template.slice(1).toLowerCase()} layout
@@ -1152,7 +1152,7 @@ function UsersTab() {
         title="Team Members"
         desc="Manage who has access to the platform and their permission level"
       >
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-wrap items-center justify-between gap-y-2 mb-4">
           <p className="text-xs text-gray-500">{activeUsers.length} active member{activeUsers.length !== 1 ? "s" : ""}</p>
           <button
             onClick={() => setShowAdd((v) => !v)}
@@ -1598,7 +1598,7 @@ function AssignmentApprovalCard() {
       title="Assignment Approval"
       desc="Whether a Head of Design signs off on who gets a task before it reaches them."
     >
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-y-2 gap-4">
         <div className="min-w-0">
           <p className="text-sm text-gray-800">Require Head-of-Design approval for assignments</p>
           <p className="text-xs text-gray-400 mt-0.5">

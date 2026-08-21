@@ -560,7 +560,7 @@ export default function CalendarPage() {
             {selectedItem ? (
               /* v3 Phase 0 (defect 4): a chip opens its own item here */
               <div className="p-4 sm:p-5">
-                <div className="flex items-center justify-between mb-4">
+                <div className="flex flex-wrap items-center justify-between gap-y-2 mb-4">
                   <button onClick={() => setSelectedItem(null)}
                     className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-800">
                     <ChevronLeft className="w-3.5 h-3.5" />
@@ -573,7 +573,7 @@ export default function CalendarPage() {
                 </div>
 
                 <div className={`border rounded-xl p-3 mb-4 ${contentStatusChip(selectedItem).chip} ${selectedItem.isAdHoc ? "border-dashed" : ""}`}>
-                  <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex flex-wrap items-center justify-between gap-y-2 mb-1.5">
                     <span className="text-xs">
                       <CreativeTypeDot color={selectedItem.creativeType.color} /> {selectedItem.creativeType.name}
                     </span>
@@ -632,7 +632,7 @@ export default function CalendarPage() {
               </div>
             ) : (
             <div className="p-4 sm:p-5">
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex flex-wrap items-center justify-between gap-y-2 mb-4">
                 <h3 className="text-sm font-semibold text-gray-900">
                   {selected.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
                 </h3>
@@ -682,7 +682,7 @@ export default function CalendarPage() {
                           <button key={i.id} type="button" onClick={() => setSelectedItem(i)}
                             className="block w-full text-left mb-2">
                             <div className={`border rounded-xl p-3 hover:shadow-sm transition-all ${meta.chip} ${i.isAdHoc ? "border-dashed" : ""}`}>
-                              <div className="flex items-center justify-between mb-1">
+                              <div className="flex flex-wrap items-center justify-between gap-y-2 mb-1">
                                 <span className="text-xs inline-flex items-center gap-1.5"><CreativeTypeDot color={i.creativeType.color} />{i.creativeType.name}</span>
                                 <span className="text-[10px] font-semibold uppercase">{meta.label}</span>
                               </div>
@@ -804,13 +804,13 @@ function AddEventDialog({
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
+        <div className="flex flex-wrap items-center justify-between gap-y-2 px-5 py-4 border-b border-gray-200">
           <h2 className="text-base font-semibold text-gray-900">Add Event</h2>
           <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4 text-gray-500" /></button>
         </div>
         <div className="p-5 space-y-4">
           {error && <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-sm text-red-700">{error}</div>}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="col-span-2">
               <label className="block text-xs font-medium text-gray-700 mb-1.5">Title <span className="text-red-500">*</span></label>
               <input autoFocus value={form.title}

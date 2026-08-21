@@ -214,7 +214,7 @@ export function RoleBlocks({ currency = "USD" }: { currency?: string }) {
           title="Money"
           action={<Link href="/invoices" className="text-xs text-indigo-600 hover:underline">Invoices</Link>}
         >
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {[
               { label: "Invoiced",    value: formatMoney(money.invoiced, currency) },
               { label: "Collected",   value: formatMoney(money.collected, currency) },

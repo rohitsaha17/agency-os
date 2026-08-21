@@ -105,7 +105,7 @@ export default function NewContractPage() {
   };
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex-1 flex flex-col min-h-0">
       <div className="bg-white border-b border-gray-200 px-4 sm:px-6 lg:px-8 py-4 sm:py-5 flex-shrink-0">
         <nav className="flex items-center gap-2 text-sm text-gray-500 mb-2">
           <Link href="/contracts" className="hover:text-gray-800 transition-colors">Contracts</Link>
@@ -200,7 +200,7 @@ export default function NewContractPage() {
 
           {/* Parties */}
           <div>
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex flex-wrap items-center justify-between gap-y-2 mb-3">
               <label className="text-sm font-medium text-gray-700">Signing Parties</label>
               <button type="button" onClick={addParty}
                 className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-medium"
@@ -211,7 +211,7 @@ export default function NewContractPage() {
             <div className="space-y-3">
               {parties.map((party, i) => (
                 <div key={i} className="border border-gray-200 rounded-xl p-4 bg-gray-50">
-                  <div className="flex items-center justify-between mb-3">
+                  <div className="flex flex-wrap items-center justify-between gap-y-2 mb-3">
                     <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Party {i + 1}</span>
                     {parties.length > 1 && (
                       <button type="button" onClick={() => removeParty(i)} className="text-red-400 hover:text-red-600">

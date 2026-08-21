@@ -136,7 +136,7 @@ function ApprovalsInner() {
   };
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex-1 flex flex-col min-h-0">
       <div className="bg-white border-b border-gray-200 px-4 sm:px-6 lg:px-8 py-5 flex-shrink-0">
         <div className="flex items-start justify-between gap-4">
           <div>

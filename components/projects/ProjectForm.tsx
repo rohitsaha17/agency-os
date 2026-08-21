@@ -326,7 +326,7 @@ export function ProjectForm({ initialData, projectId, defaultClientId, onSuccess
       )}
 
       {/* Project type */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {TYPE_OPTIONS.map((opt) => (
           <button
             key={opt.value} type="button" onClick={() => set("type", opt.value)}

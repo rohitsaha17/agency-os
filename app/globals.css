@@ -566,3 +566,35 @@ input[type="time"]::-webkit-calendar-picker-indicator:hover {
   opacity: 1;
   background-color: rgba(129, 140, 248, 0.18);
 }
+
+/* ──────────────────────────────────────────────────────────────
+   Touch targets
+   ──────────────────────────────────────────────────────────────
+   Icon buttons sit at roughly 28px, which is comfortable with a
+   mouse and fiddly with a thumb — the WCAG minimum is 44px. Rather
+   than pad every button and loosen the desktop layout, the minimum
+   is applied only where the pointer is actually coarse, so phones
+   and tablets get bigger targets and nothing else changes.
+
+   Inline links inside prose are excluded: stretching those to 44px
+   would space paragraphs out strangely, and they aren't the
+   controls people struggle to hit. */
+@media (pointer: coarse) {
+  button,
+  [role="button"],
+  a[class*="rounded"],
+  input[type="checkbox"],
+  input[type="radio"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Anything laid out as a row keeps its shape — the minimum applies
+     to the tappable box, not to text that happens to be short. */
+  button.inline,
+  button[class*="inline-flex"][class*="text-["],
+  a[class*="inline-flex"][class*="text-["] {
+    min-height: 0;
+    min-width: 0;
+  }
+}

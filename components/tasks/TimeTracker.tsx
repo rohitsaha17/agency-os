@@ -83,7 +83,7 @@ export function TimeTracker({ taskId, estimatedHours, loggedHours: initLogged, o
   return (
     <div className="space-y-4">
       {/* Summary cards */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="bg-gray-50 border border-gray-200 rounded-xl p-3">
           <p className="text-xs text-gray-500 mb-1">Estimated</p>
           <div className="flex items-center gap-2">
@@ -137,7 +137,7 @@ export function TimeTracker({ taskId, estimatedHours, loggedHours: initLogged, o
       {/* Log form */}
       {showLog && (
         <form onSubmit={handleLogTime} className="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-3">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Hours</label>
               <input

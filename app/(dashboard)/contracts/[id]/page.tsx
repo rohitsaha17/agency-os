@@ -205,7 +205,7 @@ export default function ContractDetailPage() {
   const cfg = STATUS_CONFIG[contract.status];
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex-1 flex flex-col min-h-0">
       {/* Header */}
       <div className="bg-white border-b border-gray-200 px-4 sm:px-6 lg:px-8 py-4 sm:py-5 flex-shrink-0">
         <nav className="flex items-center gap-2 text-sm text-gray-500 mb-2">
@@ -274,7 +274,7 @@ export default function ContractDetailPage() {
         <div className="max-w-3xl space-y-6">
           {/* Signature progress */}
           <div className="bg-white border border-gray-200 rounded-xl p-5">
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex flex-wrap items-center justify-between gap-y-2 mb-4">
               <h3 className="text-sm font-semibold text-gray-900">Signing Status</h3>
               <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${
                 signedCount === contract.parties.length && contract.parties.length > 0
@@ -389,7 +389,7 @@ export default function ContractDetailPage() {
       {statusOpen && (
         <Modal open title="Update Contract Status" onClose={() => setStatusOpen(false)}>
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {(Object.entries(STATUS_CONFIG) as [ContractStatus, typeof STATUS_CONFIG[ContractStatus]][]).map(([s, cfg]) => (
                 <button key={s} onClick={() => setNewStatus(s)}
                   className={`p-3 rounded-xl border-2 text-sm font-medium text-left transition-colors ${

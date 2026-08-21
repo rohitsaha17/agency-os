@@ -71,7 +71,7 @@ export default function NotificationsPage() {
   });
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex-1 flex flex-col min-h-0">
       <div className="bg-white border-b border-gray-200 px-4 sm:px-6 lg:px-8 py-4 sm:py-5">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>

@@ -196,7 +196,7 @@ function TaskBreakdown({ stats }: { stats: TaskStats }) {
         ))}
       </div>
       {/* Legend */}
-      <div className="grid grid-cols-3 gap-x-3 gap-y-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-3 gap-y-2">
         {bars.map((b) => (
           <div key={b.label} className="flex items-center gap-1.5">
             <div className={`w-2.5 h-2.5 rounded-sm flex-shrink-0 ${b.color}`} />
@@ -206,7 +206,7 @@ function TaskBreakdown({ stats }: { stats: TaskStats }) {
         ))}
       </div>
       {/* Completion rate */}
-      <div className="pt-2 border-t border-gray-100 flex items-center justify-between">
+      <div className="pt-2 border-t border-gray-100 flex flex-wrap items-center justify-between gap-y-2">
         <span className="text-xs text-gray-500">Completion rate</span>
         <span className="text-sm font-bold text-gray-900">
           {stats.total > 0 ? Math.round((stats.done / stats.total) * 100) : 0}%
@@ -279,7 +279,7 @@ function ProjectHealthRow({ project }: { project: ProjectHealth }) {
       <div className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors border-b border-gray-100 last:border-0">
         <RiskDot risk={project.risk} />
         <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between mb-1">
+          <div className="flex flex-wrap items-center justify-between gap-y-2 mb-1">
             <p className="text-sm font-medium text-gray-900 truncate">{project.name}</p>
             <span className="text-xs font-bold text-gray-700 ml-2 flex-shrink-0">{project.progress}%</span>
           </div>
@@ -433,7 +433,7 @@ function SectionCard({ title, subtitle, action, children, className = "" }: {
 }) {
   return (
     <div className={`bg-white border border-gray-200 rounded-2xl overflow-hidden ${className}`}>
-      <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+      <div className="flex flex-wrap items-center justify-between gap-y-2 px-5 py-4 border-b border-gray-100">
         <div>
           <h2 className="text-sm font-semibold text-gray-900">{title}</h2>
           {subtitle && <p className="text-xs text-gray-400 mt-0.5">{subtitle}</p>}
@@ -572,9 +572,9 @@ export default function DashboardPage() {
       <div className={`bg-gray-100 rounded animate-pulse ${className}`} />
     );
     return (
-      <div className="flex flex-col h-full">
+      <div className="flex-1 flex flex-col min-h-0">
         <div className="bg-white border-b border-gray-200 px-4 sm:px-6 lg:px-8 py-4 sm:py-5">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-y-2">
             <div>
               <Shimmer className="h-6 w-56 mb-2" />
               <Shimmer className="h-3.5 w-40" />
@@ -607,7 +607,7 @@ export default function DashboardPage() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
             {[1,2,3].map((i) => (
               <div key={i} className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
-                <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+                <div className="px-5 py-4 border-b border-gray-100 flex flex-wrap items-center justify-between gap-y-2">
                   <div>
                     <Shimmer className="h-4 w-32 mb-1.5" />
                     <Shimmer className="h-3 w-20" />
@@ -651,7 +651,7 @@ export default function DashboardPage() {
 
   if (error) {
     return (
-      <div className="flex flex-col h-full">
+      <div className="flex-1 flex flex-col min-h-0">
         <div className="bg-white border-b border-gray-200 px-4 sm:px-6 lg:px-8 py-4 sm:py-5">
           <h1 className="text-xl font-semibold text-gray-900">Dashboard</h1>
           <p className="text-sm text-gray-500 mt-0.5">{today}</p>
@@ -726,7 +726,7 @@ export default function DashboardPage() {
     : "Everything is on track — great work!";
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex-1 flex flex-col min-h-0">
       {/* Header */}
       <div className="bg-white border-b border-gray-200 px-4 sm:px-6 lg:px-8 py-4 sm:py-5 flex-shrink-0">
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:justify-between">
@@ -883,7 +883,7 @@ export default function DashboardPage() {
         {/* ── Row 4: Project Health ──────────────────────────── */}
         {projectHealth.length > 0 && (
           <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+            <div className="flex flex-wrap items-center justify-between gap-y-2 px-5 py-4 border-b border-gray-100">
               <div>
                 <h2 className="text-sm font-semibold text-gray-900">Project Health</h2>
                 <p className="text-xs text-gray-400 mt-0.5">Active projects sorted by recent activity</p>

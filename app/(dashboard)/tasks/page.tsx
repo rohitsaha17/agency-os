@@ -817,7 +817,7 @@ function TasksBoardInner() {
         <>
           <div className="fixed inset-0 z-40 bg-black/20" onClick={() => setShowApprovals(false)} />
           <div className="fixed top-0 right-0 bottom-0 z-50 w-full sm:w-[420px] bg-white shadow-2xl flex flex-col">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
+            <div className="flex flex-wrap items-center justify-between gap-y-2 px-5 py-4 border-b border-gray-200">
               <h2 className="text-base font-semibold text-gray-900 flex items-center gap-2">
                 <ShieldCheck className="w-4 h-4 text-amber-500" /> Approvals
               </h2>

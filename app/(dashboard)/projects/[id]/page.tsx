@@ -633,7 +633,7 @@ export default function ProjectDetailPage() {
 
   if (loading) {
     return (
-      <div className="flex flex-col h-full">
+      <div className="flex-1 flex flex-col min-h-0">
         <div className="bg-white border-b border-gray-200 px-4 sm:px-6 lg:px-8 py-4 sm:py-5 animate-pulse">
           <div className="h-4 bg-gray-200 rounded w-48 mb-3" />
           <div className="h-7 bg-gray-200 rounded w-72" />
@@ -654,7 +654,7 @@ export default function ProjectDetailPage() {
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex-1 flex flex-col min-h-0">
       {/* Header */}
       <div className="bg-white border-b border-gray-200 px-4 sm:px-6 lg:px-8 py-4 sm:py-5 flex-shrink-0">
         {/* Back, then the trail. The breadcrumb says where you are; this says
@@ -1050,7 +1050,7 @@ export default function ProjectDetailPage() {
 
             {expenseSummary?.budget && expenseSummary.total > 0 && (
               <div className="bg-white border border-gray-200 rounded-xl px-5 py-4 mb-6">
-                <div className="flex items-center justify-between mb-2">
+                <div className="flex flex-wrap items-center justify-between gap-y-2 mb-2">
                   <span className="text-xs font-medium text-gray-600">Budget Used</span>
                   <span className="text-xs text-gray-500">{Math.round((expenseSummary.total / expenseSummary.budget) * 100)}%</span>
                 </div>
@@ -1066,7 +1066,7 @@ export default function ProjectDetailPage() {
               </div>
             )}
 
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex flex-wrap items-center justify-between gap-y-2 mb-4">
               <h3 className="text-sm font-semibold text-gray-900">Expenses</h3>
               <Button size="sm" variant="secondary" icon={<Plus className="w-3.5 h-3.5" />}
                 onClick={() => setExpenseModalOpen(true)}
@@ -1124,7 +1124,7 @@ export default function ProjectDetailPage() {
         {/* ── CONTRACTS TAB ── */}
         {pageTab === "contracts" && (
           <div>
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex flex-wrap items-center justify-between gap-y-2 mb-4">
               <h3 className="text-sm font-semibold text-gray-900">Contracts & NDAs</h3>
               <Button size="sm" variant="secondary" icon={<Plus className="w-3.5 h-3.5" />}
                 onClick={() => setContractModalOpen(true)}
@@ -1153,7 +1153,7 @@ export default function ProjectDetailPage() {
                   };
                   return (
                     <Link key={contract.id} href={`/contracts/${contract.id}`}>
-                      <div className="bg-white border border-gray-200 rounded-xl p-4 hover:shadow-md hover:border-indigo-200 transition-all flex items-center justify-between gap-4">
+                      <div className="bg-white border border-gray-200 rounded-xl p-4 hover:shadow-md hover:border-indigo-200 transition-all flex flex-wrap items-center justify-between gap-y-2 gap-4">
                         <div className="flex items-center gap-3 min-w-0">
                           <div className="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
                             <Scroll className="w-4 h-4 text-gray-400" />
@@ -1549,7 +1549,7 @@ export default function ProjectDetailPage() {
               const currency = invoices[0]?.currency ?? project?.currency ?? "USD";
 
               return (
-                <div className="grid grid-cols-3 gap-4 mb-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
                   {[
                     { label: "Total Invoiced", value: formatCurrency(totalInvoiced, currency), color: "text-gray-900" },
                     { label: "Total Paid", value: formatCurrency(totalPaid, currency), color: "text-emerald-600" },
@@ -1564,7 +1564,7 @@ export default function ProjectDetailPage() {
               );
             })()}
 
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex flex-wrap items-center justify-between gap-y-2 mb-4">
               <h3 className="text-sm font-semibold text-gray-900">Invoices</h3>
               <Link href="/invoices">
                 <Button size="sm" variant="secondary" icon={<Plus className="w-3.5 h-3.5" />}>
@@ -1666,7 +1666,7 @@ export default function ProjectDetailPage() {
             ) : (
               <div className="space-y-4">
                 {/* Client reference */}
-                <div className="bg-white border border-gray-200 rounded-xl p-4 flex items-center justify-between">
+                <div className="bg-white border border-gray-200 rounded-xl p-4 flex flex-wrap items-center justify-between gap-y-2">
                   <div>
                     <p className="text-xs text-gray-500">Client</p>
                     <p className="text-sm font-semibold text-gray-900">{project.client.name}</p>
@@ -1681,7 +1681,7 @@ export default function ProjectDetailPage() {
                   <h3 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
                     <Receipt className="w-4 h-4 text-gray-400" /> Billing Settings
                   </h3>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <p className="text-xs text-gray-500">Currency</p>
                       <p className="text-sm font-medium text-gray-900">{clientTaxData?.billingCurrency || project.currency || "USD"}</p>
@@ -1700,13 +1700,13 @@ export default function ProjectDetailPage() {
                   </h3>
                   {clientTaxData?.taxRegistrations && clientTaxData.taxRegistrations.length > 0 ? (
                     <div className="space-y-2">
-                      <div className="grid grid-cols-3 gap-3 px-1">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 px-1">
                         {["Type", "Number", "Country / Region"].map((h) => (
                           <p key={h} className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</p>
                         ))}
                       </div>
                       {clientTaxData.taxRegistrations.map((tax) => (
-                        <div key={tax.id} className="grid grid-cols-3 gap-3 bg-gray-50 rounded-xl px-4 py-3 items-center">
+                        <div key={tax.id} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 bg-gray-50 rounded-xl px-4 py-3 items-center">
                           <span className="text-xs font-mono font-semibold text-indigo-700 bg-indigo-50 px-2 py-1 rounded w-fit">{tax.type}</span>
                           <span className="text-sm font-mono text-gray-800">{tax.number}</span>
                           <span className="text-sm text-gray-600">{tax.country}</span>
@@ -1805,7 +1805,7 @@ export default function ProjectDetailPage() {
               className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">Amount *</label>
               <input value={expenseForm.amount} onChange={(e) => setExpenseForm((f) => ({ ...f, amount: e.target.value }))} required type="number" step="0.01"
@@ -1822,7 +1822,7 @@ export default function ProjectDetailPage() {
               />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">Category</label>
               <Select
@@ -1838,7 +1838,7 @@ export default function ProjectDetailPage() {
               />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">Status</label>
               <Select
@@ -1886,7 +1886,7 @@ export default function ProjectDetailPage() {
 
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-2">Contract Type</label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
               {CONTRACT_TYPES.map((t) => (
                 <button key={t.value} type="button" onClick={() => setContractForm((f) => ({ ...f, type: t.value }))}
                   className={`py-2 px-3 rounded-lg border-2 text-xs font-medium transition-colors ${
@@ -1899,7 +1899,7 @@ export default function ProjectDetailPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">Start Date</label>
               <input type="date" value={contractForm.startDate} onChange={(e) => setContractForm((f) => ({ ...f, startDate: e.target.value }))}
@@ -1914,7 +1914,7 @@ export default function ProjectDetailPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">Contract Value</label>
               <input type="number" step="0.01" value={contractForm.value} onChange={(e) => setContractForm((f) => ({ ...f, value: e.target.value }))}
@@ -1934,7 +1934,7 @@ export default function ProjectDetailPage() {
 
           {/* Signing Parties */}
           <div>
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex flex-wrap items-center justify-between gap-y-2 mb-2">
               <label className="text-xs font-medium text-gray-500">Signing Parties</label>
               <button type="button" onClick={() => setContractParties((p) => [...p, { ...EMPTY_PARTY }])}
                 className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-medium"
@@ -1945,7 +1945,7 @@ export default function ProjectDetailPage() {
             <div className="space-y-3">
               {contractParties.map((party, i) => (
                 <div key={i} className="border border-gray-200 rounded-xl p-3 bg-gray-50 dark:bg-slate-800/50">
-                  <div className="flex items-center justify-between mb-2">
+                  <div className="flex flex-wrap items-center justify-between gap-y-2 mb-2">
                     <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Party {i + 1}</span>
                     {contractParties.length > 1 && (
                       <button type="button" onClick={() => setContractParties((p) => p.filter((_, idx) => idx !== i))}
@@ -1966,7 +1966,7 @@ export default function ProjectDetailPage() {
                       </button>
                     ))}
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {party.partyType === "CLIENT" && (
                       <div>
                         <label className="block text-xs text-gray-400 mb-1">Client</label>

@@ -204,7 +204,7 @@ function InvoiceFormModal({
         {/* Line items — manual entry, for anything the builder can't know */}
         {!fromBillables && (
           <div>
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex flex-wrap items-center justify-between gap-y-2 mb-2">
               <label className="text-xs font-medium text-gray-500">Line Items</label>
               <button type="button" onClick={addLine}
                 className="text-xs text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1"
@@ -473,7 +473,7 @@ function InvoicesPageInner() {
   const hasFilters = !!filterStatus || !!search || !!filterClient;
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex-1 flex flex-col min-h-0">
       {/* Header */}
       <div className="bg-white border-b border-gray-200 px-4 sm:px-6 lg:px-8 py-4 sm:py-5 flex-shrink-0">
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:justify-between mb-5">

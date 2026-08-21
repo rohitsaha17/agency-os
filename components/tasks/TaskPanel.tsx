@@ -631,7 +631,7 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
                 )}
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {/*
                   The person doing the work moves it with Start task and Mark
                   finished, above — a status list would just be a second way to

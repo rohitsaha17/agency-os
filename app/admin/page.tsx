@@ -261,7 +261,7 @@ export default function PlatformAdminPage() {
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <div className="max-w-5xl mx-auto px-6 py-10">
         {/* Header */}
-        <div className="flex items-center justify-between mb-10">
+        <div className="flex flex-wrap items-center justify-between gap-y-2 mb-10">
           <div className="flex items-center gap-3 text-white">
             <BrandLogo className="w-8 h-8" />
             <div className="leading-tight">

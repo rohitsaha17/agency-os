@@ -199,7 +199,7 @@ export function PackageTab({ clientId, clientCurrency }: { clientId: string; cli
       {editing && (
         <div className="bg-white border border-indigo-200 rounded-xl p-5 space-y-4">
           <h3 className="text-sm font-semibold text-gray-900">{replaceTarget ? "Replace package" : "New package"}</h3>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="col-span-2">
               <label className="block text-xs font-medium text-gray-700 mb-1.5">Name <span className="text-red-500">*</span></label>
               <input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}

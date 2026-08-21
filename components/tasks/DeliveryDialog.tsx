@@ -104,7 +104,7 @@ export function DeliveryDialog({
 
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-2">How was it delivered?</label>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {METHODS.map(({ value, label, icon: Icon }) => (
                 <button
                   key={value} type="button" onClick={() => setMethod(value)}

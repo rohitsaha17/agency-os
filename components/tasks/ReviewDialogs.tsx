@@ -98,7 +98,7 @@ export function SubmitWorkDialog({
         <div className="p-5 space-y-4">
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-2">How was it delivered?</label>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {METHODS.map((m) => (
                 <button key={m.value} type="button" onClick={() => setMethod(m.value)}
                   className={`flex items-center gap-1.5 px-2.5 py-2 text-xs rounded-lg border transition-colors ${

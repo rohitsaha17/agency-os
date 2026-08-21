@@ -248,7 +248,7 @@ export function TaskModal({
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1.5">Topic</label>
                   <input
@@ -329,7 +329,7 @@ export function TaskModal({
 
           {/* Client + Project (global modal only) */}
           {isGlobal && (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1.5">Client (optional)</label>
                 <SelectInput
@@ -349,7 +349,7 @@ export function TaskModal({
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1.5">Status</label>
               <SelectInput value={form.status} onChange={(v) => set("status", v as TaskStatus)} options={STATUS_OPTIONS} />
@@ -360,7 +360,7 @@ export function TaskModal({
             </div>
           </div>
 
-          <div className={isGeneral ? "" : "grid grid-cols-2 gap-3"}>
+          <div className={isGeneral ? "" : "grid grid-cols-1 sm:grid-cols-2 gap-3"}>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1.5">
                 {isGeneral ? "Due" : "Delivery Due Date"}
@@ -398,7 +398,7 @@ export function TaskModal({
 
           {/* Routing and review are project machinery — a to-do has neither. */}
           {!isGeneral && assignableUsers.length > 0 && (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1.5">
                   Preference — editor/designer

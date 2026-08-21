@@ -131,6 +131,12 @@ export async function createContentWorkTask(opts: {
   approverId: string;
   /** Defaults to the publish date minus two days. */
   dueDate?: Date | null;
+  /**
+   * How urgent this piece is. Set by the SMM while planning; without it every
+   * task took the schema default and "Medium" meant nothing, because nobody
+   * had ever chosen it.
+   */
+  priority?: "LOW" | "MEDIUM" | "HIGH" | "URGENT" | null;
 }): Promise<string | null> {
   const { organizationId, contentItemId, assigneeId, approverId } = opts;
 
@@ -179,6 +185,7 @@ export async function createContentWorkTask(opts: {
       referenceFileId: item.referenceFileId,
       description: item.description,
       status: "TODO",
+      priority: opts.priority ?? "MEDIUM",
       dueDate,
       approverId,
       assignees: { create: [{ userId: assigneeId }] },

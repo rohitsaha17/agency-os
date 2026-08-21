@@ -436,6 +436,7 @@ function PlanItemDialog({
     referenceUrl: item?.referenceUrl ?? "",
     assigneeId: item?.tasks[0]?.assignees[0]?.user.id ?? "",
     taskDueAt: defaultDeadline(item ? item.date : (date ?? new Date()).toISOString()),
+    taskPriority: "MEDIUM",
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -586,22 +587,36 @@ function PlanItemDialog({
             )}
           </div>
 
-          {/* Only worth asking once there's somebody to ask it of. */}
+          {/* How much it matters and by when — one decision, so one row.
+              Both only appear once there's somebody to ask. */}
           {form.assigneeId && (
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                Deadline for the editor
-              </label>
-              <input
-                type="datetime-local"
-                value={form.taskDueAt}
-                onChange={(e) => setForm((f) => ({ ...f, taskDueAt: e.target.value }))}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Select
+                label="Priority"
+                value={form.taskPriority}
+                onChange={(v) => setForm((f) => ({ ...f, taskPriority: v }))}
+                options={[
+                  { value: "LOW", label: "Low" },
+                  { value: "MEDIUM", label: "Medium" },
+                  { value: "HIGH", label: "High" },
+                  { value: "URGENT", label: "Urgent" },
+                ]}
               />
-              <p className="text-[11px] text-gray-400 mt-1">
-                When you need the work in hand — separate from{" "}
-                {new Date(form.date + "T00:00:00").toLocaleDateString("en-US", { day: "numeric", month: "short" })}, when it goes out.
-              </p>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                  Deadline for the editor
+                </label>
+                <input
+                  type="datetime-local"
+                  value={form.taskDueAt}
+                  onChange={(e) => setForm((f) => ({ ...f, taskDueAt: e.target.value }))}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+                <p className="text-[11px] text-gray-400 mt-1">
+                  In hand by — not{" "}
+                  {new Date(form.date + "T00:00:00").toLocaleDateString("en-US", { day: "numeric", month: "short" })}, when it goes out.
+                </p>
+              </div>
             </div>
           )}
 

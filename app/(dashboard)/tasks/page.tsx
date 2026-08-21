@@ -173,7 +173,10 @@ function AddTaskComposer({ listId, onAdded }: { listId: string | null; onAdded: 
               date && date !== todayStr() && date !== tomorrowStr() ? "bg-indigo-50 border-indigo-300 text-indigo-700" : "border-gray-200 text-gray-500 hover:bg-gray-50"
             }`} title="Pick a date">
               <Clock className="w-3 h-3" />
-              <input type="date" className="sr-only" value={date ?? ""} onChange={(e) => setDate(e.target.value || null)} />
+              {/* A to-do due before today can't be acted on, so the picker
+                  won't offer one. Records of things that already happened —
+                  expenses, receipts — are a different case and keep past dates. */}
+              <input type="date" className="sr-only" min={todayStr()} value={date ?? ""} onChange={(e) => setDate(e.target.value || null)} />
             </label>
             <div className="ml-auto flex items-center gap-2">
               <button onClick={reset} className="text-[11px] text-gray-400 hover:text-gray-600">Cancel</button>

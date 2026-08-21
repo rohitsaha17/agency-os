@@ -53,7 +53,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       date, creativeTypeId, topic, description, referenceUrl, referenceFileId,
       isExtra, isAdHoc, projectId, countAgainstPrevMonth,
       // v3: billing intent, the cycle, and assigning from the plan
-      billingIntent, cycleId, assigneeId, taskDueAt,
+      billingIntent, cycleId, assigneeId, taskDueAt, taskPriority,
     } = await req.json();
 
     // v3: an SMM flags work but never un-flags an extra — turning a billable
@@ -97,6 +97,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         assigneeId,
         approverId: user.id,
         dueDate: taskDueAt ? new Date(taskDueAt) : undefined,
+        priority: taskPriority ?? undefined,
       });
       const fresh = await prisma.contentItem.findUnique({
         where: { id },

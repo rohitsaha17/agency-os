@@ -640,8 +640,14 @@ function AddPersonalDialog({
 }) {
   const [mode, setMode] = useState<"self" | "teammate">("self");
   const [teammates, setTeammates] = useState<{ id: string; name: string }[]>([]);
+  const today = todayKey();
   const [form, setForm] = useState({
-    title: "", date: defaultDate ?? todayKey(), time: "", note: "", userId: "",
+    title: "",
+    // Clicking a past day still opens the dialog — you may well have meant the
+    // day beside it — but it opens on today rather than offering to remind you
+    // about something that has already happened.
+    date: defaultDate && defaultDate >= today ? defaultDate : today,
+    time: "", note: "", userId: "",
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -653,6 +659,8 @@ function AddPersonalDialog({
   const submit = async () => {
     if (!form.title.trim()) { setError("Title is required"); return; }
     if (mode === "teammate" && !form.userId) { setError("Pick a teammate"); return; }
+    // The date input's `min` is a hint the picker respects and typing doesn't.
+    if (form.date < today) { setError("Pick today or a day after — a reminder for a past day can't be acted on."); return; }
     setSaving(true);
     setError(null);
     try {
@@ -712,7 +720,7 @@ function AddPersonalDialog({
             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
 
           <div className="grid grid-cols-2 gap-3">
-            <input type="date" value={form.date}
+            <input type="date" value={form.date} min={today}
               onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
               className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
             <input type="time" value={form.time}

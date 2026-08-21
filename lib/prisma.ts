@@ -7,8 +7,8 @@ import { getRuntimeDatabaseUrl } from "@/lib/db-url";
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };
 
 function createPrismaClient() {
-  // Accept whichever connection URL is present — DATABASE_URL, or the
-  // Vercel-Supabase auto-injected POSTGRES_* variants.
+  // DATABASE_URL only. Throws, naming the variable, if it isn't set —
+  // see lib/db-url.ts for why the POSTGRES_* fallbacks were removed.
   const connectionString = getRuntimeDatabaseUrl();
 
   // Local Postgres (localhost / 127.0.0.1) doesn't use TLS; remote hosts

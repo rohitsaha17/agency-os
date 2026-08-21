@@ -1,37 +1,64 @@
 /**
- * Resolve the Postgres connection URL from whichever env var is set.
+ * Resolve the Postgres connection URL. DATABASE_URL, and nothing else.
  *
- * Falls back through Vercel + Supabase auto-injected names so the app
- * works regardless of how the DB was connected:
+ * This used to fall through a chain — DATABASE_URL, then POSTGRES_PRISMA_URL,
+ * then POSTGRES_URL, then POSTGRES_URL_NON_POOLING — so the app would start
+ * whichever of them happened to be present.
  *
- *   1. DATABASE_URL              — the standard name
- *   2. POSTGRES_PRISMA_URL       — Vercel-Supabase pooled URL (has ?pgbouncer=true)
- *   3. POSTGRES_URL_NON_POOLING  — Vercel-Supabase direct URL (port 5432)
- *   4. POSTGRES_URL              — Vercel Postgres / Supabase pooled URL
+ * That cost a production outage. The Supabase-Vercel integration injects those
+ * POSTGRES_* names automatically and stamps them with the database password AS
+ * IT WAS when the integration was connected. Reset the password and they go
+ * stale, but they don't disappear. So a deployment whose DATABASE_URL was
+ * missing or scoped to the wrong environment didn't fail with "DATABASE_URL is
+ * not set" — it quietly connected with an old credential and returned
+ * PrismaClientKnownRequestError P1000 from inside a route handler, three steps
+ * away from the actual mistake. The same chain also explains an earlier P1001:
+ * POSTGRES_URL_NON_POOLING points at Supabase's direct host, which resolves to
+ * IPv6 only and is unreachable from Vercel's IPv4 functions.
  *
- * Runtime queries prefer the pooled URL (better under high concurrency).
- * `prisma db push` / `migrate` prefer the NON_POOLING URL — pgbouncer's
- * transaction pooler doesn't support DDL statements.
+ * A fallback that silently picks a different credential isn't resilience. One
+ * variable, and a clear error naming it when it's absent.
  */
 
-/** URL to use for regular runtime PrismaClient queries. */
-export function getRuntimeDatabaseUrl(): string {
-  return (
-    process.env.DATABASE_URL ??
-    process.env.POSTGRES_PRISMA_URL ??
-    process.env.POSTGRES_URL ??
-    process.env.POSTGRES_URL_NON_POOLING ??
-    ""
+function read(name: string): string {
+  const value = process.env[name];
+  return typeof value === "string" ? value.trim() : "";
+}
+
+/** The names this app deliberately ignores, and why the message says so. */
+const IGNORED = [
+  "POSTGRES_PRISMA_URL",
+  "POSTGRES_URL",
+  "POSTGRES_URL_NON_POOLING",
+] as const;
+
+function resolve(purpose: string): string {
+  const url = read("DATABASE_URL");
+  if (url) return url;
+
+  // Name the trap explicitly. Someone hitting this has very likely got a
+  // POSTGRES_* variable sitting there looking like it should work.
+  const present = IGNORED.filter((n) => read(n));
+  const note = present.length
+    ? ` ${present.join(", ")} ${present.length === 1 ? "is" : "are"} set, but `
+      + "deliberately ignored: those are injected by the Supabase-Vercel "
+      + "integration and carry whatever password was current when it was "
+      + "connected, which goes stale on a password reset."
+    : "";
+
+  throw new Error(
+    `DATABASE_URL is not set, so ${purpose} cannot connect.${note} `
+    + "Set DATABASE_URL on this environment (in Vercel, check the Production "
+    + "box specifically) and redeploy.",
   );
 }
 
-/** URL to use for schema migrations / `prisma db push`. */
+/** URL for regular runtime PrismaClient queries. */
+export function getRuntimeDatabaseUrl(): string {
+  return resolve("the app");
+}
+
+/** URL for schema migrations / `prisma db push`. */
 export function getMigrationDatabaseUrl(): string {
-  return (
-    process.env.DATABASE_URL ??
-    process.env.POSTGRES_URL_NON_POOLING ??
-    process.env.POSTGRES_URL ??
-    process.env.POSTGRES_PRISMA_URL ??
-    ""
-  );
+  return resolve("migrations");
 }

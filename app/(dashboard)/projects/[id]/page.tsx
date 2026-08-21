@@ -20,6 +20,7 @@ import { TaskList } from "@/components/tasks/TaskList";
 import { TaskModal } from "@/components/tasks/TaskModal";
 import { PlanTab } from "@/components/projects/PlanTab";
 import { QuickInvoiceDialog } from "@/components/projects/QuickInvoiceDialog";
+import { InvoiceDetailDialog } from "@/components/projects/InvoiceDetailDialog";
 import { TaskPanel } from "@/components/tasks/TaskPanel";
 import { DeliveryDialog } from "@/components/tasks/DeliveryDialog";
 import type {
@@ -225,6 +226,7 @@ export default function ProjectDetailPage() {
   const [invoicesLoading, setInvoicesLoading] = useState(false);
   const [invoicesLoaded, setInvoicesLoaded] = useState(false);
   const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false);
+  const [openInvoice, setOpenInvoice] = useState<Invoice | null>(null);
   // Extras and complimentary items produced by closing a cycle, waiting to
   // land on an invoice.
   const [billables, setBillables] = useState<{
@@ -1695,7 +1697,11 @@ export default function ProjectDetailPage() {
                         CANCELLED: "bg-slate-100 text-slate-500",
                       };
                       return (
-                        <tr key={inv.id} className="hover:bg-gray-50 transition-colors">
+                        <tr
+                          key={inv.id}
+                          onClick={() => setOpenInvoice(inv)}
+                          className="hover:bg-gray-50 transition-colors cursor-pointer"
+                        >
                           <td className="px-5 py-3">
                             <p className="font-medium text-gray-900">{inv.invoiceNumber}</p>
                           </td>
@@ -1726,12 +1732,10 @@ export default function ProjectDetailPage() {
                             {bal.balance > 0 ? formatCurrency(bal.balance, inv.currency) : "Settled"}
                           </td>
                           <td className="px-5 py-3 text-center">
-                            <Link
-                              href="/invoices"
-                              className="inline-flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-medium"
-                            >
-                              View <ExternalLink className="w-3 h-3" />
-                            </Link>
+                            {/* Opens here. It used to link to /invoices — the
+                                whole list, unfiltered, where you had to find
+                                this same invoice again by number. */}
+                            <span className="text-xs text-indigo-600 font-medium">View</span>
                           </td>
                         </tr>
                       );
@@ -1852,6 +1856,13 @@ export default function ProjectDetailPage() {
         projectType={project?.type as "ONE_TIME" | "RETAINER" | undefined}
         startDate={project?.startDate}
         onApplied={fetchTasks}
+      />
+
+      {/* An invoice opens where you found it */}
+      <InvoiceDetailDialog
+        invoice={openInvoice}
+        onClose={() => setOpenInvoice(null)}
+        onChanged={() => { setOpenInvoice(null); fetchInvoices(); }}
       />
 
       {/* Raise an invoice without leaving the project */}

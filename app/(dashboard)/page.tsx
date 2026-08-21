@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useCurrentUser } from "@/lib/useCurrentUser";
-import { can } from "@/lib/permissions";
+import { can, type Capability } from "@/lib/permissions";
 import { RoleBlocks } from "@/components/dashboard/RoleBlocks";
 import { formatMoney } from "@/lib/money";
 import {
@@ -451,22 +451,31 @@ function SectionCard({ title, subtitle, action, children, className = "" }: {
 
 // ── Quick Actions ─────────────────────────────────────────────
 
+/**
+ * Shortcuts to the things this person can actually do.
+ *
+ * Every entry names the capability that reveals it, the same way the sidebar
+ * does — this grid was unconditional, so an editor was offered New Project,
+ * Add Client, New Invoice, Contracts and Expenses, every one of which the API
+ * refuses. A shortcut to a 403 isn't a shortcut.
+ */
 function QuickActions() {
-  // Each action uses a single accent class — light-mode pale + dark-mode tinted —
-  // controlled by .dark overrides in globals.css. Icon container and text use
-  // accent text color so they stay legible in both themes.
-  const actions = [
-    { label: "New Project",    href: "/projects",       icon: <FolderKanban className="w-5 h-5" />, accent: "bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border-indigo-200 dark:border-indigo-500/30" },
-    { label: "Add Client",     href: "/clients",        icon: <UserPlus className="w-5 h-5" />,    accent: "bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border-emerald-200 dark:border-emerald-500/30" },
-    { label: "New Invoice",    href: "/invoices",       icon: <Receipt className="w-5 h-5" />,     accent: "bg-amber-50 text-amber-600 hover:bg-amber-100 border-amber-200 dark:border-amber-500/30" },
-    { label: "Upload Files",   href: "/files",          icon: <HardDrive className="w-5 h-5" />,   accent: "bg-sky-50 text-sky-600 hover:bg-sky-100 border-sky-200 dark:border-sky-500/30" },
-    { label: "View Calendar",  href: "/calendar",       icon: <Calendar className="w-5 h-5" />,    accent: "bg-pink-50 text-pink-600 hover:bg-pink-100 border-pink-200 dark:border-pink-500/30" },
-    { label: "Contracts",      href: "/contracts",      icon: <FileText className="w-5 h-5" />,    accent: "bg-orange-50 text-orange-600 hover:bg-orange-100 border-orange-200 dark:border-orange-500/30" },
-    { label: "Expenses",       href: "/expenses",       icon: <BarChart3 className="w-5 h-5" />,   accent: "bg-teal-50 text-teal-600 hover:bg-teal-100 border-teal-200 dark:border-teal-500/30" },
-  ];
+  const { user } = useCurrentUser();
+
+  type Action = { label: string; href: string; icon: React.ReactNode; accent: string; need: Capability | null };
+  const actions: Action[] = ([
+    { label: "New Project",    href: "/projects/new",   icon: <FolderKanban className="w-5 h-5" />, accent: "bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border-indigo-200 dark:border-indigo-500/30", need: "content.plan" },
+    { label: "Add Client",     href: "/clients",        icon: <UserPlus className="w-5 h-5" />,    accent: "bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border-emerald-200 dark:border-emerald-500/30", need: "clients.manage" },
+    { label: "New Invoice",    href: "/invoices",       icon: <Receipt className="w-5 h-5" />,     accent: "bg-amber-50 text-amber-600 hover:bg-amber-100 border-amber-200 dark:border-amber-500/30", need: "invoices.manage" },
+    { label: "My Tasks",       href: "/tasks",          icon: <CheckCircle2 className="w-5 h-5" />, accent: "bg-violet-50 text-violet-600 hover:bg-violet-100 border-violet-200 dark:border-violet-500/30", need: null },
+    { label: "Upload Files",   href: "/files",          icon: <HardDrive className="w-5 h-5" />,   accent: "bg-sky-50 text-sky-600 hover:bg-sky-100 border-sky-200 dark:border-sky-500/30", need: null },
+    { label: "My Calendar",    href: "/my-calendar",    icon: <Calendar className="w-5 h-5" />,    accent: "bg-pink-50 text-pink-600 hover:bg-pink-100 border-pink-200 dark:border-pink-500/30", need: null },
+    { label: "Contracts",      href: "/contracts",      icon: <FileText className="w-5 h-5" />,    accent: "bg-orange-50 text-orange-600 hover:bg-orange-100 border-orange-200 dark:border-orange-500/30", need: "financials.view" },
+    { label: "Expenses",       href: "/expenses",       icon: <BarChart3 className="w-5 h-5" />,   accent: "bg-teal-50 text-teal-600 hover:bg-teal-100 border-teal-200 dark:border-teal-500/30", need: "expenses.create" },
+  ] as Action[]).filter((a) => a.need === null || can(user, a.need));
 
   return (
-    <div className="grid grid-cols-4 sm:grid-cols-8 gap-2.5">
+    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
       {actions.map((a) => (
         <Link key={a.label} href={a.href}>
           <div
@@ -698,8 +707,20 @@ export default function DashboardPage() {
 
   const { stats, taskStats, urgentItems, projectHealth, upcomingDeadlines, recentActivity } = data;
 
+  /**
+   * Who gets the agency-wide picture.
+   *
+   * financials.view is the line: admin and manager run the business and need
+   * totals, revenue and everyone's overdue work. An SMM and a junior get the
+   * role blocks — their own work, their own queue — because org counts are
+   * neither theirs to act on nor theirs to see.
+   */
+  const seesOrgOverview = can(currentUser, "financials.view");
+
   // Headline message
-  const alertCount = (stats.overdueTasksCount + stats.blockedTasksCount + stats.filesInReview);
+  const alertCount = can(currentUser, "financials.view")
+    ? (stats.overdueTasksCount + stats.blockedTasksCount + stats.filesInReview)
+    : 0;
   const headlineMsg = alertCount > 0
     ? `You have ${alertCount} item${alertCount !== 1 ? "s" : ""} that need${alertCount === 1 ? "s" : ""} attention`
     : "Everything is on track — great work!";
@@ -735,11 +756,26 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="flex-1 px-4 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-5 overflow-auto">
+      <div className="flex-1 px-4 sm:px-6 lg:px-8 py-6 space-y-6 overflow-auto">
 
-        {/* v3: the blocks THIS role needs, first — a junior lands on their
-            work, a manager on the money (docs/V3_CONTEXT.md §8). */}
+        {/* Shortcuts first — the fastest route to the thing you came to do. */}
+        <div className="bg-white border border-gray-200 rounded-2xl px-5 py-5">
+          <h2 className="text-sm font-semibold text-gray-900 mb-4">Quick Actions</h2>
+          <QuickActions />
+        </div>
+
+        {/* v3: the blocks THIS role needs — a junior lands on their work, an
+            SMM on their review queue, a manager on the money. */}
         <RoleBlocks currency={data.currency} />
+
+        {/*
+          Everything below is the AGENCY's position: total projects, org-wide
+          overdue, revenue, completion across everyone. That's a manager's
+          view of the business, and it was rendering for every role — a junior
+          was being shown eight active projects and three clients they have no
+          part in. Their dashboard is the blocks above.
+        */}
+        {seesOrgOverview && (<>
 
         {/* ── Row 1: Stats ───────────────────────────────────── */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -786,14 +822,6 @@ export default function DashboardPage() {
             color="bg-emerald-50"
             href="/clients"
           />
-        </div>
-
-        {/* ── Row 2: Quick actions ───────────────────────────── */}
-        <div className="bg-white border border-gray-200 rounded-2xl px-5 py-4">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-gray-900">Quick Actions</h2>
-          </div>
-          <QuickActions />
         </div>
 
         {/* ── Row 3: Urgent + Task breakdown + Performance ──── */}
@@ -896,6 +924,8 @@ export default function DashboardPage() {
             <ActivityFeed items={recentActivity} />
           </SectionCard>
         </div>
+
+        </>)}
 
       </div>
     </div>

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
+import { requireCapability } from "@/lib/api-permissions";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 
 type Params = { params: Promise<{ id: string }> };
@@ -19,6 +20,7 @@ const ACTION_TO_STATUS: Record<
 export async function POST(req: NextRequest, { params }: Params) {
   try {
     const user = await requireAuth(req);
+    requireCapability(user, "tasks.review");
     const { id } = await params;
     const body = await req.json();
 

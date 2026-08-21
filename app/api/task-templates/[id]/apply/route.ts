@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
+import { requireCapability } from "@/lib/api-permissions";
 import { handleApiError, apiError, ApiError } from "@/lib/api-errors";
 
 // Inline builtin templates (same data as the list route)
@@ -84,6 +85,7 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   try {
     const user = await requireAuth(req);
+    requireCapability(user, "content.plan");
     const { projectId, startDate } = await req.json();
     if (!projectId) {
       throw new ApiError("projectId is required", 400);

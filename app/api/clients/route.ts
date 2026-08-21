@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
-import { jsonFor } from "@/lib/api-permissions";
+import { jsonFor, requireCapability } from "@/lib/api-permissions";
 import { apiError, handleApiError, ApiError } from "@/lib/api-errors";
 import { parsePagination, paginationMeta } from "@/lib/pagination";
 import { checkRateLimit, WRITE_RATE_LIMITS } from "@/lib/rate-limit";
@@ -74,6 +74,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const user = await requireAuth(req);
+    requireCapability(user, "clients.manage");
 
     const rl = checkRateLimit(req, `clients:create:${user.id}`, WRITE_RATE_LIMITS.light);
     if (!rl.allowed) return apiError("Too many requests, please slow down", 429);

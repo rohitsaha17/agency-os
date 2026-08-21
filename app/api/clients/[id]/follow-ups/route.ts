@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
+import { requireCapability } from "@/lib/api-permissions";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 
 type Params = { params: Promise<{ id: string }> };
@@ -26,6 +27,7 @@ export async function GET(req: NextRequest, { params }: Params) {
 export async function POST(req: NextRequest, { params }: Params) {
   try {
     const user = await requireAuth(req);
+    requireCapability(user, "clients.manage");
     const { id: clientId } = await params;
     const { note, dueAt, assignedToId } = await req.json();
     if (!note?.trim()) throw new ApiError("A note is required", 400);
@@ -73,6 +75,7 @@ export async function POST(req: NextRequest, { params }: Params) {
 export async function PATCH(req: NextRequest, { params }: Params) {
   try {
     const user = await requireAuth(req);
+    requireCapability(user, "clients.manage");
     const { id: clientId } = await params;
     const { followUpId, action, days } = await req.json();
 

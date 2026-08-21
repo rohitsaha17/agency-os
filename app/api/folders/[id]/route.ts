@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
+import { requireCapability } from "@/lib/api-permissions";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 
 type Params = { params: Promise<{ id: string }> };
@@ -58,6 +59,7 @@ export async function GET(req: NextRequest, { params }: Params) {
 export async function PATCH(req: NextRequest, { params }: Params) {
   try {
     const user = await requireAuth(req);
+    requireCapability(user, "content.plan");
     const { id } = await params;
 
     const existing = await prisma.folder.findFirst({
@@ -128,6 +130,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 export async function DELETE(req: NextRequest, { params }: Params) {
   try {
     const user = await requireAuth(req);
+    requireCapability(user, "content.plan");
     const { id } = await params;
 
     const existing = await prisma.folder.findFirst({

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
-import { taskVisibilityScope } from "@/lib/api-permissions";
+import { requireCapability, taskVisibilityScope } from "@/lib/api-permissions";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 import { notifyMany } from "@/lib/notify";
 import { logStatus } from "@/lib/audit";
@@ -147,6 +147,7 @@ export async function POST(req: NextRequest, { params }: Params) {
   const { id: projectId } = await params;
   try {
     const user = await requireAuth(req);
+    requireCapability(user, "content.plan");
     await assertProjectInOrg(projectId, user.organizationId);
 
     const body = await req.json();

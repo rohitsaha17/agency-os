@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
+import { requireCapability } from "@/lib/api-permissions";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 import { logStatus } from "@/lib/audit";
 
@@ -12,6 +13,7 @@ type Params = { params: Promise<{ id: string }> };
 export async function POST(req: NextRequest, { params }: Params) {
   try {
     const user = await requireAuth(req);
+    requireCapability(user, "content.plan");
     const { id } = await params;
     const { date } = await req.json();
     if (!date || isNaN(new Date(date).getTime())) throw new ApiError("A valid target date is required", 400);

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
-import { jsonFor } from "@/lib/api-permissions";
+import { jsonFor, requireCapability } from "@/lib/api-permissions";
 import { apiError, handleApiError, ApiError } from "@/lib/api-errors";
 import { canViewContacts } from "@/lib/permissions";
 
@@ -55,6 +55,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
   try {
     const user = await requireAuth(req);
+    requireCapability(user, "clients.manage");
     const body = await req.json();
     const {
       name, companyName, email, phone, jobTitle, website,
@@ -174,6 +175,7 @@ export async function DELETE(req: NextRequest, { params }: Params) {
 
   try {
     const user = await requireAuth(req);
+    requireCapability(user, "clients.manage");
 
     // Verify org ownership before archiving.
     const existing = await prisma.client.findFirst({

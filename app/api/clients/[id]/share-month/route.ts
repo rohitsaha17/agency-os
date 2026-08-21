@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
+import { requireCapability } from "@/lib/api-permissions";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 
 type Params = { params: Promise<{ id: string }> };
@@ -11,6 +12,7 @@ type Params = { params: Promise<{ id: string }> };
 export async function POST(req: NextRequest, { params }: Params) {
   try {
     const user = await requireAuth(req);
+    requireCapability(user, "content.plan");
     const { id: clientId } = await params;
     const { month } = await req.json();
     if (!month || !/^\d{4}-\d{2}$/.test(month)) throw new ApiError("month must be YYYY-MM", 400);

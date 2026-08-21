@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
+import { requireCapability } from "@/lib/api-permissions";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 import { ensureFestivalPack } from "@/lib/reminders";
 
@@ -38,6 +39,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const user = await requireAuth(req);
+    requireCapability(user, "content.plan");
     const { title, date, endDate, kind, clientId, reminderDaysBefore, isAdHoc, notes } = await req.json();
     if (!title?.trim()) throw new ApiError("Title is required", 400);
     if (!date || isNaN(new Date(date).getTime())) throw new ApiError("A valid date is required", 400);

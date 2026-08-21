@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
+import { requireCapability } from "@/lib/api-permissions";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 import { can } from "@/lib/permissions";
 import { createContentWorkTask } from "@/lib/auto-tasks";
@@ -114,6 +115,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 export async function DELETE(req: NextRequest, { params }: Params) {
   try {
     const user = await requireAuth(req);
+    requireCapability(user, "content.plan");
     const { id } = await params;
     await findItem(id, user.organizationId);
     await prisma.contentItem.delete({ where: { id } });

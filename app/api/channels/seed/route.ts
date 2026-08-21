@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
+import { requireCapability } from "@/lib/api-permissions";
 import { handleApiError } from "@/lib/api-errors";
 
 // POST /api/channels/seed — ensure default GENERAL channels exist for the caller's org
 export async function POST(req: NextRequest) {
   try {
     const user = await requireAuth(req);
+    requireCapability(user, "content.plan");
     const defaults = [
       { name: "general",       description: "Company-wide updates and announcements" },
       { name: "announcements", description: "Important announcements for the whole team" },

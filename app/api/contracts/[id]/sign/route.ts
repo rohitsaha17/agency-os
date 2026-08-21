@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
+import { requireCapability } from "@/lib/api-permissions";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 
 type Params = { params: Promise<{ id: string }> };
@@ -18,6 +19,7 @@ export async function POST(req: NextRequest, { params }: Params) {
   const { id: contractId } = await params;
   try {
     const user = await requireAuth(req);
+    requireCapability(user, "financials.view");
     await assertContractInOrg(contractId, user.organizationId);
 
     const { partyId, signatureNote } = await req.json();
@@ -72,6 +74,7 @@ export async function DELETE(req: NextRequest, { params }: Params) {
   const { id: contractId } = await params;
   try {
     const user = await requireAuth(req);
+    requireCapability(user, "financials.view");
     await assertContractInOrg(contractId, user.organizationId);
 
     const { partyId } = await req.json();

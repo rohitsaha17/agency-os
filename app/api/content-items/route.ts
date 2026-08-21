@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
+import { requireCapability } from "@/lib/api-permissions";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 import { logStatus } from "@/lib/audit";
 import { cycleForDate } from "@/lib/cycles";
@@ -79,6 +80,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const user = await requireAuth(req);
+    requireCapability(user, "content.plan");
     const {
       clientId, projectId, date, creativeTypeId, topic, description,
       referenceUrl, referenceFileId, isExtra, isAdHoc,

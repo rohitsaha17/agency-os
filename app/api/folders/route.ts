@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
+import { requireCapability } from "@/lib/api-permissions";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 
 // ── GET /api/folders ──────────────────────────────────────────
@@ -52,6 +53,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const user = await requireAuth(req);
+    requireCapability(user, "content.plan");
     const body = await req.json();
     const { name, scope, parentId, projectId, clientId, description, color } =
       body as {

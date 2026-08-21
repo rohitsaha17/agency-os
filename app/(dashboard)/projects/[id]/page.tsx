@@ -34,6 +34,7 @@ import { formatMoney } from "@/lib/money";
 import { useToast } from "@/components/ui/Toast";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { Select } from "@/components/ui/Select";
+import { todayKey } from "@/lib/date-key";
 
 type PageTab = "plan" | "tasks" | "files" | "expenses" | "contracts" | "chat" | "invoices" | "tax";
 type ViewMode = "kanban" | "list";
@@ -64,7 +65,7 @@ const CONTRACT_TYPES: { value: ContractType; label: string }[] = [
 
 const EMPTY_EXPENSE_FORM = {
   title: "", category: "OTHER" as ExpenseCategory,
-  amount: "", currency: "USD", date: new Date().toISOString().slice(0, 10),
+  amount: "", currency: "USD", date: todayKey(),
   status: "PENDING" as ExpenseStatus, isReimbursable: false, notes: "",
 };
 

@@ -115,7 +115,7 @@ export function SubmitWorkDialog({
           {method === "LINK" && (
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1.5">Link</label>
-              <input type="url" value={url} onChange={(e) => setUrl(e.target.value)}
+              <input type="text" inputMode="url" value={url} onChange={(e) => setUrl(e.target.value)}
                 placeholder="https://…"
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
             </div>
@@ -240,7 +240,7 @@ export function MarkPostedDialog({
           <label className="block text-xs font-medium text-gray-700 mb-1.5">
             Live link <span className="font-normal text-gray-400">— optional</span>
           </label>
-          <input type="url" value={liveUrl} onChange={(e) => setLiveUrl(e.target.value)}
+          <input type="text" inputMode="url" value={liveUrl} onChange={(e) => setLiveUrl(e.target.value)}
             placeholder="https://instagram.com/p/…"
             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
           <p className="text-xs text-gray-400 mt-2">

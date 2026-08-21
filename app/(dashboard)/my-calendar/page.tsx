@@ -17,6 +17,7 @@ import { broadcastChange, useLiveRefresh } from "@/lib/live";
 import { toast } from "@/lib/toast";
 import { CreativeTypeDot } from "@/components/content/CreativeTypeDot";
 import { Select } from "@/components/ui/Select";
+import { todayKey } from "@/lib/date-key";
 
 type View = "day" | "week" | "month" | "year" | "schedule";
 
@@ -640,7 +641,7 @@ function AddPersonalDialog({
   const [mode, setMode] = useState<"self" | "teammate">("self");
   const [teammates, setTeammates] = useState<{ id: string; name: string }[]>([]);
   const [form, setForm] = useState({
-    title: "", date: defaultDate ?? new Date().toISOString().slice(0, 10), time: "", note: "", userId: "",
+    title: "", date: defaultDate ?? todayKey(), time: "", note: "", userId: "",
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);

@@ -30,6 +30,7 @@ import { Client, ContactFormData, ClientContact, ProjectStatus, ProjectType, Ass
 import { calcInvoiceTotal } from "@/lib/format";
 import { formatMoney, resolveClientCurrency } from "@/lib/money";
 import { Select } from "@/components/ui/Select";
+import { todayKey } from "@/lib/date-key";
 
 // ── helpers ──────────────────────────────────────────────────
 type Tab = "content" | "overview" | "contacts" | "brand" | "tax" | "projects" | "files" | "contracts" | "chat" | "invoices" | "expenses" | "receipts";
@@ -260,7 +261,7 @@ export default function ClientDetailPage() {
     title: "",
     amount: "",
     currency: "USD",
-    date: new Date().toISOString().slice(0, 10),
+    date: todayKey(),
     category: "OTHER" as ExpenseCategory,
     projectId: "",
     notes: "",
@@ -272,7 +273,7 @@ export default function ClientDetailPage() {
   const [receiptForm, setReceiptForm] = useState({
     amount: "",
     currency: "USD",
-    receivedAt: new Date().toISOString().slice(0, 10),
+    receivedAt: todayKey(),
     method: "BANK_TRANSFER" as ReceiptMethod,
     invoiceId: "",
     reference: "",
@@ -505,7 +506,7 @@ export default function ClientDetailPage() {
       setExpenseModalOpen(false);
       setExpenseForm({
         title: "", amount: "", currency: "USD",
-        date: new Date().toISOString().slice(0, 10),
+        date: todayKey(),
         category: "OTHER", projectId: "", notes: "",
       });
       // Refetch
@@ -541,7 +542,7 @@ export default function ClientDetailPage() {
       const defaultCurrency = invoices[0]?.currency ?? "USD";
       setReceiptForm({
         amount: "", currency: defaultCurrency,
-        receivedAt: new Date().toISOString().slice(0, 10),
+        receivedAt: todayKey(),
         method: "BANK_TRANSFER", invoiceId: "",
         reference: "", receiptNumber: "", notes: "",
       });
@@ -930,7 +931,8 @@ export default function ClientDetailPage() {
             { label: "Net Margin", value: netMargin, color: netMargin >= 0 ? "text-emerald-600" : "text-red-600", icon: DollarSign },
           ];
           return (
-          <div className="max-w-2xl space-y-6">
+          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-5 items-start">
+            <div className="space-y-5 min-w-0">
             {/* v2 Phase 6: current-month package fulfillment */}
             <FulfillmentLine clientId={id} />
 
@@ -960,6 +962,9 @@ export default function ClientDetailPage() {
             </div>
             )}
 
+            </div>
+
+            <div className="space-y-5 min-w-0">
             <div className="bg-white border border-gray-200 rounded-xl divide-y divide-gray-100">
               {[
                 { label: "Email", value: client.email, icon: Mail, href: client.email ? `mailto:${client.email}` : undefined },
@@ -968,16 +973,17 @@ export default function ClientDetailPage() {
                 { label: "Address", value: client.address, icon: MapPin },
               ].map(({ label, value, icon: Icon, href }) =>
                 value ? (
-                  <div key={label} className="flex items-center gap-4 px-5 py-3.5">
-                    <Icon className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                    <span className="text-xs text-gray-500 w-16">{label}</span>
+                  <div key={label} className="flex items-start gap-3 px-4 sm:px-5 py-3.5">
+                    <Icon className="w-4 h-4 text-gray-400 flex-shrink-0 mt-0.5" />
+                    <span className="text-xs text-gray-500 w-14 flex-shrink-0 mt-0.5">{label}</span>
                     {href ? (
                       <a href={href} target="_blank" rel="noopener noreferrer"
-                        className="text-sm text-indigo-600 hover:underline flex items-center gap-1">
-                        {value} <ExternalLink className="w-3 h-3" />
+                        className="text-sm text-indigo-600 hover:underline inline-flex items-start gap-1 min-w-0 break-all">
+                        <span className="min-w-0">{value}</span>
+                        <ExternalLink className="w-3 h-3 flex-shrink-0 mt-1" />
                       </a>
                     ) : (
-                      <span className="text-sm text-gray-800">{value}</span>
+                      <span className="text-sm text-gray-800 min-w-0 break-words">{value}</span>
                     )}
                   </div>
                 ) : null
@@ -1035,13 +1041,14 @@ export default function ClientDetailPage() {
                 {" · "} Last updated {new Date(client.updatedAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
               </p>
             </div>
+            </div>
           </div>
           );
         })()}
 
         {/* ── CONTACTS ── */}
         {tab === "contacts" && (
-          <div className="max-w-2xl space-y-4">
+          <div className="w-full space-y-4">
             <div className="flex items-center justify-between">
               <p className="text-sm text-gray-500">{client.contacts.length} contact{client.contacts.length !== 1 ? "s" : ""}</p>
               <Button size="sm" icon={<Plus className="w-3.5 h-3.5" />} onClick={() => setContactModal({ open: true })}>
@@ -1113,7 +1120,7 @@ export default function ClientDetailPage() {
 
         {/* ── BRAND ── */}
         {tab === "brand" && (
-          <div className="max-w-2xl">
+          <div className="max-w-3xl">
             {/* Logo preview strip */}
             {client.logoUrl && (
               <div className="bg-white border border-gray-200 rounded-xl p-4 mb-5 flex items-center gap-4">
@@ -1148,7 +1155,7 @@ export default function ClientDetailPage() {
 
         {/* ── TAX & BILLING ── */}
         {tab === "tax" && (
-          <div className="max-w-2xl">
+          <div className="max-w-3xl">
             <div className="bg-white border border-gray-200 rounded-xl p-6">
               <div className="flex items-center gap-2 mb-1">
                 <ReceiptIcon className="w-4 h-4 text-gray-400" />
@@ -1187,7 +1194,7 @@ export default function ClientDetailPage() {
 
         {/* ── PROJECTS ── */}
         {tab === "projects" && (
-          <div className="max-w-2xl space-y-4">
+          <div className="w-full space-y-4">
             <div className="flex items-center justify-between">
               <p className="text-sm text-gray-500">{client.projects.length} project{client.projects.length !== 1 ? "s" : ""}</p>
               {canManageChannels && (
@@ -1252,7 +1259,7 @@ export default function ClientDetailPage() {
           };
 
           return (
-            <div className="max-w-3xl space-y-4">
+            <div className="w-full space-y-4">
               {/* Summary cards */}
               <div className="grid grid-cols-3 gap-3">
                 {[
@@ -1359,7 +1366,7 @@ export default function ClientDetailPage() {
 
         {/* ── CHAT ── */}
         {tab === "chat" && (
-          <div className="max-w-3xl space-y-4">
+          <div className="w-full space-y-4">
             {!channelsLoaded ? (
               <div className="space-y-2">
                 {[1,2,3].map((i) => (
@@ -1612,7 +1619,7 @@ export default function ClientDetailPage() {
 
         {/* ── CONTRACTS ── */}
         {tab === "contracts" && (
-          <div className="max-w-3xl space-y-4">
+          <div className="w-full space-y-4">
             <div className="flex items-center justify-between">
               <p className="text-sm text-gray-500">{clientContracts.length} contract{clientContracts.length !== 1 ? "s" : ""}</p>
               <Button size="sm" icon={<Plus className="w-3.5 h-3.5" />} onClick={() => setContractModalOpen(true)}>New Contract</Button>
@@ -1715,7 +1722,7 @@ export default function ClientDetailPage() {
           );
 
           return (
-            <div className="max-w-4xl space-y-4">
+            <div className="w-full space-y-4">
               {/* Summary + add button */}
               <div className="flex items-center justify-between gap-3 flex-wrap">
                 <div className="flex gap-3">
@@ -1849,7 +1856,7 @@ export default function ClientDetailPage() {
           };
 
           return (
-            <div className="max-w-4xl space-y-4">
+            <div className="w-full space-y-4">
               <div className="flex items-center justify-between gap-3 flex-wrap">
                 <div className="flex gap-3">
                   <div className="bg-white border border-gray-200 rounded-xl px-4 py-3">

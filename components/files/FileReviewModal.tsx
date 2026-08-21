@@ -458,7 +458,7 @@ export function FileReviewModal({
         </div>
 
         {/* ── SIDEBAR ── */}
-        <aside className="flex-shrink-0 w-[360px] bg-slate-900 border-l border-slate-800 flex flex-col overflow-hidden">
+        <aside className="flex-shrink-0 w-full sm:w-[360px] max-w-full bg-slate-900 border-l border-slate-800 flex flex-col overflow-hidden">
           {/* tabs */}
           <div className="flex border-b border-slate-800">
             <button

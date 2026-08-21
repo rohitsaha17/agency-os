@@ -14,6 +14,7 @@ import { toast } from "@/lib/toast";
 import type { ContentItem, ContentStatus, CreativeType, Task } from "@/types";
 import { CreativeTypeDot } from "@/components/content/CreativeTypeDot";
 import { Select } from "@/components/ui/Select";
+import { todayKey, dateKey } from "@/lib/date-key";
 
 // ── Status styling ───────────────────────────────────────────
 
@@ -91,7 +92,7 @@ function ItemDialog({
   onSaved: () => void;
 }) {
   const [form, setForm] = useState({
-    date: editItem ? editItem.date.slice(0, 10) : (defaultDate ?? new Date()).toISOString().slice(0, 10),
+    date: editItem ? editItem.date.slice(0, 10) : (defaultDate ? dateKey(defaultDate) : todayKey()),
     creativeTypeId: editItem?.creativeTypeId ?? types[0]?.id ?? "",
     topic: editItem?.topic ?? "",
     description: editItem?.description ?? "",
@@ -241,7 +242,7 @@ function ItemDialog({
               </div>
             </div>
             {refMode === "url" ? (
-              <input type="url" value={form.referenceUrl}
+              <input type="text" inputMode="url" value={form.referenceUrl}
                 onChange={(e) => setForm((f) => ({ ...f, referenceUrl: e.target.value }))}
                 placeholder="https://…"
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
@@ -372,7 +373,7 @@ function ItemPanel({
   return (
     <>
       <div className="fixed inset-0 z-40 bg-black/20" onClick={onClose} />
-      <div className="fixed top-0 right-0 bottom-0 z-50 w-full sm:w-[440px] bg-white shadow-2xl flex flex-col">
+      <div className="fixed top-0 right-0 bottom-0 z-50 w-full sm:w-full sm:w-[440px] max-w-full bg-white shadow-2xl flex flex-col">
         {/* Header */}
         <div className="px-5 py-4 border-b border-gray-200">
           <div className="flex items-start justify-between gap-3">

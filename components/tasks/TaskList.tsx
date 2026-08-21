@@ -14,14 +14,14 @@ import type { Task, TaskStatus } from "@/types";
 // ── Status visuals ────────────────────────────────────────────
 
 export const STATUS_DOT: Record<TaskStatus, { dot: string; label: string; ring: string }> = {
-  TODO:        { dot: "bg-gray-300",    label: "To Do",       ring: "ring-gray-200" },
-  IN_PROGRESS: { dot: "bg-blue-500",    label: "In Progress", ring: "ring-blue-200" },
-  IN_REVIEW:   { dot: "bg-amber-400",   label: "In Review",   ring: "ring-amber-200" },
-  DONE:        { dot: "bg-emerald-500", label: "Done",        ring: "ring-emerald-200" },
-  BLOCKED:     { dot: "bg-red-500",     label: "Blocked",     ring: "ring-red-200" },
+  TODO:        { dot: "bg-gray-300 dark:bg-slate-600", label: "To Do", ring: "ring-gray-200 dark:ring-slate-700" },
+  IN_PROGRESS: { dot: "bg-blue-500",    label: "In Progress", ring: "ring-blue-200 dark:ring-blue-500/25" },
+  IN_REVIEW:   { dot: "bg-amber-400",   label: "In Review",   ring: "ring-amber-200 dark:ring-amber-400/25" },
+  DONE:        { dot: "bg-emerald-500", label: "Done",        ring: "ring-emerald-200 dark:ring-emerald-500/25" },
+  BLOCKED:     { dot: "bg-red-500",     label: "Blocked",     ring: "ring-red-200 dark:ring-red-500/25" },
   // Sent back by the reviewer. "Reassigned" rather than "Changes requested"
   // because to the person holding it, it's a fresh piece of work to start.
-  CHANGES_REQUESTED: { dot: "bg-orange-500", label: "Reassigned", ring: "ring-orange-200" },
+  CHANGES_REQUESTED: { dot: "bg-orange-500", label: "Reassigned", ring: "ring-orange-200 dark:ring-orange-500/25" },
 };
 
 const STATUS_ROW_LEFT: Record<TaskStatus, string> = {
@@ -133,7 +133,7 @@ export function StatusDot({ status, onPick, canPick }: {
       <span
         title={label}
         aria-label={`Status: ${label}`}
-        className={`w-3.5 h-3.5 rounded-full flex-shrink-0 ring-2 ${ring} ${dot}`}
+        className={`block w-3.5 h-3.5 rounded-full flex-shrink-0 ring-2 ${ring} ${dot}`}
       />
     );
   }

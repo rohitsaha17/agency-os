@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { writeFile, mkdir, unlink } from "fs/promises";
+import { putFile, deleteFile } from "@/lib/storage";
 import path from "path";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
@@ -133,7 +133,7 @@ export async function GET(req: NextRequest) {
 // ── POST /api/files ─────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
-  let writtenFilePath: string | null = null;
+  let storedKey: string | null = null;
   try {
     const user = await requireAuth(req);
 
@@ -179,10 +179,6 @@ export async function POST(req: NextRequest) {
     const tagIdsRaw = formData.getAll("tagIds[]");
     const tagIds = tagIdsRaw.map((t) => t.toString()).filter(Boolean);
 
-    // Persist to public/uploads/
-    const uploadsDir = path.join(process.cwd(), "public", "uploads");
-    await mkdir(uploadsDir, { recursive: true });
-
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
@@ -190,12 +186,14 @@ export async function POST(req: NextRequest) {
     const timestamp = Date.now();
     const safeOriginalName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
     const filename = `${timestamp}_${safeOriginalName}`;
-    const filePath = path.join(uploadsDir, filename);
-    await writeFile(filePath, buffer);
-    writtenFilePath = filePath;
 
-    const s3Key = `uploads/${filename}`;
-    const url = `/uploads/${filename}`;
+    // Supabase Storage in production, public/uploads locally — see lib/storage.
+    // Writing to the filesystem here is what produced EROFS on Vercel.
+    const stored = await putFile(`uploads/${filename}`, buffer, file.type);
+    storedKey = stored.key;
+
+    const s3Key = stored.key;
+    const url = stored.url;
     const mimeCategory = getMimeCategory(file.type);
 
     // Create DB record — if this throws, the outer catch will clean up the
@@ -236,14 +234,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(created, { status: 201 });
   } catch (err) {
-    // Disk write succeeded but DB insert failed → remove the orphan file.
-    if (writtenFilePath) {
-      try {
-        await unlink(writtenFilePath);
-      } catch {
-        // File might already be gone or unwritable — swallow, we've logged below.
-      }
-    }
+    // Upload succeeded but the DB insert failed → remove the orphan object.
+    if (storedKey) await deleteFile(storedKey);
     return handleApiError(err, "POST /api/files");
   }
 }

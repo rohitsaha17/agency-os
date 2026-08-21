@@ -20,6 +20,7 @@ import { BuildFromClient, type BuiltLine } from "@/components/finance/BuildFromC
 import { RequireCapability } from "@/components/layout/RequireCapability";
 import type { Invoice, InvoiceStatus, ClientSummary, Project } from "@/types";
 import { Select } from "@/components/ui/Select";
+import { todayKey } from "@/lib/date-key";
 
 // ── Constants ─────────────────────────────────────────────────
 
@@ -401,7 +402,7 @@ function InvoicesPageInner() {
     if (status === "PAID" && inv?.status !== "PAID") {
       // Require an explicit paid date — prevents silently stamping "today"
       // when jumping from DRAFT directly to PAID.
-      const defaultDate = new Date().toISOString().slice(0, 10);
+      const defaultDate = todayKey();
       const entered = typeof window !== "undefined"
         ? window.prompt(
             `Mark ${inv?.invoiceNumber ?? "invoice"} as paid.\nEnter payment date (YYYY-MM-DD):`,

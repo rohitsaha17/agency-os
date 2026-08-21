@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { writeFile, mkdir } from "fs/promises";
+import { putFile } from "@/lib/storage";
 import path from "path";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
@@ -101,16 +101,15 @@ export async function POST(req: NextRequest, { params }: Params) {
       }
       for (const file of realFiles) {
         if (!(file instanceof Blob)) continue;
-        const uploadsDir = path.join(process.cwd(), "public", "uploads");
-        await mkdir(uploadsDir, { recursive: true });
         const bytes  = await file.arrayBuffer();
         const buffer = Buffer.from(bytes);
         const ts     = Date.now();
         const safe   = (file as File).name.replace(/[^a-zA-Z0-9._-]/g, "_");
         const fname  = `${ts}_${safe}`;
-        await writeFile(path.join(uploadsDir, fname), buffer);
-        const s3Key = `uploads/${fname}`;
-        const url   = `/uploads/${fname}`;
+        // See lib/storage — the filesystem is read-only on Vercel.
+        const stored = await putFile(`uploads/${fname}`, buffer, (file as File).type);
+        const s3Key = stored.key;
+        const url   = stored.url;
 
         // Detect mime category
         const mime = (file as File).type;

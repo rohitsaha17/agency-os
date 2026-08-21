@@ -78,7 +78,7 @@ export default function MessagesPage() {
   return (
     <div className="flex h-[calc(100vh-56px)] lg:h-screen overflow-hidden bg-slate-950">
       {/* Channel sidebar */}
-      <div className="w-64 flex-shrink-0">
+      <div className="w-full sm:w-64 flex-shrink-0">
         <ChannelSidebar
           channels={channels}
           activeChannelId={activeChannel?.id ?? null}

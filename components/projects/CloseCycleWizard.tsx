@@ -175,7 +175,7 @@ export function CloseCycleWizard({
                 What this cycle actually did, per deliverable.
               </p>
               <div className="border border-gray-200 rounded-xl overflow-hidden">
-                <table className="w-full text-xs">
+                <div className="overflow-x-auto -mx-1 px-1"><table className="w-full text-xs">
                   <thead>
                     <tr className="bg-gray-50 text-gray-500">
                       <th className="text-left px-3 py-2 font-medium">Deliverable</th>
@@ -211,7 +211,7 @@ export function CloseCycleWizard({
                       );
                     })}
                   </tbody>
-                </table>
+                </table></div>
               </div>
               <div className="flex items-center gap-4 text-xs text-gray-500">
                 <span><b className="text-gray-800">{data.unposted.length}</b> still unposted</span>

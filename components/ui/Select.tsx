@@ -192,12 +192,11 @@ export function Select({
   };
 
   const pad = size === "sm" ? "px-2.5 py-1.5 text-xs" : "px-3 py-2 text-sm";
-  // A floor so a filter trigger doesn't shrink to the width of "All", then
-  // truncate the moment someone picks "Client Approved".
-  const minW = size === "sm" ? "min-w-[8rem]" : "min-w-[10rem]";
 
   return (
-    <div className={className}>
+    // min-w-0 lets this shrink inside a grid or flex row instead of forcing
+    // the track wider and overlapping whatever sits next to it.
+    <div className={`min-w-0 ${className}`}>
       {label && (
         <label htmlFor={id} className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1">
           {label}
@@ -214,7 +213,7 @@ export function Select({
           disabled={disabled}
           onClick={() => (open ? setOpen(false) : openPanel())}
           onKeyDown={onKeyDown}
-          className={`w-full ${minW} flex items-center gap-2 ${pad} rounded-lg border bg-white dark:bg-slate-800 text-left transition-colors
+          className={`w-full min-w-0 flex items-center gap-2 ${pad} rounded-lg border bg-white dark:bg-slate-800 text-left transition-colors
             focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
             disabled:opacity-60 disabled:cursor-not-allowed
             ${error

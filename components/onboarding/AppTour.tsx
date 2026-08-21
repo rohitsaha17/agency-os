@@ -228,7 +228,7 @@ export function AppTour() {
       {/* Popover card */}
       <div
         style={popoverStyle}
-        className="w-[340px] max-w-[calc(100vw-32px)] rounded-2xl bg-slate-900 border border-slate-700 shadow-2xl shadow-black/50 p-5 text-slate-100"
+        className="w-[min(340px,calc(100vw-32px))] max-w-[calc(100vw-32px)] rounded-2xl bg-slate-900 border border-slate-700 shadow-2xl shadow-black/50 p-5 text-slate-100"
       >
         <div className="flex items-start justify-between gap-3 mb-2">
           <div className="flex items-center gap-2">

@@ -300,7 +300,7 @@ export function TaskModal({
             </div>
             {refMode === "url" ? (
               <input
-                type="url" value={form.referenceUrl ?? ""}
+                type="text" inputMode="url" value={form.referenceUrl ?? ""}
                 onChange={(e) => set("referenceUrl", e.target.value)}
                 placeholder="https://…"
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"

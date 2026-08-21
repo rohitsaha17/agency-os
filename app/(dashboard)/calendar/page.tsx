@@ -16,6 +16,7 @@ import { useWheelPeriod } from "@/components/calendar/useWheelPeriod";
 import { CONTENT_STATUS_META, contentStatusChip } from "@/components/content/ContentCalendarTab";
 import { CreativeTypeDot } from "@/components/content/CreativeTypeDot";
 import { Select } from "@/components/ui/Select";
+import { todayKey } from "@/lib/date-key";
 
 // ── Constants (legacy task/project layers) ───────────────────
 
@@ -770,7 +771,7 @@ function AddEventDialog({
   onSaved: () => void;
 }) {
   const [form, setForm] = useState({
-    title: "", kind: "CAMPAIGN", date: new Date().toISOString().slice(0, 10),
+    title: "", kind: "CAMPAIGN", date: todayKey(),
     endDate: "", clientId: "", reminderDaysBefore: "7", isAdHoc: false, notes: "",
   });
   const [saving, setSaving] = useState(false);

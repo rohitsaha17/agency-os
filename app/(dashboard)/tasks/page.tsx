@@ -14,7 +14,31 @@ import { CalendarTasksSwitch } from "@/components/calendar/CalendarTasksSwitch";
 import { useCurrentUser } from "@/lib/useCurrentUser";
 import { can } from "@/lib/permissions";
 import { TaskPanel } from "@/components/tasks/TaskPanel";
-import { StatusDot } from "@/components/tasks/TaskList";
+import { StatusDot, STATUS_DOT } from "@/components/tasks/TaskList";
+
+/**
+ * Status you can read across a board.
+ *
+ * The tint runs down the card's left edge and the pill spells the state out,
+ * so a glance answers "where is this?" without knowing what amber means.
+ */
+const STATUS_ROW_TINT: Record<TaskStatus, string> = {
+  TODO:              "border-l-gray-300 dark:border-l-slate-600 hover:bg-gray-50 dark:hover:bg-slate-800/50",
+  IN_PROGRESS:       "border-l-blue-500 bg-blue-50/40 dark:bg-blue-500/[0.07] hover:bg-blue-50 dark:hover:bg-blue-500/[0.12]",
+  CHANGES_REQUESTED: "border-l-orange-500 bg-orange-50/50 dark:bg-orange-500/[0.08] hover:bg-orange-50 dark:hover:bg-orange-500/[0.14]",
+  IN_REVIEW:         "border-l-amber-400 bg-amber-50/50 dark:bg-amber-400/[0.08] hover:bg-amber-50 dark:hover:bg-amber-400/[0.14]",
+  DONE:              "border-l-emerald-500 hover:bg-gray-50 dark:hover:bg-slate-800/50",
+  BLOCKED:           "border-l-red-500 bg-red-50/50 dark:bg-red-500/[0.08] hover:bg-red-50 dark:hover:bg-red-500/[0.14]",
+};
+
+const STATUS_PILL: Record<TaskStatus, string> = {
+  TODO:              "bg-gray-50 text-gray-600 border-gray-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700",
+  IN_PROGRESS:       "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-500/15 dark:text-blue-300 dark:border-blue-500/30",
+  CHANGES_REQUESTED: "bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-500/15 dark:text-orange-300 dark:border-orange-500/30",
+  IN_REVIEW:         "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-400/15 dark:text-amber-300 dark:border-amber-400/30",
+  DONE:              "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-500/30",
+  BLOCKED:           "bg-red-50 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-300 dark:border-red-500/30",
+};
 import { SubmitWorkDialog, RequestChangesDialog, MarkPostedDialog } from "@/components/tasks/ReviewDialogs";
 import { broadcastChange, useLiveRefresh } from "@/lib/live";
 import { toast } from "@/lib/toast";
@@ -56,8 +80,19 @@ function dueChip(dateIso: string): { label: string; late: boolean } {
   return { label: d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }), late: false };
 }
 
-function todayStr() { return new Date().toISOString().slice(0, 10); }
-function tomorrowStr() { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10); }
+/**
+ * Today, in LOCAL time.
+ *
+ * Not toISOString().slice(0,10) — that converts to UTC first, so anywhere east
+ * of Greenwich a task added after midnight was stamped with the previous day
+ * and immediately displayed as "Yesterday".
+ */
+function localDateStr(d: Date) {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+function todayStr() { return localDateStr(new Date()); }
+function tomorrowStr() { const d = new Date(); d.setDate(d.getDate() + 1); return localDateStr(d); }
 
 // ── Inline "Add a task" composer (Google-Tasks style) ────────
 
@@ -209,8 +244,8 @@ function TasksBoardInner() {
   // capability rather than a job title (docs/V3_CONTEXT.md §2).
   const isHead = can(currentUser, "tasks.review");
 
-  const fetchAll = useCallback(async () => {
-    setLoading(true);
+  const fetchAll = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true);
     try {
       const [itemsRes, tasksRes] = await Promise.all([
         fetch("/api/personal-items"),
@@ -231,7 +266,7 @@ function TasksBoardInner() {
 
   useEffect(() => { if (currentUser) fetchAll(); }, [currentUser, fetchAll]);
   // Live: pick up calendar-side edits (and teammates' changes) instantly
-  useLiveRefresh(["tasks", "calendar"], () => { if (currentUser) fetchAll(); });
+  useLiveRefresh(["tasks", "calendar"], () => { if (currentUser) fetchAll({ silent: true }); });
 
   /**
    * Honour a deep-link exactly once.
@@ -415,7 +450,8 @@ function TasksBoardInner() {
     const chip = t.dueDate ? dueChip(t.dueDate) : null;
     const done = t.status === "DONE";
     return (
-      <div key={`org-${t.id}`} className="group flex items-start gap-2.5 px-3 py-2 hover:bg-gray-50 rounded-xl transition-colors">
+      <div key={`org-${t.id}`}
+        className={`group flex items-start gap-2.5 pl-2.5 pr-3 py-2 rounded-xl border-l-[3px] transition-colors ${STATUS_ROW_TINT[t.status]} ${done ? "opacity-60" : ""}`}>
         {/*
           The same control as the project board, deliberately. This used to be
           a tick that jumped a task straight to complete, so the same dot meant
@@ -453,6 +489,11 @@ function TasksBoardInner() {
                 Round {t.revision}
               </span>
             )}
+            {/* The status, in words. The dot alone asks people to memorise a
+                colour key; this doesn't. */}
+            <span className={`inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 rounded-full border ${STATUS_PILL[t.status]}`}>
+              {STATUS_DOT[t.status]?.label ?? t.status}
+            </span>
             <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 bg-indigo-50 text-indigo-600 rounded-full">
               <FolderKanban className="w-2.5 h-2.5" />
               {(t as Task & { project?: { name?: string } }).project?.name ?? t.client?.name ?? "Assigned to you"}
@@ -540,7 +581,7 @@ function TasksBoardInner() {
     ).length;
 
     return (
-      <div className="w-[320px] flex-shrink-0 bg-white border border-gray-200 rounded-2xl flex flex-col h-full shadow-sm">
+      <div className="w-[85vw] sm:w-[320px] flex-shrink-0 bg-white border border-gray-200 rounded-2xl flex flex-col h-full shadow-sm">
         <div className="px-4 pt-4 pb-2 flex-shrink-0">
           <div className="flex items-baseline justify-between gap-2">
             <h2 className="text-base font-semibold text-gray-900 truncate">{title}</h2>
@@ -722,7 +763,7 @@ function TasksBoardInner() {
         <div className="flex-1 min-w-0 bg-gray-50 overflow-x-auto">
           <div className="h-full flex items-stretch gap-4 p-4 sm:p-6">
             {view === "starred" ? (
-              <div className="w-[340px] flex-shrink-0 bg-white border border-gray-200 rounded-2xl flex flex-col h-full shadow-sm">
+              <div className="w-[85vw] sm:w-[340px] flex-shrink-0 bg-white border border-gray-200 rounded-2xl flex flex-col h-full shadow-sm">
                 <div className="px-4 pt-4 pb-2 flex-shrink-0">
                   <h2 className="text-base font-semibold text-gray-900 flex items-center gap-2">
                     <Star className="w-4 h-4 text-amber-400 fill-amber-400" /> Starred
@@ -964,7 +1005,7 @@ export default function TasksPage() {
   return (
     <Suspense fallback={
       <div className="p-8 flex gap-4">
-        {[1, 2, 3].map((i) => <div key={i} className="w-[320px] h-72 bg-gray-100 rounded-2xl animate-pulse" />)}
+        {[1, 2, 3].map((i) => <div key={i} className="w-[85vw] sm:w-[320px] h-72 bg-gray-100 rounded-2xl animate-pulse" />)}
       </div>
     }>
       <TasksBoardInner />

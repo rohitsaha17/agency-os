@@ -23,6 +23,7 @@ import { broadcastChange } from "@/lib/live";
 import type { ContentStatus } from "@/types";
 import { CreativeTypeDot } from "@/components/content/CreativeTypeDot";
 import { Select } from "@/components/ui/Select";
+import { matchingCrafts } from "@/lib/craft-match";
 
 // ── shapes the plan endpoint returns ──
 
@@ -440,6 +441,18 @@ function PlanItemDialog({
   const [error, setError] = useState<string | null>(null);
   const [extraPrompt, setExtraPrompt] = useState<{ used: number; quota: number } | null>(null);
 
+  /**
+   * A photo shoot wants a photographer, not the whole team. Narrow the picker
+   * to the crafts that suit this creative type, with a way back to the full
+   * list — nobody should be unable to assign because a designation was named
+   * something the matcher didn't recognise.
+   */
+  const [showEveryone, setShowEveryone] = useState(false);
+  const chosenType = types.find((t) => t.id === form.creativeTypeId);
+  const suited = showEveryone ? null : matchingCrafts(chosenType?.name, juniors);
+  const assignable = suited ?? juniors;
+  const narrowed = !!suited && suited.length < juniors.length;
+
   useEffect(() => {
     fetch("/api/creative-types").then((r) => r.json())
       .then((d) => { if (Array.isArray(d)) setTypes(d); });
@@ -540,7 +553,7 @@ function PlanItemDialog({
 
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1.5">Reference</label>
-            <input type="url" value={form.referenceUrl}
+            <input type="text" inputMode="url" value={form.referenceUrl}
               onChange={(e) => setForm((f) => ({ ...f, referenceUrl: e.target.value }))}
               placeholder="https://…"
               className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
@@ -554,8 +567,23 @@ function PlanItemDialog({
             <Select
               value={form.assigneeId}
               onChange={(v) => setForm((f) => ({ ...f, assigneeId: v }))}
-              options={[{ value: "", label: "Nobody yet" }, ...juniors.map((u) => ({ value: u.id, label: String(`${u.name}${u.jobTitle?.name ? ` — ${u.jobTitle.name}` : ""}`) }))]}
+              options={[
+                { value: "", label: "Nobody yet" },
+                ...assignable.map((u) => ({
+                  value: u.id,
+                  label: `${u.name}${u.jobTitle?.name ? ` — ${u.jobTitle.name}` : ""}`,
+                })),
+              ]}
             />
+            {narrowed && (
+              <p className="text-[11px] text-gray-400 mt-1">
+                Showing the people who shoot. {" "}
+                <button type="button" onClick={() => setShowEveryone(true)}
+                  className="text-indigo-600 hover:underline">
+                  Show everyone
+                </button>
+              </p>
+            )}
           </div>
 
           {/* Only worth asking once there's somebody to ask it of. */}

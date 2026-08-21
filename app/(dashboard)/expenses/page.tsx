@@ -13,6 +13,7 @@ import { formatMoney } from "@/lib/money";
 import { useCurrentUser } from "@/lib/useCurrentUser";
 import type { Expense, ExpenseCategory, ExpenseStatus, Project, ClientSummary } from "@/types";
 import { Select } from "@/components/ui/Select";
+import { todayKey } from "@/lib/date-key";
 
 const CATEGORY_LABELS: Record<ExpenseCategory, string> = {
   SOFTWARE_TOOLS: "Software & Tools",
@@ -54,7 +55,7 @@ function formatDate(d: string) {
 
 const EMPTY_FORM = {
   title: "", description: "", category: "OTHER" as ExpenseCategory,
-  amount: "", currency: "USD", date: new Date().toISOString().slice(0, 10),
+  amount: "", currency: "USD", date: todayKey(),
   status: "PENDING" as ExpenseStatus, projectId: "", clientId: "", userId: "",
   isReimbursable: false, receiptUrl: "", notes: "",
 };

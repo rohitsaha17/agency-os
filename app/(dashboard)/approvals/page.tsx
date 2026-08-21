@@ -16,7 +16,7 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import {
-  ShieldCheck, ExternalLink, Link2, Paperclip, AlertCircle,
+  ShieldCheck, ExternalLink, Link2, Paperclip, AlertCircle, ChevronLeft,
   CheckCircle2, RefreshCw, Inbox,
 } from "lucide-react";
 import { RequireCapability } from "@/components/layout/RequireCapability";
@@ -160,9 +160,9 @@ function ApprovalsInner() {
 
         {items.length > 0 && (
           <div className="flex flex-wrap items-center gap-2 mt-4">
-            <Select value={byPerson} onChange={setByPerson} options={options.people} size="sm" />
-            <Select value={byClient} onChange={setByClient} options={options.clients} size="sm" />
-            <Select value={byProject} onChange={setByProject} options={options.projects} size="sm" />
+            <Select value={byPerson} onChange={setByPerson} options={options.people} size="sm" className="w-full sm:w-44" />
+            <Select value={byClient} onChange={setByClient} options={options.clients} size="sm" className="w-full sm:w-44" />
+            <Select value={byProject} onChange={setByProject} options={options.projects} size="sm" className="w-full sm:w-44" />
             {(byPerson || byClient || byProject) && (
               <button
                 onClick={() => { setByPerson(""); setByClient(""); setByProject(""); }}
@@ -192,8 +192,11 @@ function ApprovalsInner() {
         </div>
       ) : (
         <div className="flex-1 flex min-h-0">
-          {/* The queue */}
-          <div className="w-full max-w-sm flex-shrink-0 border-r border-gray-200 bg-white overflow-y-auto">
+          {/* The queue. On a phone it's the whole screen until you pick
+              something; from `md` up it sits beside the detail. */}
+          <div className={`w-full md:w-full md:max-w-sm flex-shrink-0 border-r border-gray-200 bg-white overflow-y-auto ${
+            selectedId ? "hidden md:block" : "block"
+          }`}>
             {shown.length === 0 ? (
               <p className="text-sm text-gray-400 text-center py-10 px-4">
                 Nothing matches those filters.
@@ -242,13 +245,23 @@ function ApprovalsInner() {
           </div>
 
           {/* The submission, in full */}
-          <div className="flex-1 overflow-y-auto bg-gray-50 min-w-0">
+          <div className={`flex-1 overflow-y-auto bg-gray-50 min-w-0 ${
+            selectedId ? "block" : "hidden md:block"
+          }`}>
             {!selected ? (
               <div className="h-full flex items-center justify-center text-sm text-gray-400">
                 <Inbox className="w-4 h-4 mr-2" /> Pick something from the queue
               </div>
             ) : (
-              <div className="p-6 max-w-3xl space-y-5">
+              <div className="p-4 sm:p-6 max-w-3xl space-y-5">
+                {/* Only a phone needs this — on wider screens the list is
+                    still on screen beside it. */}
+                <button
+                  onClick={() => setSelectedId(null)}
+                  className="md:hidden inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800"
+                >
+                  <ChevronLeft className="w-4 h-4" /> Back to queue
+                </button>
                 <div>
                   <h2 className="text-lg font-semibold text-gray-900">{selected.title}</h2>
                   <p className="text-sm text-gray-500 mt-0.5">

@@ -9,6 +9,7 @@ import { BrandAssetsEditor } from "./BrandAssetsEditor";
 import { useCurrentUser } from "@/lib/useCurrentUser";
 import type { ClientFormData, ClientStatus, BrandColor, BrandAsset, TaxRegistration, ClientLink, ClientLinkType } from "@/types";
 import { Select } from "@/components/ui/Select";
+import { normalizeUrl } from "@/lib/url";
 
 // ── Static data ──────────────────────────────────────────────
 
@@ -117,32 +118,31 @@ function LinksEditor({ value, onChange }: { value: ClientLink[]; onChange: (v: C
   return (
     <div className="space-y-3">
       {value.map((link) => (
-        <div key={link.id} className="flex flex-col sm:grid sm:grid-cols-[140px_1fr_1fr_auto] gap-2 items-start">
-          <div className="relative">
-            <Select
-              value={link.type}
-              onChange={(v) => update(link.id, "type", v)}
-              options={[...LINK_TYPES.map((t) => ({ value: t.value, label: `${t.label}` }))]}
-            />
-          </div>
+        <div key={link.id} className="grid grid-cols-1 sm:grid-cols-[9rem_minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 items-center">
+          <Select
+            value={link.type}
+            onChange={(v) => update(link.id, "type", v)}
+            options={LINK_TYPES.map((t) => ({ value: t.value, label: t.label }))}
+          />
           <input
             type="text"
             value={link.label}
             onChange={(e) => update(link.id, "label", e.target.value)}
             placeholder="Label (e.g. Brand Assets)"
-            className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="w-full min-w-0 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
           <input
-            type="url"
+            type="text" inputMode="url"
             value={link.url}
             onChange={(e) => update(link.id, "url", e.target.value)}
-            placeholder="https://..."
-            className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            placeholder="www.example.com"
+            className="w-full min-w-0 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
           <button
             type="button"
             onClick={() => remove(link.id)}
-            className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+            aria-label="Remove link"
+            className="justify-self-start sm:justify-self-auto p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
           >
             <Trash2 className="w-4 h-4" />
           </button>
@@ -181,32 +181,31 @@ function TaxRegistrationsEditor({
   return (
     <div className="space-y-3">
       {value.map((tax) => (
-        <div key={tax.id} className="flex flex-col sm:grid sm:grid-cols-[120px_1fr_1fr_auto] gap-2 items-start">
-          <div className="relative">
-            <Select
-              value={tax.type}
-              onChange={(v) => update(tax.id, "type", v)}
-              options={[...TAX_TYPES.map((t) => ({ value: t, label: `${t}` }))]}
-            />
-          </div>
+        <div key={tax.id} className="grid grid-cols-1 sm:grid-cols-[9rem_minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 items-center">
+          <Select
+            value={tax.type}
+            onChange={(v) => update(tax.id, "type", v)}
+            options={TAX_TYPES.map((t) => ({ value: t, label: t }))}
+          />
           <input
             type="text"
             value={tax.number}
             onChange={(e) => update(tax.id, "number", e.target.value)}
             placeholder="Tax number"
-            className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="w-full min-w-0 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
           <input
             type="text"
             value={tax.country}
             onChange={(e) => update(tax.id, "country", e.target.value)}
             placeholder="Country / Region"
-            className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="w-full min-w-0 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
           <button
             type="button"
             onClick={() => remove(tax.id)}
-            className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+            aria-label="Remove tax registration"
+            className="justify-self-start sm:justify-self-auto p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
           >
             <Trash2 className="w-4 h-4" />
           </button>
@@ -264,12 +263,19 @@ export function ClientForm({ initialData, clientId, onSuccess }: ClientFormProps
     setSaving(true);
     setError(null);
     try {
-      // Send the form as-is. Server uses companyName as the entity identifier
-      // and creates a primary ClientContact from { name, email, phone, jobTitle }.
+      // Reference links are typed the way people say them — "www.smokzy.in" —
+      // so a scheme is added here rather than demanded of the person typing.
+      const payload = {
+        ...form,
+        links: (form.links ?? []).map((l) => ({ ...l, url: normalizeUrl(l.url) })),
+      };
+
+      // Server uses companyName as the entity identifier and creates a primary
+      // ClientContact from { name, email, phone, jobTitle }.
       const res = await fetch(isEdit ? `/api/clients/${clientId}` : "/api/clients", {
         method: isEdit ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error?.message || "Save failed");
@@ -372,11 +378,17 @@ export function ClientForm({ initialData, clientId, onSuccess }: ClientFormProps
 
       {/* Reference Links */}
       <Section title="Reference Links">
-        <p className="text-xs text-gray-500 mb-4 flex items-center gap-1.5">
-          <Link2 className="w-3.5 h-3.5" />
-          Add Drive folders, Figma files, Dropbox links, logos, and other client references.
-          A <strong>Logo</strong> type link will be used as the client avatar throughout the app.
-        </p>
+        {/* The icon is the only flex child; the sentence stays one text flow.
+            As a flex container, <strong> became its own column and "Logo"
+            floated into the middle of the paragraph. */}
+        <div className="flex items-start gap-1.5 mb-4">
+          <Link2 className="w-3.5 h-3.5 text-gray-400 flex-shrink-0 mt-0.5" />
+          <p className="text-xs text-gray-500">
+            Add Drive folders, Figma files, Dropbox links, logos, and other client
+            references. A <strong>Logo</strong> type link will be used as the client
+            avatar throughout the app.
+          </p>
+        </div>
         <LinksEditor
           value={form.links}
           onChange={(v) => set("links", v)}

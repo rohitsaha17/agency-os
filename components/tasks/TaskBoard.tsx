@@ -270,7 +270,7 @@ export function TaskBoard({ tasks, onOpen, onStatusChange, onAddTask, onAddSubta
         return (
           <div
             key={col.status}
-            className="flex-shrink-0 w-64"
+            className="flex-shrink-0 w-[80vw] sm:w-64"
             onDragOver={(e) => handleColumnDragOver(e, col.status)}
             onDragLeave={() => { setDragOverColumn(null); setDropTarget(null); }}
             onDrop={(e) => handleDrop(e, col.status)}

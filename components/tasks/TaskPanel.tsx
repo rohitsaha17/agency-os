@@ -383,7 +383,7 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
   return (
     <>
       <div className="fixed inset-0 z-40 bg-black/20" onClick={onClose} />
-      <div className="fixed top-0 right-0 bottom-0 z-50 w-[520px] bg-white shadow-2xl flex flex-col">
+      <div className="fixed top-0 right-0 bottom-0 z-50 w-full sm:w-[520px] max-w-full bg-white shadow-2xl flex flex-col">
 
         {/* Header */}
         <div className="px-5 py-4 border-b border-gray-200 flex-shrink-0">

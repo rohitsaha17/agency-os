@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { writeFile, mkdir, unlink } from "fs/promises";
+import { putFile, deleteFile } from "@/lib/storage";
 import path from "path";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
@@ -59,21 +59,17 @@ export async function POST(req: NextRequest, { params }: Params) {
     const file = rawFile as File;
     const notes = (formData.get("notes") as string) || null;
 
-    // Persist to public/uploads/
-    const uploadsDir = path.join(process.cwd(), "public", "uploads");
-    await mkdir(uploadsDir, { recursive: true });
-
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
     const timestamp = Date.now();
     const safeOriginalName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
     const filename = `${timestamp}_${safeOriginalName}`;
-    const filePath = path.join(uploadsDir, filename);
-    await writeFile(filePath, buffer);
+    // See lib/storage — the filesystem is read-only on Vercel.
+    const stored = await putFile(`uploads/${filename}`, buffer, file.type);
 
-    const s3Key = `uploads/${filename}`;
-    const url = `/uploads/${filename}`;
+    const s3Key = stored.key;
+    const url = stored.url;
 
     // Get the current highest version number
     const latestVersion = await prisma.fileVersion.findFirst({
@@ -147,7 +143,7 @@ export async function DELETE(req: NextRequest, { params }: Params) {
     if (version.url) {
       try {
         const filePath = path.join(process.cwd(), "public", version.url);
-        await unlink(filePath);
+        await deleteFile(filePath);
       } catch { /* file may not exist on disk */ }
     }
 

@@ -12,7 +12,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   ChevronLeft, ChevronRight, Plus, Calendar as CalIcon, List as ListIcon,
-  Layers, Lock, Unlock, AlertTriangle,
+  Layers, Lock, Unlock, AlertTriangle, Check,
 } from "lucide-react";
 import { MonthGrid, MONTH_NAMES } from "@/components/calendar/MonthGrid";
 import { CONTENT_STATUS_META, contentStatusChip } from "@/components/content/ContentCalendarTab";
@@ -319,8 +319,10 @@ export function PlanTab({ projectId }: { projectId: string }) {
                     <button key={i.id} type="button"
                       onClick={(e) => { e.stopPropagation(); setEditItem(i); }}
                       title={`${i.creativeType.name}: ${i.topic}${assignee ? ` — ${assignee}` : ""}`}
-                      className={`w-full text-left flex items-center gap-1 mb-0.5 px-1 py-0.5 rounded border ${meta?.chip ?? "bg-gray-100 border-gray-200"} ${i.isExtra ? "border-dashed" : ""}`}>
-                      <CreativeTypeDot color={i.creativeType.color} />
+                      className={`w-full text-left flex items-center gap-1 mb-0.5 px-1 py-0.5 rounded border ${meta?.chip ?? "bg-gray-100 border-gray-200"} ${i.isExtra ? "border-dashed" : ""} ${isSettled(i.status) ? "opacity-70" : ""}`}>
+                      {isSettled(i.status)
+                        ? <Check className="w-2.5 h-2.5 flex-shrink-0" />
+                        : <CreativeTypeDot color={i.creativeType.color} />}
                       <span className="text-[10px] truncate leading-tight flex-1">{i.topic}</span>
                       {assignee && (
                         <span className="w-3.5 h-3.5 rounded-full bg-white/70 text-[7px] font-bold flex items-center justify-center flex-shrink-0">
@@ -378,9 +380,14 @@ export function PlanTab({ projectId }: { projectId: string }) {
                     const reviewer = task?.approver?.name;
                     const due = task?.dueDate ? new Date(task.dueDate) : null;
                     const overdue = due && due < new Date() && i.status !== "POSTED";
+                    // Approved and beyond is finished work. It should read that
+                    // way down the list, not just in a chip you have to parse.
+                    const done = isSettled(i.status);
                     return (
                       <tr key={i.id} onClick={() => setEditItem(i)}
-                        className="hover:bg-gray-50 transition-colors cursor-pointer">
+                        className={`transition-colors cursor-pointer ${
+                          done ? "bg-gray-50/60 hover:bg-gray-100/60" : "hover:bg-gray-50"
+                        }`}>
                         <td className="px-4 py-3 text-xs text-gray-400 tabular-nums whitespace-nowrap">
                           {new Date(i.date).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })}
                         </td>
@@ -391,7 +398,8 @@ export function PlanTab({ projectId }: { projectId: string }) {
                           </span>
                         </td>
                         <td className="px-4 py-3">
-                          <span className="text-sm text-gray-800 flex items-center gap-1.5">
+                          <span className={`text-sm flex items-center gap-1.5 ${done ? "text-gray-400" : "text-gray-800"}`}>
+                            {done && <Check className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />}
                             <span className="truncate">{i.topic}</span>
                             {i.isExtra && (
                               <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 font-medium flex-shrink-0">
@@ -417,7 +425,7 @@ export function PlanTab({ projectId }: { projectId: string }) {
                             : <span className="text-gray-300">—</span>}
                         </td>
                         <td className="px-4 py-3">
-                          <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${meta?.chip ?? "bg-gray-100"}`}>
+                          <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap border ${meta?.chip ?? "bg-gray-100"}`}>
                             {meta?.label ?? i.status}
                           </span>
                         </td>

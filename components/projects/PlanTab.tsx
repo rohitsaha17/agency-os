@@ -535,6 +535,24 @@ function PlanItemDialog({
   const assignable = suited ?? juniors;
   const narrowed = !!suited && suited.length < juniors.length;
 
+  /**
+   * Name the crafts actually in the list, read off the people in it.
+   *
+   * Naming the content type instead ("people who work on reel") describes the
+   * wrong end of the filter and reads badly. The useful fact is who you're
+   * being offered, so it's derived rather than written — an agency that calls
+   * the role "Motion Designer" sees that word, not one I guessed at.
+   */
+  const craftsShown = (() => {
+    const names = [...new Set(
+      assignable.map((u) => u.jobTitle?.name?.toLowerCase()).filter(Boolean) as string[],
+    )];
+    if (names.length === 0) return "the people who can take this on";
+    const plural = names.map((n) => (n.endsWith("s") ? n : `${n}s`));
+    if (plural.length === 1) return plural[0];
+    return `${plural.slice(0, -1).join(", ")} and ${plural[plural.length - 1]}`;
+  })();
+
   useEffect(() => {
     fetch("/api/creative-types").then((r) => r.json())
       .then((d) => { if (Array.isArray(d)) setTypes(d); });
@@ -672,7 +690,7 @@ function PlanItemDialog({
                  line about shooting that was wrong the moment you picked a
                  Reel. The list is a suggestion, so the way out is right here. */
               <p className="text-[11px] text-gray-400 mt-1">
-                Showing people who work on {chosenType?.name.toLowerCase() ?? "this"}.{" "}
+                Showing {craftsShown}.{" "}
                 <button type="button" onClick={() => setShowEveryone(true)}
                   className="text-indigo-600 hover:underline">
                   Show everyone

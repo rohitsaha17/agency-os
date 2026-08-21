@@ -598,3 +598,74 @@ input[type="time"]::-webkit-calendar-picker-indicator:hover {
     min-width: 0;
   }
 }
+
+/* ──────────────────────────────────────────────────────────────
+   Calendar surfaces
+   ──────────────────────────────────────────────────────────────
+   A month grid is a lot of identical rectangles, and flat fills give
+   the eye nothing to hold on to — every cell reads at the same depth,
+   so the shape of the month disappears. These give the grid a floor
+   and a ceiling: in-month cells sit slightly proud, days from the
+   neighbouring month are recessed and lightly hatched so they read as
+   "not this month" without having to be a different colour entirely.
+
+   The hatch is drawn from currentColor at very low alpha, so it
+   inherits the theme instead of needing a light and a dark copy. */
+
+.cal-cell {
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0) 40%);
+}
+.dark .cal-cell {
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.035) 0%, rgba(255, 255, 255, 0) 45%);
+}
+
+/* Outside the month: recessed, and textured so it reads as inert
+   rather than simply "a slightly different grey". */
+.cal-cell-muted {
+  background-color: #f1f3f7;
+  background-image: repeating-linear-gradient(
+    -45deg,
+    rgba(15, 23, 42, 0.035) 0px,
+    rgba(15, 23, 42, 0.035) 1px,
+    transparent 1px,
+    transparent 7px
+  );
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.05);
+}
+.dark .cal-cell-muted {
+  /* The old bg-gray-50/70 had no dark mapping and fell through to a
+     literal light grey, so days either side of the month rendered as
+     white blocks on a dark page. */
+  background-color: #070d1a;
+  background-image: repeating-linear-gradient(
+    -45deg,
+    rgba(255, 255, 255, 0.022) 0px,
+    rgba(255, 255, 255, 0.022) 1px,
+    transparent 1px,
+    transparent 7px
+  );
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+/* Weekends: a whisper of tint, enough to find Saturday without counting. */
+.cal-cell-weekend { background-color: #fafbfd; }
+.dark .cal-cell-weekend { background-color: #0d1524; }
+
+/* Today: a soft wash over the whole cell, so it is findable from
+   across the grid rather than only by its pill. */
+.cal-cell-today {
+  background-color: #eef2ff;
+  box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.28);
+}
+.dark .cal-cell-today {
+  background-color: rgba(67, 56, 202, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(129, 140, 248, 0.3);
+}
+
+/* Gridlines are the one-pixel gap between cells showing the container
+   through. A dedicated class, not bg-gray-200: the .dark compatibility
+   shim above maps bg-gray-200 to slate-700, which outranks a dark:
+   variant (:where() contributes no specificity) and drew the month as a
+   cage of bright lines. */
+.cal-gridlines { background-color: #e5e7eb; }
+.dark .cal-gridlines { background-color: rgba(255, 255, 255, 0.06); }

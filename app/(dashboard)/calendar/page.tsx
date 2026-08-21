@@ -449,7 +449,9 @@ export default function CalendarPage() {
       {/* ── Body ────────────────────────────────────────────── */}
       <div className="flex flex-col lg:flex-row flex-1 min-h-0">
         <div ref={gridWrapRef} className="flex-1 min-w-0 min-h-0 flex flex-col px-3 sm:px-5 py-3">
-          <div className="flex-1 min-h-0 border border-gray-200 rounded-xl overflow-hidden">
+          {/* The grid is the page's one object — give it an edge and a
+              shadow so it sits ON the page rather than being a region of it. */}
+          <div className="flex-1 min-h-0 border border-gray-200 dark:border-white/[0.07] rounded-xl overflow-hidden shadow-[0_1px_2px_rgba(15,23,42,0.05),0_10px_28px_-16px_rgba(15,23,42,0.18)] dark:shadow-[0_10px_30px_-18px_rgba(0,0,0,0.9)]">
           <MonthGrid
             fill
             view={view}
@@ -471,7 +473,7 @@ export default function CalendarPage() {
                   {evs.slice(0, 2).map((e) => (
                     <div key={e.id}
                       title={e.title + (e.client ? ` (${e.client.name})` : "")}
-                      className={`px-1.5 py-0.5 text-[9px] font-semibold truncate border-y ${EVENT_KIND_STYLE[e.kind]} ${e.isAdHoc ? "border-dashed" : ""}`}>
+                      className={`px-1.5 py-0.5 text-[9px] font-semibold truncate border-y ${EVENT_KIND_STYLE[e.kind]}`}>
                       {e.kind === "FESTIVAL" && <PartyPopper className="w-3 h-3 inline mr-1" />}
                       {e.isAdHoc && <Zap className="w-3 h-3 inline mr-1" />}
                       {e.title}
@@ -503,9 +505,9 @@ export default function CalendarPage() {
                       <button key={i.id} type="button"
                         onClick={(e) => { e.stopPropagation(); setSelected(day); setSelectedItem(i); }}
                         title={`${i.client.name}${i.project ? ` · ${i.project.name}` : ""} — ${i.creativeType.name}: ${i.topic} (${meta.label})`}
-                        className={`w-full text-left flex items-center gap-1 mb-0.5 px-1 py-0.5 rounded border ${chipClass(i)} ${i.isAdHoc ? "border-dashed" : ""}`}
+                        className={`w-full text-left flex items-center gap-1 mb-0.5 px-1.5 py-[3px] rounded-md border shadow-[0_1px_1px_rgba(15,23,42,0.04)] hover:shadow-[0_2px_4px_rgba(15,23,42,0.10)] hover:-translate-y-px transition-all duration-150 ${chipClass(i)}`}
                       >
-                        <span className="w-3.5 h-3.5 rounded-full bg-white/70 text-[7px] font-bold flex items-center justify-center flex-shrink-0">
+                        <span className="w-3.5 h-3.5 rounded-full bg-black/[0.07] dark:bg-white/[0.12] text-[7px] font-bold flex items-center justify-center flex-shrink-0">
                           {initials(i.client.name)}
                         </span>
                         <CreativeTypeDot color={i.creativeType.color} />
@@ -516,7 +518,9 @@ export default function CalendarPage() {
                     );
                   })}
                   {dayItems.length > maxShow && (
-                    <span className="text-[9px] text-gray-400">+{dayItems.length - maxShow} more</span>
+                    <span className="block text-[9px] font-medium text-gray-400 dark:text-slate-500 pl-1 pt-0.5">
+                      +{dayItems.length - maxShow} more
+                    </span>
                   )}
 
                   {/* Task dots (legacy layer) */}

@@ -62,7 +62,11 @@ export function contentStatusChip(item: { status: ContentStatus; description: st
     return {
       ...meta,
       label: "Reserved",
-      chip: "bg-slate-50 text-slate-500 border-slate-200 border-dashed",
+      // Outline, not fill: an empty slot should read as an outline waiting to
+      // be filled in. It used to be a dashed border, but a bulk-planned month
+      // is almost entirely reserved slots, so the whole calendar came out
+      // hatched and looked unfinished rather than deliberate.
+      chip: "bg-transparent text-slate-400 dark:text-slate-500 border-slate-200/80 dark:border-white/10",
     };
   }
   return meta;
@@ -876,7 +880,7 @@ export function ContentCalendarTab({ clientId, readOnly = false }: { clientId: s
                 <p className="text-sm text-gray-500">Nothing planned for {MONTH_NAMES[month]}.</p>
               </div>
             ) : (
-              <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+              <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-[0_1px_2px_rgba(15,23,42,0.05),0_10px_28px_-16px_rgba(15,23,42,0.18)] dark:shadow-[0_10px_30px_-18px_rgba(0,0,0,0.9)] dark:border-white/[0.07]">
                 {items.map((i, idx) => {
                   const meta = contentStatusChip(i);
                   return (

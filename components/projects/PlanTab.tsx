@@ -303,7 +303,7 @@ export function PlanTab({ projectId }: { projectId: string }) {
 
       {/* ── The plan itself ── */}
       {view === "month" ? (
-        <div className="border border-gray-200 rounded-xl overflow-hidden">
+        <div className="border border-gray-200 rounded-xl overflow-hidden shadow-[0_1px_2px_rgba(15,23,42,0.05),0_10px_28px_-16px_rgba(15,23,42,0.18)] dark:shadow-[0_10px_30px_-18px_rgba(0,0,0,0.9)] dark:border-white/[0.07]">
           <MonthGrid
             view="month"
             year={cycleStart.getUTCFullYear()}

@@ -139,7 +139,8 @@ interface TaskRowProps {
   depth: number;
   onOpen: (task: Task) => void;
   onStatusChange: (taskId: string, status: TaskStatus) => void;
-  onAddSubtask: (parent: Task) => void;
+  /** Omitted for people who don't plan — the add controls then don't render. */
+  onAddSubtask?: (parent: Task) => void;
   draggingId: string | null;
   dropTarget: DropTarget | null;
   onDragStart: (taskId: string) => void;
@@ -247,7 +248,8 @@ function TaskRow({ task, depth, onOpen, onStatusChange, onAddSubtask, draggingId
           </span>
         ) : <span className="w-[68px] flex-shrink-0" />}
 
-        {/* Add subtask */}
+        {/* Add subtask — planners only */}
+        {onAddSubtask && (
         <button
           onClick={(e) => { e.stopPropagation(); onAddSubtask(task); }}
           className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-gray-200 rounded flex-shrink-0"
@@ -255,6 +257,7 @@ function TaskRow({ task, depth, onOpen, onStatusChange, onAddSubtask, draggingId
         >
           <Plus className="w-3.5 h-3.5 text-gray-500" />
         </button>
+        )}
       </div>
       {isDropAfter && <div className="h-0.5 bg-indigo-500 mx-3 rounded-full" />}
 
@@ -269,8 +272,9 @@ interface TaskListProps {
   tasks: Task[];
   onOpen: (task: Task) => void;
   onStatusChange: (taskId: string, status: TaskStatus) => void;
-  onAddTask: () => void;
-  onAddSubtask: (parent: Task) => void;
+  onAddTask?: () => void;
+  /** Omitted for people who don't plan — the add controls then don't render. */
+  onAddSubtask?: (parent: Task) => void;
   onReorder?: (taskIds: string[]) => void;
   groupByStatus?: boolean;
 }
@@ -309,11 +313,19 @@ export function TaskList({ tasks, onOpen, onStatusChange, onAddTask, onAddSubtas
         <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mb-3">
           <GitBranch className="w-5 h-5 text-gray-400" />
         </div>
-        <p className="text-sm font-medium text-gray-600">No tasks yet</p>
-        <p className="text-xs text-gray-400 mt-1 mb-4">Break this project into tasks to start tracking work</p>
+        <p className="text-sm font-medium text-gray-600">
+          {onAddTask ? "No tasks yet" : "Nothing assigned to you here"}
+        </p>
+        <p className="text-xs text-gray-400 mt-1 mb-4">
+          {onAddTask
+            ? "Break this project into tasks to start tracking work"
+            : "Work assigned to you on this project will appear here."}
+        </p>
+        {onAddTask && (
         <button onClick={onAddTask} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors">
           <Plus className="w-3.5 h-3.5" /> Add First Task
         </button>
+        )}
       </div>
     );
   }
@@ -358,9 +370,11 @@ export function TaskList({ tasks, onOpen, onStatusChange, onAddTask, onAddSubtas
         tasks.map((t) => <TaskRow key={t.id} task={t} depth={0} {...rowProps} />)
       )}
 
-      <button onClick={onAddTask} className="w-full flex items-center gap-2 px-4 py-2.5 text-xs text-gray-400 hover:text-indigo-600 hover:bg-indigo-50/50 transition-colors border-t border-gray-100">
-        <Plus className="w-3.5 h-3.5" /> Add task
-      </button>
+      {onAddTask && (
+        <button onClick={onAddTask} className="w-full flex items-center gap-2 px-4 py-2.5 text-xs text-gray-400 hover:text-indigo-600 hover:bg-indigo-50/50 transition-colors border-t border-gray-100">
+          <Plus className="w-3.5 h-3.5" /> Add task
+        </button>
+      )}
     </div>
   );
 }

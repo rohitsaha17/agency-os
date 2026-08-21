@@ -58,15 +58,40 @@ export async function GET(req: NextRequest, { params }: Params) {
 export async function PATCH(req: NextRequest, { params }: Params) {
   try {
     const user = await requireAuth(req);
-    requireRole(user, ["ADMIN", "MANAGER"]);
     const { id } = await params;
 
     // Verify the project belongs to the caller's org before mutating.
     const existing = await prisma.project.findFirst({
       where: { id, organizationId: user.organizationId },
-      select: { id: true, status: true },
+      select: {
+        id: true, status: true,
+        members: { select: { userId: true, role: true } },
+      },
     });
     if (!existing) throw new ApiError("Project not found", 404);
+
+    /**
+     * Who may edit a project.
+     *
+     * Admin and manager edit any of them. An SMM edits the ones they plan —
+     * they own the shape of the work, so renaming it or moving its dates is
+     * theirs; the price never is, and that's enforced separately below.
+     *
+     * This is checked here rather than by widening projects.manage in the
+     * matrix, because that capability also means "sees every task in the org"
+     * (taskVisibilityScope) — granting it to plan a project would quietly
+     * hand the SMM everyone else's work.
+     */
+    const plansThisProject = existing.members.some(
+      (m) => m.userId === user.id && m.role === "SMM",
+    );
+    const mayEdit = can(user, "projects.manage") || plansThisProject;
+    if (!mayEdit) {
+      throw new ApiError(
+        "Only an admin, a manager, or this project's SMM can edit it",
+        403,
+      );
+    }
 
     const body = await req.json();
     const {
@@ -79,6 +104,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     // Only projects.pricing may move an amount. A caller without it can still
     // edit the project; their cycleAmount is simply ignored.
     const canSetPricing = can(user, "projects.pricing");
+
+    if (clientId !== undefined && !can(user, "projects.manage")) {
+      throw new ApiError("Only an admin or manager can move a project to a different client", 403);
+    }
 
     // If the client is being reassigned, verify that client is also in the org.
     if (clientId !== undefined && clientId !== null) {
@@ -110,7 +139,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         ...(status !== undefined && { status }),
         ...(startDate !== undefined && { startDate: startDate ? new Date(startDate) : null }),
         ...(endDate !== undefined && { endDate: endDate ? new Date(endDate) : null }),
-        ...(budget !== undefined && { budget: budget != null && budget !== "" ? parseFloat(budget) : null }),
+        ...(canSetPricing && budget !== undefined && {
+          budget: budget != null && budget !== "" ? parseFloat(budget) : null,
+        }),
         ...(currency !== undefined && { currency }),
         ...(canSetPricing && cycleAmount !== undefined && {
           cycleAmount: cycleAmount != null && cycleAmount !== "" ? parseFloat(cycleAmount) : null,

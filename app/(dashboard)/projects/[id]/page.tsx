@@ -145,7 +145,6 @@ export default function ProjectDetailPage() {
   // and manager only. Planning is the SMM's. Everyone else gets the work.
   const seesMoney = can(currentUser, "financials.view");
   const canPlanProject = can(currentUser, "content.plan");
-
   const [pdfLoading, setPdfLoading] = useState(false);
 
   // v3: the API now returns the deal (deliverables) and the team alongside
@@ -159,6 +158,12 @@ export default function ProjectDetailPage() {
     members?: { userId: string; role: string; user: { id: string; name: string; avatarUrl: string | null } }[];
   };
   const [project, setProject] = useState<ProjectWithDeal | null>(null);
+  // Mirrors the rule in PATCH /api/projects/[id]: admin and manager edit any
+  // project, an SMM edits the ones they plan. Nobody else gets the button,
+  // because for them it only ever opened onto a 403.
+  const canEditProject =
+    can(currentUser, "projects.manage") ||
+    (project?.members ?? []).some((m) => m.userId === currentUser?.id && m.role === "SMM");
   // v3: the project's billing periods, and which one the page is showing.
   // Defaults to the cycle containing today so the page opens on "now".
   const [cycles, setCycles] = useState<ProjectCycle[]>([]);
@@ -705,12 +710,18 @@ export default function ProjectDetailPage() {
             >
               {pdfLoading ? "Generating…" : "PDF"}
             </Button>
-            <Button variant="secondary" size="sm" icon={<Edit3 className="w-3.5 h-3.5" />} onClick={() => setEditProjectOpen(true)}>
-              Edit
-            </Button>
-            <Button size="sm" icon={<Plus className="w-3.5 h-3.5" />} onClick={() => setTaskModal({ open: true })}>
-              Add Task
-            </Button>
+            {canEditProject && (
+              <Button variant="secondary" size="sm" icon={<Edit3 className="w-3.5 h-3.5" />} onClick={() => setEditProjectOpen(true)}>
+                Edit
+              </Button>
+            )}
+            {/* Work on a project is created by whoever plans it. An editor
+                keeps their own to-dos in Tasks > My Tasks, not here. */}
+            {canPlanProject && (
+              <Button size="sm" icon={<Plus className="w-3.5 h-3.5" />} onClick={() => setTaskModal({ open: true })}>
+                Add Task
+              </Button>
+            )}
           </div>
         </div>
 
@@ -854,14 +865,16 @@ export default function ProjectDetailPage() {
               </button>
             ))}
           </div>
-          <Button
-            size="sm"
-            variant="secondary"
-            icon={<Sparkles className="w-3.5 h-3.5" />}
-            onClick={() => setTemplatePickerOpen(true)}
-          >
-            Generate Tasks
-          </Button>
+          {canPlanProject && (
+            <Button
+              size="sm"
+              variant="secondary"
+              icon={<Sparkles className="w-3.5 h-3.5" />}
+              onClick={() => setTemplatePickerOpen(true)}
+            >
+              Generate Tasks
+            </Button>
+          )}
         </div>
 
 
@@ -878,8 +891,8 @@ export default function ProjectDetailPage() {
             tasks={tasks}
             onOpen={(task) => setTaskPanel({ open: true, task })}
             onStatusChange={handleStatusChange}
-            onAddTask={(status) => setTaskModal({ open: true, defaultStatus: status })}
-            onAddSubtask={(parent) => setTaskModal({ open: true, parentTask: parent })}
+            onAddTask={canPlanProject ? (status) => setTaskModal({ open: true, defaultStatus: status }) : undefined}
+            onAddSubtask={canPlanProject ? (parent) => setTaskModal({ open: true, parentTask: parent }) : undefined}
             onReorder={handleReorder}
           />
         ) : (
@@ -887,8 +900,8 @@ export default function ProjectDetailPage() {
             tasks={tasks}
             onOpen={(task) => setTaskPanel({ open: true, task })}
             onStatusChange={handleStatusChange}
-            onAddTask={() => setTaskModal({ open: true })}
-            onAddSubtask={(parent) => setTaskModal({ open: true, parentTask: parent })}
+            onAddTask={canPlanProject ? () => setTaskModal({ open: true }) : undefined}
+            onAddSubtask={canPlanProject ? (parent) => setTaskModal({ open: true, parentTask: parent }) : undefined}
             onReorder={handleReorder}
           />
         )}

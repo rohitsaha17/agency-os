@@ -32,7 +32,11 @@ const navItems: {
     links: [
       { href: "/",          label: "Dashboard",    icon: LayoutDashboard, need: null              },
       { href: "/clients",   label: "Clients",      icon: Users,           need: "clients.manage"  },
-      { href: "/projects",  label: "Projects",     icon: FolderKanban,    need: "content.plan"    },
+      // Everyone works inside projects, so everyone gets the list. What you
+      // see on a project is already scoped by role — an editor's board shows
+      // their own tasks and none of the commercial tabs. Hiding the entry only
+      // meant reaching a project you're on took a breadcrumb from somewhere else.
+      { href: "/projects",  label: "Projects",     icon: FolderKanban,    need: null              },
     ],
   },
   {

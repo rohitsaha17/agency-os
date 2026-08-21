@@ -31,7 +31,8 @@ interface TaskCardProps {
   task: Task;
   onOpen: (task: Task) => void;
   onStatusChange: (taskId: string, status: TaskStatus) => void;
-  onAddSubtask: (parent: Task) => void;
+  /** Omitted for people who don't plan — the add controls then don't render. */
+  onAddSubtask?: (parent: Task) => void;
   isDragging: boolean;
   onDragStart: () => void;
   onCardDragOver: (e: React.DragEvent) => void;
@@ -161,15 +162,17 @@ function TaskCard({
           )}
         </button>
 
-        {/* Add subtask */}
-        <button
-          onClick={() => onAddSubtask(task)}
-          className="text-xs text-gray-400 hover:text-indigo-600 flex items-center gap-0.5 transition-colors opacity-0 group-hover:opacity-100"
-          title="Add subtask"
-        >
-          <Plus className="w-3 h-3" />
-          <span>Subtask</span>
-        </button>
+        {/* Add subtask — planners only */}
+        {onAddSubtask && (
+          <button
+            onClick={() => onAddSubtask(task)}
+            className="text-xs text-gray-400 hover:text-indigo-600 flex items-center gap-0.5 transition-colors opacity-0 group-hover:opacity-100"
+            title="Add subtask"
+          >
+            <Plus className="w-3 h-3" />
+            <span>Subtask</span>
+          </button>
+        )}
       </div>
 
       {/* Status quick-change row */}
@@ -192,8 +195,9 @@ interface TaskBoardProps {
   tasks: Task[];
   onOpen: (task: Task) => void;
   onStatusChange: (taskId: string, status: TaskStatus) => void;
-  onAddTask: (status: TaskStatus) => void;
-  onAddSubtask: (parent: Task) => void;
+  onAddTask?: (status: TaskStatus) => void;
+  /** Omitted for people who don't plan — the add controls then don't render. */
+  onAddSubtask?: (parent: Task) => void;
   onReorder?: (taskIds: string[]) => void;
 }
 
@@ -280,12 +284,14 @@ export function TaskBoard({ tasks, onOpen, onStatusChange, onAddTask, onAddSubta
                 <span className="text-xs font-semibold text-gray-700 whitespace-nowrap">{col.label}</span>
                 <span className="text-xs text-gray-400">({columnTasks.length})</span>
               </div>
-              <button
-                onClick={() => onAddTask(col.status)}
-                className="p-0.5 hover:bg-white rounded transition-colors text-gray-400 hover:text-gray-700"
-              >
-                <Plus className="w-3.5 h-3.5" />
-              </button>
+              {onAddTask && (
+                <button
+                  onClick={() => onAddTask(col.status)}
+                  className="p-0.5 hover:bg-white rounded transition-colors text-gray-400 hover:text-gray-700"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
 
             {/* Cards */}
@@ -314,10 +320,10 @@ export function TaskBoard({ tasks, onOpen, onStatusChange, onAddTask, onAddSubta
               })}
               {columnTasks.length === 0 && !isOver && (
                 <div
-                  className="border-2 border-dashed border-gray-200 rounded-xl p-4 text-center cursor-pointer hover:border-gray-300 transition-colors"
-                  onClick={() => onAddTask(col.status)}
+                  className={`border-2 border-dashed border-gray-200 rounded-xl p-4 text-center transition-colors ${onAddTask ? "cursor-pointer hover:border-gray-300" : ""}`}
+                  onClick={() => onAddTask?.(col.status)}
                 >
-                  <p className="text-xs text-gray-400">Drop here or click +</p>
+                  <p className="text-xs text-gray-400">{onAddTask ? "Drop here or click +" : "Nothing here"}</p>
                 </div>
               )}
             </div>

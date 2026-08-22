@@ -668,7 +668,7 @@ function TasksBoardInner() {
   return (
     // Anchor to the viewport so the rail and columns fill the page
     // (the dashboard shell is min-h-screen, so h-full alone can't resolve).
-    <div className="flex flex-col h-[calc(100dvh-3.5rem)] lg:h-dvh min-h-0">
+    <div className="flex flex-col h-screen-below-appbar min-h-0">
       {/* ── Page header ── */}
       <div className="bg-white border-b border-gray-200 px-4 sm:px-6 lg:px-8 py-4 flex-shrink-0">
         <div className="flex items-center justify-between gap-3 flex-wrap">

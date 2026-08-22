@@ -582,11 +582,27 @@ input[type="time"]::-webkit-calendar-picker-indicator:hover {
 @media (pointer: coarse) {
   button,
   [role="button"],
-  a[class*="rounded"],
-  input[type="checkbox"],
-  input[type="radio"] {
+  a[class*="rounded"] {
     min-height: 44px;
     min-width: 44px;
+  }
+
+  /* Checkboxes and radios are NOT in that list. Forcing a 16px box to 44px
+     does not give you a bigger checkbox, it gives you a 44px square with a
+     tick rattling around inside it. They get a modest bump instead, and the
+     label they sit in carries the target — which is the right place for it
+     anyway, since tapping the words should toggle the box. */
+  input[type="checkbox"],
+  input[type="radio"] {
+    width: 1.15rem;
+    height: 1.15rem;
+    min-height: 0;
+    min-width: 0;
+  }
+
+  label:has(> input[type="checkbox"]),
+  label:has(> input[type="radio"]) {
+    min-height: 44px;
   }
 
   /* Anything laid out as a row keeps its shape — the minimum applies
@@ -596,6 +612,15 @@ input[type="time"]::-webkit-calendar-picker-indicator:hover {
   a[class*="inline-flex"][class*="text-["] {
     min-height: 0;
     min-width: 0;
+  }
+
+  /* Controls whose SIZE is the design: a switch, a colour swatch, a
+     day cell. Stretching a 24px switch to 44px does not make it easier
+     to hit, it makes it a rectangle with a knob floating in it. These
+     opt out and put the 44px on a wrapper instead. */
+  [data-fixed-size] {
+    min-height: 0 !important;
+    min-width: 0 !important;
   }
 }
 
@@ -669,3 +694,92 @@ input[type="time"]::-webkit-calendar-picker-indicator:hover {
    cage of bright lines. */
 .cal-gridlines { background-color: #e5e7eb; }
 .dark .cal-gridlines { background-color: rgba(255, 255, 255, 0.06); }
+
+/* ──────────────────────────────────────────────────────────────
+   Edge to edge
+   ──────────────────────────────────────────────────────────────
+   viewport-fit=cover lets the page paint into the notch and the
+   home-indicator strip, which is what makes an installed app look
+   like an app rather than a web page in a frame. The cost is that
+   nothing is inset for you any more: a fixed header will sit under
+   the camera cutout, and the last row of a list will sit under the
+   home indicator, unless it says otherwise.
+
+   These are the four insets, named once, with a 0px fallback so
+   every browser that has never heard of env() still gets sane
+   numbers. Everything below composes them — no component does its
+   own env() arithmetic. */
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  /* The mobile app bar, so the bar and the space reserved for it can
+     never drift apart. */
+  --appbar-h: 3.5rem;
+}
+
+.safe-top    { padding-top: var(--safe-top); }
+.safe-bottom { padding-bottom: var(--safe-bottom); }
+.safe-x      { padding-left: var(--safe-left); padding-right: var(--safe-right); }
+
+/* The fixed app bar grows by the top inset and pads its contents down,
+   so the logo clears the cutout instead of hiding behind it. */
+.appbar {
+  height: calc(var(--appbar-h) + var(--safe-top));
+  padding-top: var(--safe-top);
+  padding-left: var(--safe-left);
+  padding-right: var(--safe-right);
+}
+
+/* What sits under the app bar reserves exactly the bar's real height.
+   Only below lg, where the bar exists at all. */
+@media (max-width: 1023px) {
+  .appbar-offset { padding-top: calc(var(--appbar-h) + var(--safe-top)); }
+  /* Full-height panes measure from under the bar, not from the top of
+     the screen — otherwise they overflow by the height of the inset. */
+  .h-screen-below-appbar { height: calc(100dvh - var(--appbar-h) - var(--safe-top)); }
+}
+@media (min-width: 1024px) {
+  .h-screen-below-appbar { height: 100dvh; }
+}
+
+/* A modal's own bottom edge, so its buttons clear the home indicator. */
+.safe-modal { padding-bottom: max(var(--safe-bottom), 0px); }
+
+/* ──────────────────────────────────────────────────────────────
+   Phone legibility
+   ──────────────────────────────────────────────────────────────
+   The interface was drawn for a desktop, where 12px next to a
+   mouse cursor at arm's length is fine. Held in one hand it is
+   not: text-xs is the workhorse class here, and at 12px on a
+   phone it is genuinely hard to read.
+
+   Done as a size bump on the existing classes rather than by
+   editing several hundred components. The scale keeps its
+   relative steps — small text stays smaller than body text —
+   it just starts higher. */
+@media (max-width: 639px) {
+  .text-\[9px\]    { font-size: 0.6875rem; }  /* 11px */
+  .text-\[10px\]   { font-size: 0.75rem;   }  /* 12px */
+  .text-\[11px\]   { font-size: 0.8125rem; }  /* 13px */
+  .text-xs         { font-size: 0.8125rem; line-height: 1.15rem; }  /* 13px */
+  .text-sm         { font-size: 0.9375rem; line-height: 1.375rem; } /* 15px */
+
+  /* iOS zooms the whole page in when you focus a field whose text is
+     under 16px, then leaves you scrolled somewhere else. 16px is the
+     documented threshold, so every field gets it — this is the fix for
+     the page jumping around whenever you tap an input. */
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+
+  /* Fields and buttons get a little more height to aim at. */
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    min-height: 44px;
+  }
+}

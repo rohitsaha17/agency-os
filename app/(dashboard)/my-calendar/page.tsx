@@ -451,7 +451,7 @@ export default function MyCalendarPage() {
   const weekDays = getWeekDays(anchor);
 
   return (
-    <div className="flex flex-col h-[calc(100dvh-3.5rem)] lg:h-dvh min-h-0">
+    <div className="flex flex-col h-screen-below-appbar min-h-0">
       {/* ── Header ── */}
       <div className="bg-white border-b border-gray-200 px-4 sm:px-6 py-3 flex-shrink-0">
         <div className="flex items-center gap-3 flex-wrap">

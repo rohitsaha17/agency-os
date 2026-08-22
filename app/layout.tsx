@@ -20,11 +20,10 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     title: "Studio Flow",
-    // "default", not "black-translucent". Translucent draws the page UNDER
-    // the status bar, which needs safe-area padding on every fixed element to
-    // stop the header hiding behind the notch — and there is no device here
-    // to check that on. An opaque bar costs a few pixels and cannot go wrong.
-    statusBarStyle: "default",
+    // Translucent, so the app's own dark chrome runs up behind the clock
+    // instead of leaving a white band above the header. Safe here because
+    // .appbar reserves --safe-top for exactly this.
+    statusBarStyle: "black-translucent",
   },
   // iOS home-screen apps have no browser chrome to go back with, and a
   // detected phone number turning into a link inside an invoice is worse
@@ -41,11 +40,11 @@ export const viewport: Viewport = {
   ],
   width: "device-width",
   initialScale: 1,
-  // viewportFit is deliberately left at the default rather than "cover".
-  // Cover extends the page into the notch and the home-indicator area, which
-  // only looks right once every fixed element carries safe-area padding.
-  // Until that can be checked on a real handset, the inset default is the
-  // one that cannot render a header underneath a camera cutout.
+  // Edge to edge. The app bar, the drawer, the full-height panes and the
+  // modals all pad themselves off --safe-* now (see globals.css), so the page
+  // can paint into the notch and the home-indicator strip without anything
+  // ending up underneath them.
+  viewportFit: "cover",
 };
 
 /*
@@ -76,6 +75,13 @@ export default function RootLayout({
      */
     <html lang="en" suppressHydrationWarning>
       <head>
+        {/*
+          Next emits the standardised `mobile-web-app-capable`. iOS before
+          16.4 only understands the legacy spelling, and without it "Add to
+          Home Screen" opens Studio Flow in a Safari tab with the address bar
+          rather than as an app. Costs one tag; nothing newer is harmed by it.
+        */}
+        <meta name="apple-mobile-web-app-capable" content="yes" />
         {/* eslint-disable-next-line @next/next/no-sync-scripts */}
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>

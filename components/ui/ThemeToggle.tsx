@@ -15,6 +15,11 @@ export function ThemeToggle() {
       type="button"
       aria-label={`Switch to ${isDark ? "light" : "dark"} mode`}
       title={`Switch to ${isDark ? "light" : "dark"} mode`}
+      /* Opts out of the 44px coarse-pointer minimum in globals.css. A switch
+         is 24px tall by design, and stretching it to 44 turned it into a fat
+         rectangle with the knob floating in the middle. The row around it is
+         the tap target instead — see Sidebar's dark-mode row. */
+      data-fixed-size
       className={`
         relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full
         cursor-pointer transition-all duration-300

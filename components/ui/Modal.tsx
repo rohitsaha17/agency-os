@@ -32,7 +32,7 @@ export function Modal({ open, onClose, title, children, width = "max-w-lg" }: Mo
         onClick={onClose}
       />
       {/* Panel */}
-      <div className={`relative bg-white dark:bg-slate-900 rounded-xl shadow-2xl w-full ${width} max-h-[90vh] flex flex-col dark:ring-1 dark:ring-white/[0.08]`}>
+      <div className={`relative bg-white dark:bg-slate-900 rounded-xl shadow-2xl w-full ${width} max-h-[90dvh] flex flex-col dark:ring-1 dark:ring-white/[0.08] safe-modal`}>
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-white/[0.08]">
           <h2 className="text-base font-semibold text-gray-900 dark:text-slate-100">{title}</h2>

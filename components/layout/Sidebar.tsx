@@ -17,6 +17,24 @@ import { GlobalSearch } from "@/components/ui/GlobalSearch";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { can, type Capability } from "@/lib/permissions";
 
+
+/**
+ * The dark-mode row. A <label> wrapping the switch, so tapping the word
+ * "Dark mode" flips it too — the switch alone is 44px wide and 24px tall,
+ * which is a small thing to hit with a thumb.
+ */
+function DarkModeRow() {
+  return (
+    <label className="flex items-center justify-between gap-3 px-3 py-2.5 min-h-[44px] rounded-lg cursor-pointer hover:bg-white/[0.05] transition-colors">
+      <span className="flex items-center gap-2.5 text-sm sm:text-xs font-medium text-slate-400">
+        <Sun className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-slate-500" />
+        Dark mode
+      </span>
+      <ThemeToggle />
+    </label>
+  );
+}
+
 /* ─────────────────────────────────────────────────────────────
    Nav structure
    ───────────────────────────────────────────────────────────── */
@@ -271,14 +289,10 @@ function NavContent({
           </>
         ) : (
           <>
-            {/* Dark mode toggle row */}
-            <div className="flex items-center justify-between px-3 py-2">
-              <span className="flex items-center gap-2.5 text-xs font-medium text-slate-400">
-                <Sun className="w-3.5 h-3.5 text-slate-500" />
-                Dark mode
-              </span>
-              <ThemeToggle />
-            </div>
+            {/* Dark mode. The whole row is the target, not the 24px switch —
+                a thumb should not have to find a small control at the bottom
+                of a drawer. */}
+            <DarkModeRow />
 
             {/* Settings — org settings for admin/manager, own account otherwise */}
             <Link
@@ -482,7 +496,7 @@ export function Sidebar() {
         // Inline width so the rail animates reliably regardless of which
         // Tailwind width utilities get generated.
         style={{ width: collapsed ? 72 : 256, transition: "width 200ms ease" }}
-        className="hidden lg:flex fixed inset-y-0 left-0 flex-col z-30 bg-slate-900"
+        className="hidden lg:flex fixed inset-y-0 left-0 flex-col z-30 bg-slate-900 safe-top safe-bottom"
       >
         {/* Subtle top border accent */}
         <div className="absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-indigo-500/40 to-transparent" />
@@ -525,7 +539,7 @@ export function Sidebar() {
       </aside>
 
       {/* ── Mobile / tablet top bar ───────────────────────────── */}
-      <div className="lg:hidden fixed top-0 inset-x-0 h-14 bg-slate-900 flex items-center justify-between px-4 z-40 border-b border-white/[0.06]">
+      <div className="lg:hidden fixed top-0 inset-x-0 appbar bg-slate-900 flex items-center justify-between px-4 z-40 border-b border-white/[0.06]">
         <Logo />
         <div className="flex items-center gap-1">
           <NotificationBell align="right" />
@@ -554,7 +568,7 @@ export function Sidebar() {
       {/* ── Mobile drawer ─────────────────────────────────────── */}
       <aside
         className={`
-          lg:hidden fixed inset-y-0 left-0 w-72 bg-slate-900 flex flex-col z-50
+          lg:hidden fixed inset-y-0 left-0 w-72 bg-slate-900 flex flex-col z-50 safe-top safe-bottom
           transform transition-transform duration-300 ease-in-out
           ${open ? "translate-x-0" : "-translate-x-full"}
         `}

@@ -488,7 +488,7 @@ export default function CalendarPage() {
 
   return (
     // Viewport-locked so a whole month fits without scrolling the page.
-    <div className="flex flex-col h-[calc(100dvh-3.5rem)] lg:h-dvh min-h-0">
+    <div className="flex flex-col h-screen-below-appbar min-h-0">
       {/* ── Toolbar (single row, Google-style) ──────────────── */}
       <div className="bg-white border-b border-gray-200 px-4 sm:px-6 py-2.5 flex-shrink-0">
         <div className="flex items-center gap-3 flex-wrap">

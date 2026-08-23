@@ -135,8 +135,14 @@ export function InvoiceDetailDialog({ invoice, onClose, onChanged }: Props) {
       : invoice.status.charAt(0) + invoice.status.slice(1).toLowerCase();
 
   return (
-    <Modal open onClose={onClose} title={invoice.invoiceNumber} width="max-w-2xl">
-      <div className="px-6 py-5 space-y-5 overflow-y-auto">
+    <Modal
+      open
+      onClose={onClose}
+      title={invoice.invoiceNumber}
+      width="max-w-2xl"
+      footer={<div className="flex justify-end"><Button variant="secondary" onClick={onClose}>Close</Button></div>}
+    >
+      <div className="space-y-5">
         <div className="flex flex-wrap items-center gap-3">
           <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${
             bal.state === "partial" ? "bg-amber-50 text-amber-700"
@@ -295,9 +301,6 @@ export function InvoiceDetailDialog({ invoice, onClose, onChanged }: Props) {
         )}
       </div>
 
-      <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-gray-200 dark:border-white/[0.08]">
-        <Button variant="secondary" onClick={onClose}>Close</Button>
-      </div>
     </Modal>
   );
 }

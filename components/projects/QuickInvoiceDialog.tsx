@@ -157,13 +157,33 @@ export function QuickInvoiceDialog({ open, onClose, onCreated, project }: Props)
     }
   }
 
+  /**
+   * No width here on purpose. This used to start with `w-full`, and Tailwind
+   * resolves conflicting utilities by stylesheet order, not by the order you
+   * wrote them — so `${inputCls} w-16` on the quantity field rendered at full
+   * width and shoved the delete button off the side of a phone. Each use site
+   * states its own width.
+   */
   const inputCls =
-    "w-full min-w-0 px-3 py-2 text-sm bg-white dark:bg-slate-800 border border-gray-200 dark:border-white/[0.08] rounded-lg text-gray-900 dark:text-slate-100 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-400";
+    "min-w-0 px-3 py-2 text-sm bg-white dark:bg-slate-800 border border-gray-200 dark:border-white/[0.08] rounded-lg text-gray-900 dark:text-slate-100 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-400";
   const labelCls = "block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5";
 
   return (
-    <Modal open={open} onClose={onClose} title="New invoice" width="max-w-2xl">
-      <div className="px-6 py-5 space-y-5 overflow-y-auto">
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="New invoice"
+      width="max-w-2xl"
+      footer={
+        <div className="flex items-center justify-end gap-2">
+          <Button variant="secondary" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button onClick={handleSave} loading={saving} disabled={!canSave}>
+            {paidNow > 0 ? "Create and record payment" : issueNow ? "Create and issue" : "Save draft"}
+          </Button>
+        </div>
+      }
+    >
+      <div className="space-y-5">
         <p className="text-xs text-gray-500 dark:text-slate-400 -mt-1">
           For <span className="font-medium text-gray-700 dark:text-slate-200">{project.name}</span>
           {cycleAmount && <> · prefilled with the agreed {money(parseFloat(cycleAmount))} per cycle</>}
@@ -174,36 +194,41 @@ export function QuickInvoiceDialog({ open, onClose, onCreated, project }: Props)
           <label className={labelCls}>What is being billed</label>
           <div className="space-y-2">
             {lines.map((line, i) => (
-              <div key={i} className="flex items-start gap-2">
+              // Four controls on one row needs ~300px of fixed width before
+              // the description gets any, which does not exist on a phone.
+              // Description on its own line, the numbers beneath it.
+              <div key={i} className="flex flex-col sm:flex-row items-stretch sm:items-start gap-2 rounded-lg sm:rounded-none border sm:border-0 border-gray-200 dark:border-white/[0.08] p-2 sm:p-0">
                 <input
-                  className={inputCls}
+                  className={`${inputCls} w-full`}
                   placeholder="Description"
                   value={line.description}
                   onChange={(e) => setLine(i, { description: e.target.value })}
                 />
-                <input
-                  className={`${inputCls} w-16 shrink-0 text-center`}
-                  inputMode="decimal"
-                  placeholder="Qty"
-                  value={line.quantity}
-                  onChange={(e) => setLine(i, { quantity: e.target.value })}
-                />
-                <input
-                  className={`${inputCls} w-28 shrink-0 text-right`}
-                  inputMode="decimal"
-                  placeholder="Amount"
-                  value={line.unitPrice}
-                  onChange={(e) => setLine(i, { unitPrice: e.target.value })}
-                />
-                <button
-                  type="button"
-                  onClick={() => setLines((p) => p.filter((_, idx) => idx !== i))}
-                  disabled={lines.length === 1}
-                  className="p-2 shrink-0 text-gray-400 hover:text-red-500 disabled:opacity-30 disabled:hover:text-gray-400"
-                  aria-label="Remove line"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                <div className="flex items-start gap-2">
+                  <input
+                    className={`${inputCls} w-16 shrink-0 text-center`}
+                    inputMode="decimal"
+                    placeholder="Qty"
+                    value={line.quantity}
+                    onChange={(e) => setLine(i, { quantity: e.target.value })}
+                  />
+                  <input
+                    className={`${inputCls} flex-1 sm:flex-none sm:w-28 text-right`}
+                    inputMode="decimal"
+                    placeholder="Amount"
+                    value={line.unitPrice}
+                    onChange={(e) => setLine(i, { unitPrice: e.target.value })}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setLines((p) => p.filter((_, idx) => idx !== i))}
+                    disabled={lines.length === 1}
+                    className="p-2 shrink-0 text-gray-400 hover:text-red-500 disabled:opacity-30 disabled:hover:text-gray-400"
+                    aria-label="Remove line"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -220,15 +245,15 @@ export function QuickInvoiceDialog({ open, onClose, onCreated, project }: Props)
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="min-w-0">
             <label className={labelCls}>Due date</label>
-            <input type="date" className={inputCls} value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+            <input type="date" className={`${inputCls} w-full`} value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
           </div>
           <div className="min-w-0">
             <label className={labelCls}>Discount %</label>
-            <input className={inputCls} inputMode="decimal" placeholder="0" value={discountPct} onChange={(e) => setDiscountPct(e.target.value)} />
+            <input className={`${inputCls} w-full`} inputMode="decimal" placeholder="0" value={discountPct} onChange={(e) => setDiscountPct(e.target.value)} />
           </div>
           <div className="min-w-0">
             <label className={labelCls}>Tax %</label>
-            <input className={inputCls} inputMode="decimal" placeholder="0" value={taxPct} onChange={(e) => setTaxPct(e.target.value)} />
+            <input className={`${inputCls} w-full`} inputMode="decimal" placeholder="0" value={taxPct} onChange={(e) => setTaxPct(e.target.value)} />
           </div>
         </div>
 
@@ -259,7 +284,7 @@ export function QuickInvoiceDialog({ open, onClose, onCreated, project }: Props)
                 <div className="relative">
                   <IndianRupee className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                   <input
-                    className={`${inputCls} pl-8`}
+                    className={`${inputCls} w-full pl-8`}
                     inputMode="decimal"
                     value={payAmount}
                     onChange={(e) => setPayAmount(e.target.value)}
@@ -268,7 +293,7 @@ export function QuickInvoiceDialog({ open, onClose, onCreated, project }: Props)
               </div>
               <div className="min-w-0">
                 <label className={labelCls}>Received on</label>
-                <input type="date" className={inputCls} value={payDate} onChange={(e) => setPayDate(e.target.value)} />
+                <input type="date" className={`${inputCls} w-full`} value={payDate} onChange={(e) => setPayDate(e.target.value)} />
               </div>
               <div className="min-w-0">
                 <label className={labelCls}>Method</label>
@@ -277,7 +302,7 @@ export function QuickInvoiceDialog({ open, onClose, onCreated, project }: Props)
               <div className="min-w-0">
                 <label className={labelCls}>Reference</label>
                 <input
-                  className={inputCls}
+                  className={`${inputCls} w-full`}
                   placeholder="UTR / cheque no."
                   value={payReference}
                   onChange={(e) => setPayReference(e.target.value)}
@@ -290,7 +315,7 @@ export function QuickInvoiceDialog({ open, onClose, onCreated, project }: Props)
         <div>
           <label className={labelCls}>Notes on the invoice</label>
           <textarea
-            className={`${inputCls} resize-none`}
+            className={`${inputCls} w-full resize-none`}
             rows={2}
             placeholder="Optional — payment terms, bank details, anything the client should see"
             value={notes}
@@ -339,12 +364,6 @@ export function QuickInvoiceDialog({ open, onClose, onCreated, project }: Props)
         )}
       </div>
 
-      <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-gray-200 dark:border-white/[0.08]">
-        <Button variant="secondary" onClick={onClose} disabled={saving}>Cancel</Button>
-        <Button onClick={handleSave} loading={saving} disabled={!canSave}>
-          {paidNow > 0 ? "Create and record payment" : issueNow ? "Create and issue" : "Save draft"}
-        </Button>
-      </div>
     </Modal>
   );
 }

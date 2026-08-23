@@ -1670,7 +1670,59 @@ export default function ProjectDetailPage() {
                 </Button>
               </div>
             ) : (
-              <div className="overflow-x-auto bg-white border border-gray-200 rounded-xl overflow-hidden">
+              <>
+              {/* Phones get cards. Seven columns on a 375px screen is either a
+                  horizontal scroll nobody discovers or a squeeze where every
+                  figure truncates — and these are the figures you came for. */}
+              <div className="sm:hidden space-y-2">
+                {invoices.map((inv) => {
+                  const { total } = calcInvoiceTotal(inv.lineItems, {
+                    discountRate: inv.discountPct, taxRate: inv.taxPct,
+                  });
+                  const bal = calcInvoiceBalance(total, inv.receipts ?? []);
+                  const partial = bal.state === "partial" && inv.status !== "CANCELLED";
+                  return (
+                    <button
+                      key={inv.id}
+                      onClick={() => setOpenInvoice(inv)}
+                      className="w-full text-left bg-white border border-gray-200 rounded-xl p-4 active:bg-gray-50 transition-colors"
+                    >
+                      <div className="flex items-start justify-between gap-3 mb-2">
+                        <div className="min-w-0">
+                          <p className="font-semibold text-gray-900">{inv.invoiceNumber}</p>
+                          <p className="text-xs text-gray-400 mt-0.5">
+                            {inv.dueDate ? `Due ${formatDate(inv.dueDate)}` : "No due date"}
+                          </p>
+                        </div>
+                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0 ${
+                          partial ? "bg-amber-50 text-amber-700" : (
+                            inv.status === "PAID" ? "bg-emerald-50 text-emerald-700" :
+                            inv.status === "OVERDUE" ? "bg-red-50 text-red-700" :
+                            inv.status === "SENT" ? "bg-blue-50 text-blue-700" :
+                            "bg-gray-100 text-gray-600"
+                          )
+                        }`}>
+                          {partial ? "Part paid" : inv.status.charAt(0) + inv.status.slice(1).toLowerCase()}
+                        </span>
+                      </div>
+                      <div className="flex items-end justify-between gap-3">
+                        <div>
+                          <p className="text-xs text-gray-400">Amount</p>
+                          <p className="font-semibold text-gray-900">{formatCurrency(total, inv.currency)}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xs text-gray-400">{bal.balance > 0 ? "Balance" : "Status"}</p>
+                          <p className={`font-semibold ${bal.balance > 0 ? "text-amber-600" : "text-emerald-600"}`}>
+                            {bal.balance > 0 ? formatCurrency(bal.balance, inv.currency) : "Settled"}
+                          </p>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="hidden sm:block overflow-x-auto bg-white border border-gray-200 rounded-xl overflow-hidden">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-100 text-xs font-medium text-gray-400 uppercase tracking-wide">
@@ -1743,6 +1795,7 @@ export default function ProjectDetailPage() {
                   </tbody>
                 </table>
               </div>
+              </>
             )}
           </div>
         )}

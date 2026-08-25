@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { newAssignment } from "@/lib/task-acceptance";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, isHeadOfDesign } from "@/lib/auth";
 import { handleApiError, ApiError } from "@/lib/api-errors";
@@ -43,7 +44,7 @@ export async function POST(req: NextRequest, { params }: Params) {
       where: { id },
       data: {
         assignmentStatus: reassigned ? "REASSIGNED" : "APPROVED",
-        assignees: { deleteMany: {}, create: [{ userId: finalAssigneeId, assignedById: user.id }] },
+        assignees: { deleteMany: {}, create: [newAssignment(finalAssigneeId, user.id)] },
       },
       include: {
         assignees: { include: { user: { select: { id: true, name: true, avatarUrl: true } } } },

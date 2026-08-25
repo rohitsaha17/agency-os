@@ -82,8 +82,14 @@ export function Modal({
         </div>
 
         {/* Body. Narrower gutters on a phone — 24px each side of a 375px
-            screen is 13% of it spent on nothing. */}
-        <div className="overflow-y-auto flex-1 px-4 sm:px-6 py-4 sm:py-5">{children}</div>
+            screen is 13% of it spent on nothing.
+
+            When there is no footer the body is the bottom edge of the sheet,
+            so it carries the home-indicator inset itself; otherwise the
+            footer does and doubling it would leave a gap. */}
+        <div className={`overflow-y-auto flex-1 px-4 sm:px-6 py-4 sm:py-5 ${footer ? "" : "safe-bottom"}`}>
+          {children}
+        </div>
 
         {/* Actions stay put while the body scrolls. */}
         {footer && (

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { newAssignment } from "@/lib/task-acceptance";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { requireCapability, taskVisibilityScope } from "@/lib/api-permissions";
@@ -206,7 +207,7 @@ export async function POST(req: NextRequest, { params }: Params) {
         preferredAssigneeId: preferredAssigneeId || null,
         assignmentStatus: routing.assignmentStatus,
         ...(routing.assigneeIds.length && {
-          assignees: { create: routing.assigneeIds.map((userId) => ({ userId })) },
+          assignees: { create: routing.assigneeIds.map((userId) => newAssignment(userId, user.id)) },
         }),
       },
       include: {

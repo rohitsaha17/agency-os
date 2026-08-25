@@ -7,7 +7,7 @@
  */
 import {
   canRespond, canTransition, validateDeclineReason, declineAudience,
-  isAwaitingAcceptance, MAX_DECLINE_REASON,
+  isAwaitingAcceptance, newAssignment, MAX_DECLINE_REASON,
 } from "../lib/task-acceptance";
 
 let fails = 0;
@@ -64,6 +64,21 @@ console.log("\n— the assigner's view —");
 check("pending is awaiting", isAwaitingAcceptance(a("u1", "PENDING")), true);
 check("accepted is not", isAwaitingAcceptance(a("u1", "ACCEPTED")), false);
 check("declined is not awaiting either", isAwaitingAcceptance(a("u1", "DECLINED")), false);
+
+console.log("\n— what a new assignment looks like —");
+check("handing work to someone else asks the question",
+  newAssignment("u1", "boss").acceptance, "PENDING");
+check("and remembers who to tell",
+  newAssignment("u1", "boss").assignedById, "boss");
+check("nothing to answer yet", newAssignment("u1", "boss").respondedAt, null);
+check("a task you make for yourself is already accepted",
+  newAssignment("u1", "u1").acceptance, "ACCEPTED");
+check("and is stamped as answered",
+  newAssignment("u1", "u1").respondedAt !== null, true);
+check("no known assigner still asks the question",
+  newAssignment("u1", null).acceptance, "PENDING");
+check("null assigner is stored as null, not undefined",
+  newAssignment("u1", undefined).assignedById, null);
 
 console.log(fails === 0 ? "\nAll checks passed." : `\n${fails} FAILED`);
 process.exit(fails === 0 ? 0 : 1);

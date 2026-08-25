@@ -98,3 +98,26 @@ export function declineAudience(args: {
 export function isAwaitingAcceptance(a: AssignmentLike): boolean {
   return a.acceptance === "PENDING";
 }
+
+/**
+ * The row to write when work is handed to somebody.
+ *
+ * One helper because there are five places that create assignments — task
+ * create, project task create, the approve/reassign path, and two system-task
+ * generators — and an assignment written without an acceptance state is one
+ * that silently defaults to PENDING with no record of who to tell when it is
+ * declined.
+ *
+ * Assigning to yourself skips the question. Being asked to accept a task you
+ * just created for yourself is noise, and it would put a banner on top of
+ * every to-do anybody adds to their own list.
+ */
+export function newAssignment(userId: string, assignedById: string | null | undefined) {
+  const self = !!assignedById && userId === assignedById;
+  return {
+    userId,
+    assignedById: assignedById ?? null,
+    acceptance: (self ? "ACCEPTED" : "PENDING") as Acceptance,
+    respondedAt: self ? new Date() : null,
+  };
+}

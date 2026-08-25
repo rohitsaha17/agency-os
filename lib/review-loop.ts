@@ -10,6 +10,7 @@
  *   requestChanges() revision +1, task → CHANGES_REQUESTED, brief intact
  *   markPosted()     the POST task closes, content → POSTED
  */
+import { newAssignment } from "@/lib/task-acceptance";
 import { prisma } from "@/lib/prisma";
 import { isPublishable } from "@/lib/content-status";
 import { logStatus } from "@/lib/audit";
@@ -299,7 +300,7 @@ export async function createPostTask(opts: {
       status: "TODO",
       // Due the day it publishes — not before, not after.
       dueDate: item.date,
-      assignees: { create: [{ userId: opts.userId }] },
+      assignees: { create: [newAssignment(opts.userId, opts.userId)] },
     },
     select: { id: true },
   });

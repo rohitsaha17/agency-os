@@ -8,6 +8,7 @@
  * Both are idempotent: creating the same auto-task twice is a bug the user
  * would see as duplicate work, so each checks for an existing open one first.
  */
+import { newAssignment } from "@/lib/task-acceptance";
 import { prisma } from "@/lib/prisma";
 import { notify } from "@/lib/notify";
 import { logStatus } from "@/lib/audit";
@@ -87,7 +88,7 @@ export async function createPlanningTask(opts: {
       status: "TODO",
       priority: "HIGH",
       dueDate,
-      assignees: { create: [{ userId }] },
+      assignees: { create: [newAssignment(userId, opts.createdById)] },
     },
     select: { id: true },
   });
@@ -188,7 +189,7 @@ export async function createContentWorkTask(opts: {
       priority: opts.priority ?? "MEDIUM",
       dueDate,
       approverId,
-      assignees: { create: [{ userId: assigneeId }] },
+      assignees: { create: [newAssignment(assigneeId, opts.approverId)] },
     },
     select: { id: true },
   });

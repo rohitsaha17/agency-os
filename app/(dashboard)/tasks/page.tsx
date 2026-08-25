@@ -556,6 +556,30 @@ function TasksBoardInner() {
             {t.title}
           </button>
           <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+            {/* Waiting on an answer. Without this the feature only works for
+                people who open every task — the list is where most of them
+                actually look, and an unanswered assignment looks exactly like
+                work in progress from here. */}
+            {(() => {
+              const mine = (t.assignees ?? []).find(
+                (a) => (a.user?.id ?? a.userId) === currentUser?.id);
+              if (!mine) return null;
+              if (mine.acceptance === "PENDING") {
+                return (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 bg-indigo-600 text-white rounded-full">
+                    Accept?
+                  </span>
+                );
+              }
+              if (mine.acceptance === "DECLINED") {
+                return (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-full">
+                    You declined
+                  </span>
+                );
+              }
+              return null;
+            })()}
             {/* v3: a round badge from round 2 — the work came back once */}
             {(t.revision ?? 1) > 1 && (
               <span className="inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-full">

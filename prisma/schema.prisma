@@ -104,6 +104,18 @@ enum AssignmentStatus {
   REASSIGNED
 }
 
+/// Whether the person the work was handed to has actually taken it on.
+///
+/// Distinct from AssignmentStatus above, which is about a HEAD approving who
+/// got the work. This is the other direction: the assignee answering. Someone
+/// can be on leave, double-booked, or simply not the right person, and until
+/// they say so the assigner believes the work is moving.
+enum AssignmentAcceptance {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
 // v2: how a finished task was delivered to the client/manager
 enum DeliveryMethod {
   FILE_UPLOAD
@@ -325,6 +337,7 @@ model User {
   tasksToApprove       Task[]          @relation("TaskApprover")
   taskReviews          TaskReview[]    @relation("TaskReviews")
   flaggedBillables     BillableItem[]  @relation("FlaggedBillables")
+  assignmentsMade      TaskAssignee[]  @relation("AssignmentsMade")
 
   @@unique([organizationId, email])
   @@index([organizationId])
@@ -867,10 +880,23 @@ model TaskAssignee {
   userId     String
   assignedAt DateTime @default(now())
 
-  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Has this person taken the work on? New assignments start PENDING.
+  acceptance    AssignmentAcceptance @default(PENDING)
+  respondedAt   DateTime?
+  /// Why they can't take it. Required when declining — "not available" with
+  /// no reason tells the assigner nothing they can act on.
+  declineReason String?
+  /// Who handed it over, so a decline can go back to the right person.
+  /// Nullable because assignments made before this existed have no record of
+  /// it, and inventing one would be worse than admitting we don't know.
+  assignedById  String?
+
+  task       Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user       User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assignedBy User? @relation("AssignmentsMade", fields: [assignedById], references: [id], onDelete: SetNull)
 
   @@id([taskId, userId])
+  @@index([userId, acceptance])
   @@map("task_assignees")
 }
 

@@ -16,6 +16,7 @@ import { SubmitWorkDialog } from "./ReviewDialogs";
 import { Select } from "@/components/ui/Select";
 import { useCurrentUser } from "@/lib/useCurrentUser";
 import { can } from "@/lib/permissions";
+import { AcceptanceBanner } from "@/components/tasks/AcceptanceBanner";
 import type {
   Task, TaskStatus, Priority, User,
   TaskHistoryEntry, TaskDeliveryRecord,
@@ -587,6 +588,18 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-5 min-h-0">
+
+          {/* Above everything: until the assignment is answered, nothing else
+              on this task is really theirs to get on with. Outside the tabs
+              so it can't be missed by being on the wrong one. */}
+          <AcceptanceBanner
+            taskId={task.id}
+            assignees={task.assignees ?? []}
+            currentUserId={me?.id}
+            canReassign={can(me, "tasks.assign")}
+            onReassign={() => setTab("details")}
+            onChanged={(assignees) => onUpdated({ ...task, assignees })}
+          />
 
           {tab === "details" && (
             <div className="space-y-4">

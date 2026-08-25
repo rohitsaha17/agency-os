@@ -43,7 +43,7 @@ export async function POST(req: NextRequest, { params }: Params) {
       where: { id },
       data: {
         assignmentStatus: reassigned ? "REASSIGNED" : "APPROVED",
-        assignees: { deleteMany: {}, create: [{ userId: finalAssigneeId }] },
+        assignees: { deleteMany: {}, create: [{ userId: finalAssigneeId, assignedById: user.id }] },
       },
       include: {
         assignees: { include: { user: { select: { id: true, name: true, avatarUrl: true } } } },

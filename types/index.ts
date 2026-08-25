@@ -267,9 +267,18 @@ export interface ProjectCycle {
 
 // ── Tasks ─────────────────────────────────────────────────────
 
+/** Whether the person handed the work has taken it on. */
+export type AssignmentAcceptance = "PENDING" | "ACCEPTED" | "DECLINED";
+
 export interface TaskAssignee {
   userId: string;
   user: User;
+  /** Absent on payloads built before this existed; treat as accepted. */
+  acceptance?: AssignmentAcceptance;
+  respondedAt?: string | null;
+  declineReason?: string | null;
+  /** Who handed it over. Null on assignments made before this was recorded. */
+  assignedById?: string | null;
 }
 
 export interface TaskDependency {

@@ -180,7 +180,7 @@ export async function POST(req: NextRequest) {
         isAdHoc: !!isAdHoc,
         estimatedHours: estimatedHours ? parseFloat(estimatedHours) : null,
         ...(routing.assigneeIds.length && {
-          assignees: { create: routing.assigneeIds.map((userId: string) => ({ userId })) },
+          assignees: { create: routing.assigneeIds.map((userId: string) => ({ userId, assignedById: user.id })) },
         }),
       },
       include: {

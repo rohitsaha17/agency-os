@@ -191,11 +191,24 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         ...(preferredAssigneeId !== undefined && { preferredAssigneeId: preferredAssigneeId || null }),
         ...(isAdHoc !== undefined && { isAdHoc: !!isAdHoc }),
         ...(sortOrder !== undefined && { sortOrder }),
-        // Sync assignees if provided
+        // Sync assignees if provided.
+        //
+        // Only what actually changed. This used to delete every row and
+        // recreate the lot, which meant somebody who was on the task before
+        // and is still on it afterwards had their acceptance thrown away and
+        // was asked to accept work they were already doing — every time
+        // anybody edited the assignee list.
         ...(assigneeIds !== undefined && {
           assignees: {
-            deleteMany: {},
-            create: (assigneeIds as string[]).map((userId) => ({ userId })),
+            deleteMany: {
+              userId: { notIn: (assigneeIds as string[]) },
+            },
+            create: (assigneeIds as string[])
+              .filter((uid) => !existing.assignees.some((a) => a.userId === uid))
+              // A fresh assignment starts PENDING (the schema default) and
+              // remembers who handed it over, so a decline can go back to
+              // the right person.
+              .map((userId) => ({ userId, assignedById: user.id })),
           },
         }),
       },

@@ -73,3 +73,25 @@ export function taskVisibilityScope(user: { id: string; role?: string | null }) 
 
   return { OR: mine };
 }
+
+/**
+ * May this person export a task sheet for `requested`?
+ *
+ * `requested` is a user id, the literal "all", or "" meaning "me".
+ *
+ * Separate from `taskVisibilityScope` on purpose. That decides which rows the
+ * database will return; this decides whose NAME may go at the top of a
+ * document. Without it a junior could ask for a colleague and receive an empty
+ * sheet titled with their colleague's name — not a data leak, but a document
+ * that misrepresents itself, which is its own kind of harm.
+ *
+ * Exported so the rule can be tested directly rather than only through a
+ * request.
+ */
+export function mayExportTasksFor(
+  user: { id: string; role?: string | null },
+  requested: string,
+): boolean {
+  const wantsOthers = requested === "all" || (!!requested && requested !== user.id);
+  return !wantsOthers || can(user, "projects.manage");
+}

@@ -287,27 +287,34 @@ function TasksBoardInner() {
     : !viewUserId || viewUserId === currentUser?.id ? (currentUser?.name ?? "You")
     : people.find((p) => p.id === viewUserId)?.name ?? "Selected person";
 
-  /** Print-ready worklist of exactly what is on screen. */
+  /**
+   * Print-ready worklist, rendered by the server.
+   *
+   * It would be less work to build this from `orgTasks`, which is already in
+   * memory — but that sheet is silently bounded by whatever the page happened
+   * to fetch, and for "Everyone" at a busy agency that is a document which
+   * looks complete and isn't. The server queries independently and says so on
+   * the sheet if it ever hits its own ceiling. One path for every case, so
+   * two people printing the same list cannot get different documents.
+   */
   const downloadTaskSheet = useCallback(async () => {
     setPdfBusy(true);
     try {
-      const [{ fetchSettings, openPrintPdf }, { buildTaskSheetHtml }] = await Promise.all([
-        import("@/lib/pdf"),
-        import("@/lib/pdfTemplates"),
-      ]);
-      const settings = await fetchSettings();
-      await openPrintPdf(buildTaskSheetHtml({
-        subject: viewingLabel,
-        scope: `${orgTasks.length} task${orgTasks.length === 1 ? "" : "s"}`,
-        generatedAt: new Date(),
-        tasks: orgTasks,
-      }, settings));
-    } catch {
-      toast.error("Could not build the task sheet");
+      const who = viewUserId === "__all__" ? "all" : (viewUserId || currentUser?.id || "");
+      const res = await fetch(`/api/tasks/export?userId=${encodeURIComponent(who)}&scope=all`);
+      if (!res.ok) {
+        const d = await res.json().catch(() => null);
+        throw new Error(d?.error?.message ?? "Could not build the task sheet");
+      }
+      const html = await res.text();
+      const { openPrintPdf } = await import("@/lib/pdf");
+      await openPrintPdf(html);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not build the task sheet");
     } finally {
       setPdfBusy(false);
     }
-  }, [orgTasks, viewingLabel]);
+  }, [viewUserId, currentUser?.id]);
 
   const fetchAll = useCallback(async (opts?: { silent?: boolean }) => {
     if (!opts?.silent) setLoading(true);

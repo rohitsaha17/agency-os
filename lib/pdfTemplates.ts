@@ -734,3 +734,152 @@ export function buildInvoiceHtml(inv: InvoicePdfData, s: CompanySettings): strin
 
   return wrapHtml(`Invoice ${inv.invoiceNumber}`, accent, cfg.font, body);
 }
+
+/* ── Task sheet ─────────────────────────────────────────────────
+   A printable worklist. Built to be carried away from the screen:
+   grouped by project so it reads the way people actually work, with
+   the brief included rather than truncated, because a sheet you have
+   to come back to the app to understand is not worth printing. */
+
+export interface TaskSheetTask {
+  id: string;
+  title: string;
+  description?: string | null;
+  status: string;
+  priority?: string | null;
+  dueDate?: string | null;
+  progress?: number;
+  project?: { id: string; name: string } | null;
+  client?: { id: string; name: string } | null;
+  assignees?: { user?: { id: string; name: string } | null }[];
+  kind?: string | null;
+}
+
+export interface TaskSheetData {
+  /** Whose sheet this is — a person's name, or "Everyone" for the org-wide one. */
+  subject: string;
+  /** Sub-line under the title: what was included and when it was taken. */
+  scope?: string;
+  generatedAt: Date;
+  tasks: TaskSheetTask[];
+}
+
+const TASK_STATUS_LABEL: Record<string, string> = {
+  TODO: "To Do", IN_PROGRESS: "In Progress", IN_REVIEW: "In Review",
+  CHANGES_REQUESTED: "Changes Requested", DONE: "Done",
+  BLOCKED: "Blocked", ON_HOLD: "On Hold",
+};
+
+const PRIORITY_COLOR: Record<string, string> = {
+  URGENT: "#dc2626", HIGH: "#ea580c", MEDIUM: "#ca8a04", LOW: "#64748b",
+};
+
+export function buildTaskSheetHtml(d: TaskSheetData, s: CompanySettings): string {
+  const cfg = parseCfg(s);
+  const accent = s.letterheadColor ?? "#6366f1";
+
+  const open = d.tasks.filter((t) => t.status !== "DONE");
+  const done = d.tasks.filter((t) => t.status === "DONE");
+
+  // Overdue is worth its own number: it is the one figure on this sheet
+  // that means "do something today".
+  const startOfToday = new Date(d.generatedAt);
+  startOfToday.setHours(0, 0, 0, 0);
+  const overdue = open.filter((t) => t.dueDate && new Date(t.dueDate) < startOfToday);
+
+  // Grouped by project, because that is how the work is actually handed
+  // out. Tasks with no project collect at the end rather than vanishing.
+  const groups = new Map<string, { name: string; client: string | null; tasks: TaskSheetTask[] }>();
+  for (const t of d.tasks) {
+    const key = t.project?.id ?? "__none__";
+    if (!groups.has(key)) {
+      groups.set(key, {
+        name: t.project?.name ?? "Not tied to a project",
+        client: t.client?.name ?? null,
+        tasks: [],
+      });
+    }
+    groups.get(key)!.tasks.push(t);
+  }
+
+  const sections = [...groups.entries()]
+    // Unassigned work last; everything else alphabetical so two sheets
+    // taken on different days line up against each other.
+    .sort((a, b) => (a[0] === "__none__" ? 1 : b[0] === "__none__" ? -1 : a[1].name.localeCompare(b[1].name)))
+    .map(([, g]) => {
+      const rows = g.tasks
+        .slice()
+        .sort((a, b) => {
+          // Done drops to the bottom; the rest by due date, undated last.
+          if ((a.status === "DONE") !== (b.status === "DONE")) return a.status === "DONE" ? 1 : -1;
+          if (!a.dueDate) return b.dueDate ? 1 : 0;
+          if (!b.dueDate) return -1;
+          return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+        })
+        .map((t) => {
+          const isOverdue = t.status !== "DONE" && t.dueDate && new Date(t.dueDate) < startOfToday;
+          const who = (t.assignees ?? []).map((a) => a.user?.name).filter(Boolean).join(", ");
+          return `
+            <tr>
+              <td style="width:14px; padding:6px 0 6px 0; vertical-align:top;">
+                <div style="width:9px; height:9px; border:1.2px solid #94a3b8; border-radius:2px; margin-top:3px;${
+                  t.status === "DONE" ? "background:#94a3b8;" : ""
+                }"></div>
+              </td>
+              <td style="padding:6px 8px 6px 4px; vertical-align:top;">
+                <div style="font-size:9pt; font-weight:600; color:#111827;${
+                  t.status === "DONE" ? "text-decoration:line-through; color:#9ca3af;" : ""
+                }">${esc(t.title)}</div>
+                ${t.description ? `<div style="font-size:7.5pt; color:#6b7280; margin-top:2px; line-height:1.45;">${esc(t.description)}</div>` : ""}
+                ${who ? `<div style="font-size:7pt; color:#9ca3af; margin-top:2px;">${esc(who)}</div>` : ""}
+              </td>
+              <td style="padding:6px 6px; vertical-align:top; white-space:nowrap; font-size:7.5pt; color:${
+                t.priority && PRIORITY_COLOR[t.priority] ? PRIORITY_COLOR[t.priority] : "#9ca3af"
+              }; font-weight:600;">${t.priority && t.priority !== "MEDIUM" ? esc(t.priority.toLowerCase()) : ""}</td>
+              <td style="padding:6px 6px; vertical-align:top; white-space:nowrap; font-size:7.5pt; color:#6b7280;">${
+                TASK_STATUS_LABEL[t.status] ?? esc(t.status)
+              }</td>
+              <td style="padding:6px 0 6px 6px; vertical-align:top; white-space:nowrap; text-align:right; font-size:7.5pt; color:${
+                isOverdue ? "#dc2626" : "#9ca3af"
+              }; font-weight:${isOverdue ? "700" : "400"};">${t.dueDate ? fmtDate(t.dueDate) : "—"}</td>
+            </tr>`;
+        })
+        .join("");
+
+      return `
+        <div style="margin-bottom:16px; page-break-inside:avoid;">
+          <div style="font-size:8.5pt; font-weight:700; color:#374151; border-bottom:1px solid #e5e7eb; padding-bottom:3px; margin-bottom:2px;">
+            ${esc(g.name)}${g.client ? `<span style="font-weight:400; color:#9ca3af;"> · ${esc(g.client)}</span>` : ""}
+            <span style="float:right; font-weight:400; color:#9ca3af;">${g.tasks.length}</span>
+          </div>
+          <table style="width:100%; border-collapse:collapse;"><tbody>${rows}</tbody></table>
+        </div>`;
+    })
+    .join("");
+
+  const body = `
+    ${letterheadHtml(s)}
+    <div class="doc-header">
+      <div>
+        <div class="doc-title">TASK SHEET</div>
+        <div class="doc-number">${esc(d.subject)}</div>
+      </div>
+      <div style="text-align:right; font-size:7.5pt; color:#9ca3af;">
+        ${fmtDate(d.generatedAt.toISOString())}
+        ${d.scope ? `<div style="margin-top:2px;">${esc(d.scope)}</div>` : ""}
+      </div>
+    </div>
+
+    <div class="info-grid-3" style="margin-bottom:18px;">
+      <div class="info-block"><label>Open</label><p style="font-weight:700;">${open.length}</p></div>
+      <div class="info-block"><label>Overdue</label><p style="font-weight:700; color:${overdue.length ? "#dc2626" : "#111827"};">${overdue.length}</p></div>
+      <div class="info-block"><label>Done</label><p style="font-weight:700;">${done.length}</p></div>
+    </div>
+
+    ${d.tasks.length === 0
+      ? `<p style="font-size:9pt; color:#9ca3af;">Nothing assigned.</p>`
+      : sections}
+    ${footerHtml(s)}`;
+
+  return wrapHtml(`Tasks — ${d.subject}`, accent, cfg.font, body);
+}

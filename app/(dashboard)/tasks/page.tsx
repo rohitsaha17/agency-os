@@ -6,7 +6,7 @@ import Link from "next/link";
 import {
   Plus, Star, CheckCircle2, Circle, ChevronDown, ChevronRight, ChevronUp,
   MoreVertical, ListTodo, Clock, ShieldCheck, X, FolderKanban, Repeat,
-  Link2 as LinkIcon, Paperclip,
+  Link2 as LinkIcon, Paperclip, FileText,
 } from "lucide-react";
 import { TaskModal } from "@/components/tasks/TaskModal";
 import { DeliveryDialog } from "@/components/tasks/DeliveryDialog";
@@ -222,7 +222,15 @@ function TasksBoardInner() {
   const searchParams = useSearchParams();
 
   const [items, setItems] = useState<PersonalRow[]>([]);
-  const [orgTasks, setOrgTasks] = useState<Task[]>([]);
+  const [allVisible, setAllVisible] = useState<Task[]>([]);
+  /**
+   * Whose tasks are on screen. "" means the signed-in person — the default,
+   * because your own list is what you open this page for. Anyone who can
+   * manage projects can switch to a colleague or to everyone.
+   */
+  const [viewUserId, setViewUserId] = useState<string>("");
+  const [people, setPeople] = useState<{ id: string; name: string }[]>([]);
+  const [pdfBusy, setPdfBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<SidebarView>("all");
   const [hiddenLists, setHiddenLists] = useState<Set<string>>(new Set());
@@ -246,6 +254,60 @@ function TasksBoardInner() {
   // v3: the Approvals inbox belongs to anyone who reviews work, which is a
   // capability rather than a job title (docs/V3_CONTEXT.md §2).
   const isHead = can(currentUser, "tasks.review");
+  /** Who may look at somebody else's list. Same capability the API scopes on. */
+  const seesEveryone = can(currentUser, "projects.manage");
+
+  /**
+   * The list actually on screen.
+   *
+   * `allVisible` holds everything the server was willing to return; this
+   * picks whose to show. For anyone without projects.manage the server has
+   * already limited it to their own work, so this is only ever a narrowing
+   * of what they could see anyway.
+   */
+  const orgTasks = useMemo(() => {
+    if (seesEveryone && viewUserId === "__all__") return allVisible;
+    const target = viewUserId || currentUser?.id;
+    if (!target) return [];
+    return allVisible.filter((t) =>
+      t.assignees?.some((a) => a.userId === target || a.user?.id === target));
+  }, [allVisible, viewUserId, currentUser?.id, seesEveryone]);
+
+  /** Only fetched for people who can act on it. */
+  useEffect(() => {
+    if (!seesEveryone) return;
+    fetch("/api/users")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((d) => setPeople(Array.isArray(d) ? d.map((u: { id: string; name: string }) => ({ id: u.id, name: u.name })) : []))
+      .catch(() => {});
+  }, [seesEveryone]);
+
+  const viewingLabel =
+    viewUserId === "__all__" ? "Everyone"
+    : !viewUserId || viewUserId === currentUser?.id ? (currentUser?.name ?? "You")
+    : people.find((p) => p.id === viewUserId)?.name ?? "Selected person";
+
+  /** Print-ready worklist of exactly what is on screen. */
+  const downloadTaskSheet = useCallback(async () => {
+    setPdfBusy(true);
+    try {
+      const [{ fetchSettings, openPrintPdf }, { buildTaskSheetHtml }] = await Promise.all([
+        import("@/lib/pdf"),
+        import("@/lib/pdfTemplates"),
+      ]);
+      const settings = await fetchSettings();
+      await openPrintPdf(buildTaskSheetHtml({
+        subject: viewingLabel,
+        scope: `${orgTasks.length} task${orgTasks.length === 1 ? "" : "s"}`,
+        generatedAt: new Date(),
+        tasks: orgTasks,
+      }, settings));
+    } catch {
+      toast.error("Could not build the task sheet");
+    } finally {
+      setPdfBusy(false);
+    }
+  }, [orgTasks, viewingLabel]);
 
   const fetchAll = useCallback(async (opts?: { silent?: boolean }) => {
     if (!opts?.silent) setLoading(true);
@@ -257,10 +319,11 @@ function TasksBoardInner() {
       if (itemsRes.ok) setItems(await itemsRes.json());
       if (tasksRes.ok) {
         const all = await tasksRes.json();
-        setOrgTasks(
-          (Array.isArray(all) ? all : []).filter((t: Task) =>
-            t.assignees?.some((a) => a.userId === currentUser?.id || a.user?.id === currentUser?.id)),
-        );
+        // Keep everything the API was willing to return. It is already
+        // scoped by taskVisibilityScope, so a junior only ever receives
+        // their own — narrowing again here is a display choice, not a
+        // permission, and it used to hide the whole org from an admin.
+        setAllVisible(Array.isArray(all) ? all : []);
       }
     } finally {
       setLoading(false);
@@ -337,14 +400,14 @@ function TasksBoardInner() {
       setDeliveryFor({ id: t.id, title: t.title });
       return;
     }
-    setOrgTasks((prev) => prev.map((x) => (x.id === t.id ? { ...x, status: next } : x)));
+    setAllVisible((prev) => prev.map((x) => (x.id === t.id ? { ...x, status: next } : x)));
     const res = await fetch(`/api/tasks/${t.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: next }),
     });
     if (!res.ok) {
-      setOrgTasks((prev) => prev.map((x) => (x.id === t.id ? { ...x, status: t.status } : x)));
+      setAllVisible((prev) => prev.map((x) => (x.id === t.id ? { ...x, status: t.status } : x)));
       const d = await res.json().catch(() => null);
       toast.error(d?.error?.message ?? "Couldn't update that task");
       return;
@@ -679,10 +742,45 @@ function TasksBoardInner() {
               {overdueCount > 0 && (
                 <span className="text-red-600 font-medium"> · {overdueCount} overdue</span>
               )}
-              {" · "}work assigned to you lands here and on your calendar
+              {" · "}
+              {viewUserId === "__all__" ? "everyone's work across the agency"
+                : !viewUserId || viewUserId === currentUser?.id
+                  ? "work assigned to you lands here and on your calendar"
+                  : `${viewingLabel}'s work`}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Whose list. Only for people the API would answer for anyway —
+                a junior asking for a colleague would get an empty array, so
+                offering the control would just be a lie. */}
+            {seesEveryone && people.length > 0 && (
+              <Select
+                value={viewUserId}
+                onChange={setViewUserId}
+                className="w-full sm:w-48"
+                size="sm"
+                options={[
+                  { value: "", label: "My tasks" },
+                  { value: "__all__", label: "Everyone" },
+                  ...people
+                    .filter((p) => p.id !== currentUser?.id)
+                    .map((p) => ({ value: p.id, label: p.name })),
+                ]}
+              />
+            )}
+
+            {/* Anyone can take their own list away to print. Admins get
+                whoever is on screen, which the picker above decides. */}
+            <button
+              onClick={downloadTaskSheet}
+              disabled={pdfBusy || orgTasks.length === 0}
+              title={`Download ${viewingLabel === (currentUser?.name ?? "You") ? "your" : `${viewingLabel}'s`} task sheet as a PDF`}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-700 bg-white hover:bg-gray-50 border border-gray-300 rounded-lg transition-colors disabled:opacity-50"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              {pdfBusy ? "Preparing…" : "PDF"}
+            </button>
+
             <CalendarTasksSwitch active="tasks" />
             {/* Approvals is its own page now — a review needs the brief and
                 the submission side by side, which a drawer never had room for. */}

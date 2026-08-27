@@ -580,6 +580,30 @@ function TasksBoardInner() {
               }
               return null;
             })()}
+            {/* Looking at someone else's list: say what is still unanswered.
+                An assignment nobody has accepted reads as work in progress
+                from here, and it isn't. */}
+            {(() => {
+              const others = (t.assignees ?? []).filter(
+                (a) => (a.user?.id ?? a.userId) !== currentUser?.id);
+              const pending = others.filter((a) => a.acceptance === "PENDING");
+              const refused = others.filter((a) => a.acceptance === "DECLINED");
+              if (refused.length > 0) {
+                return (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-full">
+                    {refused[0].user?.name?.split(" ")[0] ?? "They"} declined
+                  </span>
+                );
+              }
+              if (pending.length > 0) {
+                return (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 bg-gray-100 text-gray-600 border border-gray-200 rounded-full">
+                    Awaiting {pending[0].user?.name?.split(" ")[0] ?? "reply"}
+                  </span>
+                );
+              }
+              return null;
+            })()}
             {/* v3: a round badge from round 2 — the work came back once */}
             {(t.revision ?? 1) > 1 && (
               <span className="inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-full">

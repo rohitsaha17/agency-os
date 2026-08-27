@@ -316,80 +316,6 @@ function ProjectHealthRow({ project }: { project: ProjectHealth }) {
   );
 }
 
-function UpcomingDeadlines({ tasks, projects }: {
-  tasks: DeadlineTask[]; projects: DeadlineProject[];
-}) {
-  const all: ({ date: string; type: "task" | "project"; id: string; title: string; sub: string; link: string; priority?: string })[] = [
-    ...tasks.map((t) => ({
-      date: t.dueDate, type: "task" as const, id: t.id, title: t.title,
-      sub: t.project?.name ?? "No project",
-      link: `/projects/${t.project?.id}`,
-      priority: t.priority,
-    })),
-    ...projects.map((p) => ({
-      date: p.endDate!, type: "project" as const, id: p.id, title: p.name,
-      sub: p.client?.name ?? "",
-      link: `/projects/${p.id}`,
-    })),
-  ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-  if (all.length === 0) {
-    return (
-      <div className="flex items-center justify-center py-8 text-xs text-gray-400">
-        No deadlines in the next 2 weeks
-      </div>
-    );
-  }
-
-  // Group by day label
-  const groups: Record<string, typeof all> = {};
-  for (const item of all) {
-    const label = formatDate(item.date);
-    if (!groups[label]) groups[label] = [];
-    groups[label].push(item);
-  }
-
-  return (
-    <div className="space-y-4">
-      {Object.entries(groups).map(([day, items]) => (
-        <div key={day}>
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 px-1">{day}</p>
-          <div className="space-y-1">
-            {items.map((item) => (
-              <Link key={`${item.type}-${item.id}`} href={item.link}>
-                <div className="flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-gray-50 transition-colors">
-                  {item.type === "project"
-                    ? <FolderKanban className="w-3.5 h-3.5 text-indigo-400 flex-shrink-0" />
-                    : <CheckCircle2 className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" />
-                  }
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-gray-900 font-medium truncate">{item.title}</p>
-                    <p className="text-xs text-gray-400 truncate">{item.sub}</p>
-                  </div>
-                  {item.priority && (
-                    <span className={`text-xs px-1.5 py-0.5 rounded-md font-medium flex-shrink-0 ${PRIORITY_COLORS[item.priority] ?? ""}`}>
-                      {item.priority.charAt(0)}
-                    </span>
-                  )}
-                  <span className={`text-xs flex-shrink-0 ${
-                    daysUntil(item.date) === 0 ? "text-red-500 font-semibold" :
-                    daysUntil(item.date) === 1 ? "text-amber-600 font-medium" :
-                    "text-gray-400"
-                  }`}>
-                    {daysUntil(item.date) === 0 ? "Today" :
-                     daysUntil(item.date) === 1 ? "Tomorrow" :
-                     `in ${daysUntil(item.date)}d`}
-                  </span>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 function ActivityFeed({ items }: { items: FeedItem[] }) {
   if (items.length === 0) {
     return (
@@ -705,7 +631,7 @@ export default function DashboardPage() {
 
   if (!data) return null;
 
-  const { stats, taskStats, urgentItems, projectHealth, upcomingDeadlines, recentActivity } = data;
+  const { stats, taskStats, urgentItems, projectHealth, recentActivity } = data;
 
   /**
    * Who gets the agency-wide picture.
@@ -824,16 +750,21 @@ export default function DashboardPage() {
           />
         </div>
 
-        {/* ── Row 3: Urgent + Task breakdown + Performance ──── */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        {/* Anything actually on fire, before any of the counting.
+            This was a third of a row below three rows of statistics — the one
+            list that asks you to do something was the hardest thing on the
+            page to find. */}
+        {urgentItems.length > 0 && (
           <SectionCard
-            title={`Needs Attention ${urgentItems.length > 0 ? `(${urgentItems.length})` : ""}`}
+            title={`Needs Attention (${urgentItems.length})`}
             subtitle="Sorted by urgency"
-            className="col-span-1"
           >
             <UrgentPanel items={urgentItems} />
           </SectionCard>
+        )}
 
+        {/* ── The numbers ────────────────────────────────────── */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           <SectionCard
             title="Task Overview"
             subtitle={`${taskStats.total} total tasks`}
@@ -903,27 +834,17 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* ── Row 5: Deadlines + Activity ───────────────────── */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-          <SectionCard
-            title="Upcoming Deadlines"
-            subtitle="Next 2 weeks"
-            action={{ label: "Calendar", href: "/calendar" }}
-          >
-            <UpcomingDeadlines
-              tasks={upcomingDeadlines.tasks}
-              projects={upcomingDeadlines.projects}
-            />
-          </SectionCard>
-
-          <SectionCard
-            title="Recent Activity"
-            subtitle="Latest updates across the platform"
-            action={{ label: "Files", href: "/files" }}
-          >
-            <ActivityFeed items={recentActivity} />
-          </SectionCard>
-        </div>
+        {/* Upcoming Deadlines used to sit here. It repeated what the calendar
+            shows properly and what Needs Attention already flags, and dated
+            work is on My Calendar and the task list too — three places for the
+            same thing, none of them the one you would act in. */}
+        <SectionCard
+          title="Recent Activity"
+          subtitle="Latest updates across the platform"
+          action={{ label: "Files", href: "/files" }}
+        >
+          <ActivityFeed items={recentActivity} />
+        </SectionCard>
 
         </>)}
 

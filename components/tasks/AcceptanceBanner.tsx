@@ -44,6 +44,11 @@ export function AcceptanceBanner({
   const myState = mine?.acceptance ?? "ACCEPTED";
 
   const declined = assignees.filter((a) => a.acceptance === "DECLINED");
+  // Somebody else has been handed this and hasn't answered. Worth saying:
+  // an unanswered assignment is not work in progress, however settled the
+  // board looks, and the assigner is the one who can chase it.
+  const awaiting = assignees.filter(
+    (a) => a.acceptance === "PENDING" && (a.user?.id ?? a.userId) !== currentUserId);
 
   async function respond(action: "ACCEPT" | "DECLINE") {
     setBusy(true);
@@ -114,6 +119,27 @@ export function AcceptanceBanner({
               )}
               <p className="text-xs text-amber-700 dark:text-amber-300/70 mt-1">
                 Whoever assigned it has been told. They can hand it to someone else, or back to you.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Handed over, not yet answered. */}
+      {awaiting.length > 0 && (
+        <div className="rounded-xl border border-gray-200 bg-gray-50 dark:border-white/[0.08] dark:bg-white/[0.03] p-3.5 mb-4">
+          <div className="flex items-start gap-2.5">
+            <Clock className="w-4 h-4 text-gray-400 flex-shrink-0 mt-0.5" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm text-gray-700 dark:text-slate-300">
+                Waiting for{" "}
+                <span className="font-medium text-gray-900 dark:text-slate-100">
+                  {awaiting.map((a) => a.user?.name ?? "them").join(", ")}
+                </span>{" "}
+                to accept
+              </p>
+              <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">
+                They haven&rsquo;t answered yet, so nobody has committed to this date.
               </p>
             </div>
           </div>

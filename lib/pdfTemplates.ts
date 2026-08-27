@@ -196,9 +196,33 @@ function baseStyles(accent: string, font: "sans" | "serif"): string {
 function fmt(n: number, currency: string) {
   return formatMoney(n, currency, { precision: 2 });
 }
-function fmtDate(d: string | null | undefined) {
+/**
+ * A date, in the agency's timezone.
+ *
+ * `toLocaleDateString` with no timeZone uses whatever the runtime is set to.
+ * In the browser that is the reader's own zone and looks right; on Vercel it
+ * is UTC, so a document generated at 5am in Mumbai printed the previous day's
+ * date on every line. Same failure as the calendar's "today shows yesterday",
+ * one layer down.
+ *
+ * `tz` is threaded in from Organization.timezone by the server-rendered
+ * documents. Left undefined it falls back to the runtime, which is correct in
+ * the browser and is what the client-side PDFs have always relied on.
+ */
+function fmtDate(d: string | null | undefined, tz?: string) {
   if (!d) return "—";
-  return new Date(d).toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" });
+  return new Date(d).toLocaleDateString("en-US", {
+    day: "numeric", month: "short", year: "numeric",
+    ...(tz ? { timeZone: tz } : {}),
+  });
+}
+
+/** Midnight today in `tz`, for deciding what counts as overdue. */
+function startOfDayIn(now: Date, tz?: string): Date {
+  if (!tz) { const d = new Date(now); d.setHours(0, 0, 0, 0); return d; }
+  // en-CA renders as YYYY-MM-DD, so this is the calendar date in that zone.
+  const ymd = now.toLocaleDateString("en-CA", { timeZone: tz });
+  return new Date(`${ymd}T00:00:00`);
 }
 function esc(s: string | null | undefined) {
   if (!s) return "";
@@ -758,6 +782,13 @@ export interface TaskSheetTask {
 export interface TaskSheetData {
   /** Whose sheet this is — a person's name, or "Everyone" for the org-wide one. */
   subject: string;
+  /**
+   * The agency's timezone (Organization.timezone). Required here rather than
+   * optional because this document is rendered on the server, where the
+   * runtime zone is UTC and every date would silently be wrong for anyone
+   * east of Greenwich.
+   */
+  timezone?: string;
   /** Sub-line under the title: what was included and when it was taken. */
   scope?: string;
   generatedAt: Date;
@@ -778,13 +809,13 @@ export function buildTaskSheetHtml(d: TaskSheetData, s: CompanySettings): string
   const cfg = parseCfg(s);
   const accent = s.letterheadColor ?? "#6366f1";
 
+  const tz = d.timezone;
   const open = d.tasks.filter((t) => t.status !== "DONE");
   const done = d.tasks.filter((t) => t.status === "DONE");
 
   // Overdue is worth its own number: it is the one figure on this sheet
   // that means "do something today".
-  const startOfToday = new Date(d.generatedAt);
-  startOfToday.setHours(0, 0, 0, 0);
+  const startOfToday = startOfDayIn(d.generatedAt, tz);
   const overdue = open.filter((t) => t.dueDate && new Date(t.dueDate) < startOfToday);
 
   // Grouped by project, because that is how the work is actually handed
@@ -841,7 +872,7 @@ export function buildTaskSheetHtml(d: TaskSheetData, s: CompanySettings): string
               }</td>
               <td style="padding:6px 0 6px 6px; vertical-align:top; white-space:nowrap; text-align:right; font-size:7.5pt; color:${
                 isOverdue ? "#dc2626" : "#9ca3af"
-              }; font-weight:${isOverdue ? "700" : "400"};">${t.dueDate ? fmtDate(t.dueDate) : "—"}</td>
+              }; font-weight:${isOverdue ? "700" : "400"};">${t.dueDate ? fmtDate(t.dueDate, tz) : "—"}</td>
             </tr>`;
         })
         .join("");
@@ -865,7 +896,7 @@ export function buildTaskSheetHtml(d: TaskSheetData, s: CompanySettings): string
         <div class="doc-number">${esc(d.subject)}</div>
       </div>
       <div style="text-align:right; font-size:7.5pt; color:#9ca3af;">
-        ${fmtDate(d.generatedAt.toISOString())}
+        ${fmtDate(d.generatedAt.toISOString(), tz)}
         ${d.scope ? `<div style="margin-top:2px;">${esc(d.scope)}</div>` : ""}
       </div>
     </div>

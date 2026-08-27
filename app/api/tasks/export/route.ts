@@ -89,6 +89,9 @@ export async function GET(req: NextRequest) {
     const html = buildTaskSheetHtml(
       {
         subject,
+        // The server runs in UTC; without this every date on the sheet is a
+        // day behind for an agency in IST generating one before 05:30.
+        timezone: org.timezone,
         scope: [
           `${rows.length} task${rows.length === 1 ? "" : "s"}`,
           scope === "open" ? "open only" : "including completed",

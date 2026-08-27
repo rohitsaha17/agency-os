@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { assertAssignable } from "@/lib/assignment-guard";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { requireCapability, taskVisibilityScope } from "@/lib/api-permissions";
@@ -76,6 +77,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       select: {
         id: true, projectId: true, status: true, title: true, kind: true,
         assignees: { select: { userId: true } },
+        // Needed to check a moved due date against the existing assignees.
+        dueDate: true,
       },
     });
     if (!existing) throw new ApiError("Task not found", 404);
@@ -159,6 +162,18 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       if (count !== new Set(assigneeIds).size) {
         throw new ApiError("One or more assignees not found", 404);
       }
+    }
+
+    // Check against whichever of the two is changing. Moving a task ONTO a
+    // day its assignee has blocked is the same mistake as assigning it there
+    // in the first place, and only checking the assignee list would let it
+    // through.
+    {
+      const nextAssignees = assigneeIds !== undefined && Array.isArray(assigneeIds)
+        ? (assigneeIds as string[])
+        : existing.assignees.map((a) => a.userId);
+      const nextDue = dueDate !== undefined ? dueDate : existing.dueDate;
+      await assertAssignable(user.organizationId, nextAssignees, nextDue);
     }
 
     if (estimatedHours !== undefined && estimatedHours !== null && estimatedHours !== "") {

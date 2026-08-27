@@ -20,6 +20,7 @@ import { toast } from "@/lib/toast";
 import { CreativeTypeDot } from "@/components/content/CreativeTypeDot";
 import { Select } from "@/components/ui/Select";
 import { todayKey } from "@/lib/date-key";
+import { dayString as availDayString, KIND_LABEL } from "@/lib/availability";
 
 type View = "day" | "week" | "month" | "year" | "schedule";
 
@@ -105,6 +106,26 @@ function keyOf(d: Date) { return `${d.getFullYear()}-${d.getMonth()}-${d.getDate
 export default function MyCalendarPage() {
   const now = useMemo(() => new Date(), []);
   const { user: currentUser } = useCurrentUser();
+
+  /**
+   * Days you have marked yourself unavailable.
+   *
+   * Shown on your own calendar because a blocked day you cannot see is one
+   * you will forget you blocked — and then wonder why nobody assigned you
+   * anything that week.
+   */
+  const [blockedDays, setBlockedDays] = useState<Record<string, { kind: string; reason: string }>>({});
+  useEffect(() => {
+    fetch("/api/availability")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows: { userId: string; date: string; kind: string; reason: string }[]) => {
+        if (!Array.isArray(rows)) return;
+        const map: Record<string, { kind: string; reason: string }> = {};
+        for (const b of rows) map[availDayString(b.date)] = { kind: b.kind, reason: b.reason };
+        setBlockedDays(map);
+      })
+      .catch(() => {});
+  }, []);
   // Same capability the sidebar gates /calendar on, so the link never points
   // somewhere the person can't go.
   const canSeeTeamCalendar = can(currentUser, "content.plan");
@@ -610,8 +631,19 @@ export default function MyCalendarPage() {
                 cellCount={(day) => entriesOn(day).length}
                 renderCell={(day) => {
                   const list = entriesOn(day);
+                  const blocked = blockedDays[availDayString(day)];
                   return (
                     <>
+                      {/* Marked out. Sits above the work so it reads as the
+                          state of the day rather than another item on it. */}
+                      {blocked && (
+                        <div
+                          title={blocked.reason}
+                          className="w-full mb-0.5 px-1.5 py-[3px] rounded-md border border-dashed border-gray-300 bg-gray-50 dark:bg-white/[0.04] dark:border-white/15 text-[10px] font-medium text-gray-500 dark:text-slate-400 truncate"
+                        >
+                          {KIND_LABEL[blocked.kind as keyof typeof KIND_LABEL] ?? "Unavailable"}
+                        </div>
+                      )}
                       {list.slice(0, 3).map((e) => chip(e, { compact: true }))}
                       {list.length > 3 && <span className="text-[9px] text-gray-400">+{list.length - 3} more</span>}
                     </>

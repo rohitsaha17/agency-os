@@ -95,3 +95,32 @@ export function mayExportTasksFor(
   const wantsOthers = requested === "all" || (!!requested && requested !== user.id);
   return !wantsOthers || can(user, "projects.manage");
 }
+
+/**
+ * Who may read somebody's unavailability, and who may set it.
+ *
+ * Reading is deliberately wide: an SMM delegating a shoot needs to see the
+ * whole crew's diary or the feature does not do its job. What is exposed is a
+ * date, a category and a short reason — the same thing a shared team calendar
+ * shows — not anything private beyond it.
+ *
+ * Writing is narrow. Your own diary is yours; only someone who manages users
+ * can mark another person out, which is the "they called in sick" case.
+ * Letting an SMM block a photographer's calendar would let the person doing
+ * the delegating rewrite the constraint they are meant to be working around.
+ */
+export function mayReadAvailability(
+  user: { id: string; role?: string | null },
+  targetUserId: string,
+): boolean {
+  if (targetUserId === user.id) return true;
+  return can(user, "content.plan");
+}
+
+export function maySetAvailability(
+  user: { id: string; role?: string | null },
+  targetUserId: string,
+): boolean {
+  if (targetUserId === user.id) return true;
+  return can(user, "users.manage");
+}

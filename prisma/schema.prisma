@@ -338,6 +338,8 @@ model User {
   taskReviews          TaskReview[]    @relation("TaskReviews")
   flaggedBillables     BillableItem[]  @relation("FlaggedBillables")
   assignmentsMade      TaskAssignee[]  @relation("AssignmentsMade")
+  unavailability       Unavailability[] @relation("UserUnavailability")
+  unavailabilityLogged Unavailability[] @relation("UnavailabilityRecorded")
 
   @@unique([organizationId, email])
   @@index([organizationId])
@@ -873,6 +875,55 @@ model ChangeRequest {
 
   @@index([taskId, status])
   @@map("change_requests")
+}
+
+/// Why somebody can't be given work on a given day.
+///
+/// Kept as a short list rather than free text alone so the team view can be
+/// read at a glance — "who is on a shoot next Tuesday" is the question the
+/// SMM is actually asking, and it can't be answered by scanning sentences.
+enum UnavailabilityKind {
+  SHOOT          // booked on a shoot, ours or someone else's
+  LEAVE          // holiday, personal
+  SICK
+  OTHER_CLIENT   // freelancers: booked by another agency
+  OTHER
+}
+
+/// One day somebody cannot be assigned work.
+///
+/// Stored per DAY rather than as a range. A range is nicer to type and the
+/// API accepts one, but "is this person free on the 4th" is the question
+/// asked on every assignment, and against ranges that is an overlap query on
+/// every check. One row per day makes it a lookup and lets the unique
+/// constraint stop the same day being blocked twice.
+///
+/// Whole days only. Half-day availability sounds useful and is a different,
+/// much larger feature — the point here is that a freelancer photographer is
+/// on someone else's shoot on Tuesday, and that is a whole-day fact.
+model Unavailability {
+  id             String             @id @default(cuid())
+  organizationId String
+  userId         String
+  /// Midnight UTC on the blocked day. Compared as a calendar date, never a
+  /// timestamp — see lib/availability.ts.
+  date           DateTime
+  kind           UnavailabilityKind @default(OTHER)
+  /// Required. "Unavailable" with no reason gives the SMM nothing to plan
+  /// around, and this list exists to make delegation easier.
+  reason         String
+  /// Who recorded it. Usually the person themselves; an admin can mark
+  /// somebody out when they call in sick.
+  createdById    String?
+  createdAt      DateTime           @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation("UserUnavailability", fields: [userId], references: [id], onDelete: Cascade)
+  createdBy    User?        @relation("UnavailabilityRecorded", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([userId, date])
+  @@index([organizationId, date])
+  @@map("unavailability")
 }
 
 model TaskAssignee {
@@ -1485,6 +1536,7 @@ model Organization {
   taskTemplates TaskTemplate[]
   statusHistory StatusHistory[]
   notifications Notification[]
+  unavailability Unavailability[]
   creativeTypes CreativeType[]
   contentItems  ContentItem[]
   events        CalendarEvent[]

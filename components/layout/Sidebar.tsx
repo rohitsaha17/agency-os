@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Users, FolderKanban, CheckSquare,
   Calendar, CalendarClock, Receipt, Settings,
-  HardDrive, TrendingDown, Scroll, Menu, X,
+  HardDrive, TrendingDown, Scroll, Menu, X, CalendarOff,
   Sun, MessageSquare, LogOut, BarChart3,
   PanelLeftClose, PanelLeftOpen, ShieldCheck,
 } from "lucide-react";
@@ -65,6 +65,9 @@ const navItems: {
       // rather than hiding behind a button on the tasks page.
       { href: "/approvals",    label: "Approvals",    icon: ShieldCheck,   need: "tasks.review"      },
       { href: "/my-calendar",  label: "My Calendar",  icon: CalendarClock, need: null                },
+      // Everyone can mark themselves out; planners use the same page to see
+      // the whole crew's diary before promising a shoot date.
+      { href: "/availability", label: "Availability",  icon: CalendarOff,   need: null                },
       { href: "/messages",     label: "Messages",     icon: MessageSquare, need: null                },
       // "Calendar" next to "My Calendar" gave no clue which was which, so a
       // manager looking for the reel somebody else was scheduling opened the

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { newAssignment } from "@/lib/task-acceptance";
+import { assertAssignable } from "@/lib/assignment-guard";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { taskVisibilityScope } from "@/lib/api-permissions";
@@ -157,6 +158,9 @@ export async function POST(req: NextRequest) {
 
     const requireApproval = await assignmentRequiresApproval(user.organizationId);
     const routing = resolveRouting(user, preferredAssigneeId, assigneeIds, requireApproval);
+
+    // Somebody who has blocked that day cannot be handed work on it.
+    await assertAssignable(user.organizationId, routing.assigneeIds, dueDate);
 
     const task = await prisma.task.create({
       data: {

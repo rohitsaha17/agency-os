@@ -93,7 +93,11 @@ export async function createPlanningTask(opts: {
     select: { id: true },
   });
 
-  const link = `/projects/${projectId}?tab=plan`;
+  // The task id rides along so the bell can offer Accept before sending them
+  // on. Deliberately NOT `task=`, which the project page reads and would use
+  // to open a task panel — the destination for a planning task is the plan,
+  // and this parameter only tells the notification what it is about.
+  const link = `/projects/${projectId}?tab=plan&acceptTask=${task.id}`;
   await logStatus({
     organizationId,
     entityType: "TASK",

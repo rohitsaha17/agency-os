@@ -100,7 +100,9 @@ export function NotificationBell({ align = "left" }: { align?: "left" | "right" 
    */
   const follow = useCallback(async (n: NotificationItem) => {
     if (!n.link) return;
-    const taskId = n.link.match(/[?&]task=([^&]+)/)?.[1];
+    // `acceptTask` is used where `task` would be read by the destination
+    // page and change what it opens — see lib/auto-tasks.ts.
+    const taskId = n.link.match(/[?&](?:task|acceptTask)=([^&]+)/)?.[1];
 
     if (n.type === "TASK_ASSIGNED" && taskId && me?.id) {
       try {

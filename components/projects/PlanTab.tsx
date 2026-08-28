@@ -569,6 +569,39 @@ function PlanItemDialog({
       .then((d) => { if (Array.isArray(d)) setJuniors(d); });
   }, []);
 
+  /**
+   * Who can actually take this, on the day it is due.
+   *
+   * Two different facts, fetched together because they are read together:
+   * who has blocked the day (a hard no, and the server will refuse it anyway)
+   * and how much everyone else already has on it. A freelance photographer
+   * with two shoots booked can physically take a third; whether they should
+   * is the SMM's call, and this is the number they need to make it.
+   *
+   * Keyed on the task's due date, not the publish date. The due date is when
+   * the work happens, which is when the person is actually occupied.
+   */
+  const [dayLoad, setDayLoad] = useState<Record<string, {
+    blocked: { kind: string; reason: string } | null; load: number; on: string[];
+  }>>({});
+  const dueDay = (form.taskDueAt || form.date || "").slice(0, 10);
+  useEffect(() => {
+    if (!dueDay) { setDayLoad({}); return; }
+    let cancelled = false;
+    fetch(`/api/availability/day?date=${dueDay}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (cancelled || !d?.people) return;
+        const m: Record<string, { blocked: { kind: string; reason: string } | null; load: number; on: string[] }> = {};
+        for (const p of d.people) m[p.id] = { blocked: p.blocked, load: p.load, on: p.on ?? [] };
+        setDayLoad(m);
+      })
+      // A picker that still works without the hints is better than one that
+      // breaks because a side query failed.
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [dueDay]);
+
   const submit = async (acknowledgeExtra = false) => {
     if (!form.topic.trim()) { setError("Topic is required"); return; }
     if (!form.creativeTypeId) { setError("Pick a creative type"); return; }
@@ -687,12 +720,34 @@ function PlanItemDialog({
               onChange={(v) => setForm((f) => ({ ...f, assigneeId: v }))}
               options={[
                 { value: "", label: "Nobody yet" },
-                ...assignable.map((u) => ({
-                  value: u.id,
-                  label: `${u.name}${u.jobTitle?.name ? ` — ${u.jobTitle.name}` : ""}`,
-                })),
+                ...assignable.map((u) => {
+                  const d = dayLoad[u.id];
+                  const craft = u.jobTitle?.name ? ` — ${u.jobTitle.name}` : "";
+                  // Blocked reads as the reason, not as a count: "why can't
+                  // they" is the next question and this answers it in place.
+                  if (d?.blocked) {
+                    return {
+                      value: u.id,
+                      label: `${u.name}${craft} · unavailable (${d.blocked.reason})`,
+                      disabled: true,
+                    };
+                  }
+                  const busy = d && d.load > 0 ? ` · ${d.load} on that day` : "";
+                  return { value: u.id, label: `${u.name}${craft}${busy}` };
+                }),
               ]}
              disabled={settled}/>
+
+            {/* What the chosen person already has on. The count in the option
+                says how much; this says what, which is the difference between
+                "they're busy" and "they're on a shoot in another city". */}
+            {form.assigneeId && (dayLoad[form.assigneeId]?.load ?? 0) > 0 && (
+              <p className="text-[11px] text-amber-600 mt-1">
+                Already on {dueDay ? new Date(dueDay).toLocaleDateString("en-US", { day: "numeric", month: "short" }) : "that day"}:{" "}
+                {dayLoad[form.assigneeId].on.join(", ")}
+                {dayLoad[form.assigneeId].load > dayLoad[form.assigneeId].on.length && " and more"}.
+              </p>
+            )}
             {narrowed && (
               /* Says which craft it filtered to and why, instead of a fixed
                  line about shooting that was wrong the moment you picked a

@@ -270,8 +270,24 @@ function TasksBoardInner() {
     if (seesEveryone && viewUserId === "__all__") return allVisible;
     const target = viewUserId || currentUser?.id;
     if (!target) return [];
-    return allVisible.filter((t) =>
-      t.assignees?.some((a) => a.userId === target || a.user?.id === target));
+    return allVisible.filter((t) => {
+      const theirs = t.assignees?.find((a) => a.userId === target || a.user?.id === target);
+      if (!theirs) return false;
+      /*
+        Work you have declined is not on YOUR list.
+
+        You said you can't take it, so leaving it there reads as still yours to
+        do — and the only thing you can do with it is decline it again. It
+        stays on the task itself and in its history.
+
+        Only hidden from your own view. A planner looking at that person's
+        list is looking precisely because something needs reassigning, so for
+        them it stays, badged "<name> declined" with the reason and a way to
+        hand it on.
+      */
+      const isOwnList = target === currentUser?.id;
+      return !(isOwnList && theirs.acceptance === "DECLINED");
+    });
   }, [allVisible, viewUserId, currentUser?.id, seesEveryone]);
 
   /** Only fetched for people who can act on it. */
@@ -436,8 +452,40 @@ function TasksBoardInner() {
    */
   const [acceptFor, setAcceptFor] = useState<Task | null>(null);
 
-  const openTaskOrPlan = (t: Task) => {
+  /**
+   * `justAnswered` skips the pending check.
+   *
+   * The dialog hands back the task object it was opened with, which still says
+   * PENDING because it is the copy the list was rendered from. Re-checking it
+   * would reopen the dialog the person just closed, forever.
+   */
+  const openTaskOrPlan = (t: Task, justAnswered = false) => {
+    // An assignment nobody has answered is answered first. Clicking through to
+    // the work while the row still says "Accept?" leaves the question hanging
+    // behind you.
+    if (!justAnswered) {
+      const mine = (t.assignees ?? []).find(
+        (a) => (a.user?.id ?? a.userId) === currentUser?.id);
+      if (mine?.acceptance === "PENDING") { setAcceptFor(t); return; }
+    }
+
     if (t.kind === "PLANNING" && t.projectId) {
+      /*
+        Opening the plan starts the task.
+
+        A PLANNING task's work is entirely on the Plan tab, so arriving there
+        IS starting it — asking someone to first set the status to In Progress
+        and then go and plan is a step that records what the next click was
+        about to prove anyway. Fired and forgotten: a status that fails to
+        stick must not stop the SMM planning.
+      */
+      if (t.status === "TODO") {
+        fetch(`/api/tasks/${t.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: "IN_PROGRESS" }),
+        }).then(() => broadcastChange("all")).catch(() => {});
+      }
       router.push(`/projects/${t.projectId}?tab=plan`);
       return;
     }
@@ -1185,7 +1233,7 @@ function TasksBoardInner() {
             fetchAll();
             // Accepting takes you straight to the work; declining leaves you
             // here, because there is nothing to go and do.
-            if (action === "ACCEPT" && t) openTaskOrPlan(t);
+            if (action === "ACCEPT" && t) openTaskOrPlan(t, true);
           }}
         />
       )}

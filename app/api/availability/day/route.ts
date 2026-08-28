@@ -61,7 +61,10 @@ export async function GET(req: NextRequest) {
         },
         select: {
           userId: true,
-          task: { select: { id: true, title: true, kind: true, creativeTypeName: true } },
+          // Only fields that exist. `creativeTypeName` was invented here and
+          // threw at runtime: Prisma's nested select types accept unknown
+          // keys, so tsc passed and the endpoint 500'd on the first real call.
+          task: { select: { id: true, title: true, kind: true } },
         },
       }),
     ]);

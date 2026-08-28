@@ -581,8 +581,11 @@ function TasksBoardInner() {
     const chip = t.dueDate ? dueChip(t.dueDate) : null;
     const done = t.status === "DONE";
     return (
+      // The whole row opens the task, not just its title. Aiming at a line of
+      // text to open something the size of a card is a small, constant tax.
       <div key={`org-${t.id}`}
-        className={`group flex items-start gap-2.5 pl-2.5 pr-3 py-2 rounded-xl border-l-[3px] transition-colors ${STATUS_ROW_TINT[t.status]} ${done ? "opacity-60" : ""}`}>
+        onClick={() => openTaskOrPlan(t)}
+        className={`group flex items-start gap-2.5 pl-2.5 pr-3 py-2 rounded-xl border-l-[3px] transition-colors cursor-pointer ${STATUS_ROW_TINT[t.status]} ${done ? "opacity-60" : ""}`}>
         {/*
           The same control as the project board, deliberately. This used to be
           a tick that jumped a task straight to complete, so the same dot meant
@@ -593,7 +596,7 @@ function TasksBoardInner() {
           Personal items keep the tick — see renderPersonalRow. Ticking your own
           reminder off IS the whole interaction there, and that one is right.
         */}
-        <div className="mt-1 flex-shrink-0">
+        <div className="mt-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
           <StatusDot
             status={t.status}
             canPick={canPickStatus}

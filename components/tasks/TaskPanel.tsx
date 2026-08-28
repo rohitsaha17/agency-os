@@ -311,7 +311,20 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
   );
 
   const REVIEWABLE = new Set(["IN_REVIEW", "SUBMITTED", "DONE"]);
-  const canReview = can(me, "tasks.review") && !isMine && REVIEWABLE.has(status);
+  /*
+    The verdict belongs to the person the work answers to.
+
+    `tasks.review` alone was too broad: every SMM has it, so any SMM could
+    demand changes on another SMM's task. It is the reviewer named on the task
+    — normally whoever assigned it — or somebody who runs the agency and
+    answers for all of it. A peer with the same job title is neither.
+  */
+  const isReviewerHere =
+    (task.manager?.id && task.manager.id === me?.id) ||
+    (task.approverId && task.approverId === me?.id) ||
+    can(me, "clients.manage");
+  const canReview =
+    can(me, "tasks.review") && isReviewerHere && !isMine && REVIEWABLE.has(status);
 
   const hasChildren = (task.children?.length ?? 0) > 0;
 

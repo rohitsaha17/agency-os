@@ -372,8 +372,20 @@ function ExpensesPageInner() {
 
       {/* Add Expense Modal */}
       {addOpen && (
-        <Modal open={addOpen} title="New Expense" onClose={() => setAddOpen(false)} width="max-w-lg">
-          <form onSubmit={handleAdd} className="space-y-4">
+        <Modal
+          open={addOpen}
+          title="New Expense"
+          onClose={() => setAddOpen(false)}
+          width="max-w-lg"
+          footer={
+            <div className="flex items-center justify-end gap-2">
+              <Button type="button" variant="secondary" onClick={() => setAddOpen(false)}>Cancel</Button>
+              {/* Outside the <form>, so it needs to name the form it submits. */}
+              <Button type="submit" form="new-expense-form" loading={saving}>Add Expense</Button>
+            </div>
+          }
+        >
+          <form id="new-expense-form" onSubmit={handleAdd} className="space-y-4">
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">Title *</label>
               <input value={form.title} onChange={(e) => set("title", e.target.value)} required
@@ -466,10 +478,6 @@ function ExpensesPageInner() {
               <label htmlFor="reimb" className="text-sm text-gray-700">Reimbursable (bill to client)</label>
             </div>
 
-            <div className="flex gap-3 pt-2">
-              <Button type="button" variant="secondary" onClick={() => setAddOpen(false)}>Cancel</Button>
-              <Button type="submit" loading={saving}>Add Expense</Button>
-            </div>
           </form>
         </Modal>
       )}

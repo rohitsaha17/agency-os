@@ -1973,8 +1973,19 @@ export default function ProjectDetailPage() {
       )}
 
       {/* ── Inline Expense Modal ── */}
-      <Modal open={expenseModalOpen} title="Add Expense" onClose={() => { setExpenseModalOpen(false); setExpenseForm(EMPTY_EXPENSE_FORM); }}>
-        <form onSubmit={handleAddExpense} className="space-y-4">
+      <Modal
+        open={expenseModalOpen}
+        title="Add Expense"
+        onClose={() => { setExpenseModalOpen(false); setExpenseForm(EMPTY_EXPENSE_FORM); }}
+        footer={
+          <div className="flex items-center justify-end gap-2">
+            <Button type="button" variant="secondary" onClick={() => { setExpenseModalOpen(false); setExpenseForm(EMPTY_EXPENSE_FORM); }}>Cancel</Button>
+            {/* Outside the <form>, so it names the form it submits. */}
+            <Button type="submit" form="project-expense-form" loading={expenseSaving}>Add Expense</Button>
+          </div>
+        }
+      >
+        <form id="project-expense-form" onSubmit={handleAddExpense} className="space-y-4">
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">Title *</label>
             <input value={expenseForm.title} onChange={(e) => setExpenseForm((f) => ({ ...f, title: e.target.value }))} required
@@ -2039,16 +2050,23 @@ export default function ProjectDetailPage() {
             />
             <span className="text-sm text-gray-700">Reimbursable — bill this back to client</span>
           </label>
-          <div className="flex gap-3 pt-1">
-            <Button type="button" variant="secondary" onClick={() => { setExpenseModalOpen(false); setExpenseForm(EMPTY_EXPENSE_FORM); }}>Cancel</Button>
-            <Button type="submit" loading={expenseSaving}>Add Expense</Button>
-          </div>
         </form>
       </Modal>
 
       {/* ── Inline Contract Modal ── */}
-      <Modal open={contractModalOpen} title="New Contract / NDA" onClose={() => { setContractModalOpen(false); setContractForm(EMPTY_CONTRACT_FORM); setContractParties([{ ...EMPTY_PARTY }]); }} width="max-w-2xl">
-        <form onSubmit={handleAddContract} className="space-y-5">
+      <Modal
+        open={contractModalOpen}
+        title="New Contract / NDA"
+        onClose={() => { setContractModalOpen(false); setContractForm(EMPTY_CONTRACT_FORM); setContractParties([{ ...EMPTY_PARTY }]); }}
+        width="max-w-2xl"
+        footer={
+          <div className="flex items-center justify-end gap-2">
+            <Button type="button" variant="secondary" onClick={() => { setContractModalOpen(false); setContractForm(EMPTY_CONTRACT_FORM); setContractParties([{ ...EMPTY_PARTY }]); }}>Cancel</Button>
+            <Button type="submit" form="project-contract-form" loading={contractSaving}>Create Contract</Button>
+          </div>
+        }
+      >
+        <form id="project-contract-form" onSubmit={handleAddContract} className="space-y-5">
           {contractError && (
             <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{contractError}</p>
           )}
@@ -2196,10 +2214,6 @@ export default function ProjectDetailPage() {
             />
           </div>
 
-          <div className="flex gap-3 pt-1">
-            <Button type="button" variant="secondary" onClick={() => { setContractModalOpen(false); setContractForm(EMPTY_CONTRACT_FORM); setContractParties([{ ...EMPTY_PARTY }]); }}>Cancel</Button>
-            <Button type="submit" loading={contractSaving}>Create Contract</Button>
-          </div>
         </form>
       </Modal>
     </div>

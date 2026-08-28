@@ -363,8 +363,21 @@ export default function ContractDetailPage() {
 
       {/* Mark Signed Modal */}
       {signModal?.open && (
-        <Modal open title={`Mark ${signModal.partyName} as Signed`} onClose={() => setSignModal(null)}>
-          <div className="space-y-4">
+        <Modal
+          open
+          compact
+          title={`Mark ${signModal.partyName} as Signed`}
+          onClose={() => setSignModal(null)}
+          footer={
+            <div className="flex items-center justify-end gap-2">
+              <Button size="sm" variant="secondary" onClick={() => setSignModal(null)}>Cancel</Button>
+              <Button size="sm" loading={signing} onClick={handleSign} icon={<CheckCircle2 className="w-3.5 h-3.5" />}>
+                Confirm Signature
+              </Button>
+            </div>
+          }
+        >
+          <div className="space-y-3">
             <p className="text-sm text-gray-600">
               Confirm that <strong>{signModal.partyName}</strong> has signed this contract.
             </p>
@@ -375,20 +388,25 @@ export default function ContractDetailPage() {
                 className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
             </div>
-            <div className="flex gap-3 pt-2">
-              <Button variant="secondary" onClick={() => setSignModal(null)}>Cancel</Button>
-              <Button loading={signing} onClick={handleSign} icon={<CheckCircle2 className="w-3.5 h-3.5" />}>
-                Confirm Signature
-              </Button>
-            </div>
           </div>
         </Modal>
       )}
 
       {/* Status Update Modal */}
       {statusOpen && (
-        <Modal open title="Update Contract Status" onClose={() => setStatusOpen(false)}>
-          <div className="space-y-4">
+        <Modal
+          open
+          compact
+          title="Update Contract Status"
+          onClose={() => setStatusOpen(false)}
+          footer={
+            <div className="flex items-center justify-end gap-2">
+              <Button size="sm" variant="secondary" onClick={() => setStatusOpen(false)}>Cancel</Button>
+              <Button size="sm" onClick={handleStatusUpdate}>Update Status</Button>
+            </div>
+          }
+        >
+          <div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {(Object.entries(STATUS_CONFIG) as [ContractStatus, typeof STATUS_CONFIG[ContractStatus]][]).map(([s, cfg]) => (
                 <button key={s} onClick={() => setNewStatus(s)}
@@ -399,10 +417,6 @@ export default function ContractDetailPage() {
                   <span className={`inline-block text-xs px-2 py-0.5 rounded-full mb-1 ${cfg.color}`}>{cfg.label}</span>
                 </button>
               ))}
-            </div>
-            <div className="flex gap-3 pt-2">
-              <Button variant="secondary" onClick={() => setStatusOpen(false)}>Cancel</Button>
-              <Button onClick={handleStatusUpdate}>Update Status</Button>
             </div>
           </div>
         </Modal>

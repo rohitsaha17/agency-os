@@ -168,8 +168,20 @@ function InvoiceFormModal({
   );
 
   return (
-    <Modal open={open} onClose={onClose} title="New Invoice" width="max-w-2xl">
-      <form onSubmit={handleSubmit} className="space-y-5">
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="New Invoice"
+      width="max-w-2xl"
+      footer={
+        <div className="flex items-center justify-end gap-2">
+          <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
+          {/* Outside the <form>, so it needs to name the form it submits. */}
+          <Button type="submit" form="new-invoice-form" loading={saving}>Create Invoice</Button>
+        </div>
+      }
+    >
+      <form id="new-invoice-form" onSubmit={handleSubmit} className="space-y-5">
         {/* Client + Project */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
@@ -338,10 +350,6 @@ function InvoiceFormModal({
           />
         </div>
 
-        <div className="flex gap-3 pt-1">
-          <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button type="submit" loading={saving}>Create Invoice</Button>
-        </div>
       </form>
     </Modal>
   );

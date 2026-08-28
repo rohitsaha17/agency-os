@@ -172,8 +172,21 @@ function ContactModal({
   };
 
   return (
-    <Modal open={open} onClose={onClose} title={existing ? "Edit Contact" : "Add Contact"}>
-      <form onSubmit={handleSubmit} className="space-y-4">
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={existing ? "Edit Contact" : "Add Contact"}
+      footer={
+        <div className="flex items-center gap-2">
+          <Button type="button" variant="secondary" className="flex-1" onClick={onClose}>Cancel</Button>
+          {/* Outside the <form>, so it names the form it submits. */}
+          <Button type="submit" form="contact-form" loading={saving} className="flex-1">
+            {existing ? "Save Changes" : "Add Contact"}
+          </Button>
+        </div>
+      }
+    >
+      <form id="contact-form" onSubmit={handleSubmit} className="space-y-4">
         {error && <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">{error}</p>}
         {[
           { label: "Name *", field: "name", type: "text", placeholder: "Full name" },
@@ -205,12 +218,6 @@ function ContactModal({
           />
           <span className="text-sm text-gray-700">Set as primary contact</span>
         </label>
-        <div className="flex gap-2 pt-2">
-          <Button type="button" variant="secondary" className="flex-1" onClick={onClose}>Cancel</Button>
-          <Button type="submit" loading={saving} className="flex-1">
-            {existing ? "Save Changes" : "Add Contact"}
-          </Button>
-        </div>
       </form>
     </Modal>
   );
@@ -1955,8 +1962,19 @@ export default function ClientDetailPage() {
       </div>
 
       {/* Expense Modal */}
-      <Modal open={expenseModalOpen} onClose={() => setExpenseModalOpen(false)} title="Add Expense" width="max-w-md">
-        <form onSubmit={handleAddExpense} className="space-y-4">
+      <Modal
+        open={expenseModalOpen}
+        onClose={() => setExpenseModalOpen(false)}
+        title="Add Expense"
+        width="max-w-md"
+        footer={
+          <div className="flex items-center gap-2">
+            <Button type="button" variant="secondary" className="flex-1" onClick={() => setExpenseModalOpen(false)}>Cancel</Button>
+            <Button type="submit" form="client-expense-form" loading={expenseSaving} className="flex-1">Add Expense</Button>
+          </div>
+        }
+      >
+        <form id="client-expense-form" onSubmit={handleAddExpense} className="space-y-4">
           {expenseError && <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">{expenseError}</p>}
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Title *</label>
@@ -2025,16 +2043,23 @@ export default function ClientDetailPage() {
               placeholder="Optional notes…"
             />
           </div>
-          <div className="flex gap-2 pt-2">
-            <Button type="button" variant="secondary" className="flex-1" onClick={() => setExpenseModalOpen(false)}>Cancel</Button>
-            <Button type="submit" loading={expenseSaving} className="flex-1">Add Expense</Button>
-          </div>
         </form>
       </Modal>
 
       {/* Receipt Modal */}
-      <Modal open={receiptModalOpen} onClose={() => setReceiptModalOpen(false)} title={receiptEditing ? "Edit Receipt" : "Record Receipt"} width="max-w-md">
-        <form onSubmit={handleSaveReceipt} className="space-y-4">
+      <Modal
+        open={receiptModalOpen}
+        onClose={() => setReceiptModalOpen(false)}
+        title={receiptEditing ? "Edit Receipt" : "Record Receipt"}
+        width="max-w-md"
+        footer={
+          <div className="flex items-center gap-2">
+            <Button type="button" variant="secondary" className="flex-1" onClick={() => setReceiptModalOpen(false)}>Cancel</Button>
+            <Button type="submit" form="receipt-form" loading={receiptSaving} className="flex-1">{receiptEditing ? "Save Changes" : "Record Receipt"}</Button>
+          </div>
+        }
+      >
+        <form id="receipt-form" onSubmit={handleSaveReceipt} className="space-y-4">
           {receiptError && <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">{receiptError}</p>}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
@@ -2113,10 +2138,6 @@ export default function ClientDetailPage() {
               className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
             />
           </div>
-          <div className="flex gap-2 pt-2">
-            <Button type="button" variant="secondary" className="flex-1" onClick={() => setReceiptModalOpen(false)}>Cancel</Button>
-            <Button type="submit" loading={receiptSaving} className="flex-1">{receiptEditing ? "Save Changes" : "Record Receipt"}</Button>
-          </div>
         </form>
       </Modal>
 
@@ -2178,8 +2199,19 @@ export default function ClientDetailPage() {
       </Modal>
 
       {/* ── New Contract Modal ── */}
-      <Modal open={contractModalOpen} title="New Contract / NDA" onClose={() => { setContractModalOpen(false); setClientContractForm(EMPTY_CONTRACT_FORM); setClientContractParties([{ ...EMPTY_CLIENT_PARTY }]); }} width="max-w-2xl">
-        <form onSubmit={handleAddClientContract} className="space-y-5">
+      <Modal
+        open={contractModalOpen}
+        title="New Contract / NDA"
+        onClose={() => { setContractModalOpen(false); setClientContractForm(EMPTY_CONTRACT_FORM); setClientContractParties([{ ...EMPTY_CLIENT_PARTY }]); }}
+        width="max-w-2xl"
+        footer={
+          <div className="flex items-center justify-end gap-2">
+            <Button type="button" variant="secondary" onClick={() => { setContractModalOpen(false); setClientContractForm(EMPTY_CONTRACT_FORM); setClientContractParties([{ ...EMPTY_CLIENT_PARTY }]); }}>Cancel</Button>
+            <Button type="submit" form="client-contract-form" loading={clientContractSaving}>Create Contract</Button>
+          </div>
+        }
+      >
+        <form id="client-contract-form" onSubmit={handleAddClientContract} className="space-y-5">
           {clientContractError && (
             <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{clientContractError}</p>
           )}
@@ -2324,10 +2356,6 @@ export default function ClientDetailPage() {
             />
           </div>
 
-          <div className="flex gap-3 pt-1">
-            <Button type="button" variant="secondary" onClick={() => { setContractModalOpen(false); setClientContractForm(EMPTY_CONTRACT_FORM); setClientContractParties([{ ...EMPTY_CLIENT_PARTY }]); }}>Cancel</Button>
-            <Button type="submit" loading={clientContractSaving}>Create Contract</Button>
-          </div>
         </form>
       </Modal>
     </div>

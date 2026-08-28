@@ -82,7 +82,13 @@ export function TemplatePickerModal({
   });
 
   return (
-    <Modal open={open} onClose={onClose} title="Generate Tasks from Template" width="max-w-2xl">
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Generate Tasks from Template"
+      width="max-w-2xl"
+      footer={<div className="flex justify-end"><Button type="button" variant="secondary" onClick={onClose}>Close</Button></div>}
+    >
       <div className="space-y-3">
         <div className="flex items-start gap-3 bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/30 rounded-xl p-3">
           <Wand2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400 flex-shrink-0 mt-0.5" />
@@ -158,9 +164,7 @@ export function TemplatePickerModal({
           </div>
         )}
 
-        <div className="flex justify-end pt-2">
-          <Button type="button" variant="secondary" onClick={onClose}>Close</Button>
-        </div>
+
       </div>
     </Modal>
   );

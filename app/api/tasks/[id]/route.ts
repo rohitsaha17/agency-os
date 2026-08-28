@@ -76,7 +76,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       where: { id, deletedAt: null, organizationId: user.organizationId },
       select: {
         id: true, projectId: true, status: true, title: true, kind: true,
-        assignees: { select: { userId: true } },
+        // assignedById: so a reassignment can go back to whoever handed it over.
+        assignees: { select: { userId: true, assignedById: true } },
         // Needed to check a moved due date against the existing assignees.
         dueDate: true,
       },
@@ -277,6 +278,32 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         body: reassignNote ? `${user.name}: ${String(reassignNote).slice(0, 140)}` : `Assigned by ${user.name}.`,
         link: taskLink,
       });
+      /*
+        Tell the senior their work moved.
+
+        An SMM handing a task to an editor is normal and shouldn't need
+        permission — but the person who assigned it is still answerable for it
+        landing, and finding out only when the wrong name appears on the
+        finished thing is too late. So the task's reviewer hears about a
+        reassignment they didn't make.
+
+        Not the person doing it, and not on the first assignment either: being
+        told "the task you just created has been assigned" is noise.
+      */
+      if (added.length > 0 && before.size > 0) {
+        const seniors = [task.managerId, existing.assignees[0]?.assignedById]
+          .filter((uid): uid is string => !!uid && uid !== user.id);
+        await notifyMany(seniors, {
+          organizationId: user.organizationId,
+          type: "TASK_REASSIGNED",
+          title: `${user.name} reassigned "${task.title}"`,
+          body: reassignNote
+            ? String(reassignNote).slice(0, 140)
+            : "Passed to someone else.",
+          link: taskLink,
+        });
+      }
+
       if (added.length || removed.length) {
         await logStatus({
           organizationId: user.organizationId,

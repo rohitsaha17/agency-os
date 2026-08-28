@@ -10,7 +10,7 @@
  */
 import { newAssignment } from "@/lib/task-acceptance";
 import { prisma } from "@/lib/prisma";
-import { notify } from "@/lib/notify";
+import { notify, notifyMany } from "@/lib/notify";
 import { logStatus } from "@/lib/audit";
 import { cycleSummary } from "@/lib/cycle-quota";
 
@@ -26,7 +26,8 @@ import { cycleSummary } from "@/lib/cycle-quota";
 export async function createPlanningTask(opts: {
   organizationId: string;
   projectId: string;
-  userId: string;
+  /** Everyone who plans this project. Two SMMs share one task, not one each. */
+  userIds: string[];
   createdById?: string | null;
   /**
    * When the plan is wanted by. Set by whoever assigns the SMM; falls back to
@@ -34,19 +35,43 @@ export async function createPlanningTask(opts: {
    */
   planningDueDate?: Date | null;
 }): Promise<string | null> {
-  const { organizationId, projectId, userId } = opts;
+  const { organizationId, projectId } = opts;
+  const userIds = [...new Set(opts.userIds.filter(Boolean))];
+  if (userIds.length === 0) return null;
 
+  /*
+    One planning task per PROJECT, not per person.
+
+    This used to look for an open planning task assigned to THIS user, so a
+    project with two SMMs got two identical "plan MONTHLY" tasks — the same
+    single job listed twice, with both people liable to do it and neither sure
+    whether the other had. Planning a month is one piece of work; if two people
+    share it they share the task.
+
+    When one already exists, anyone missing is added to it rather than given
+    their own copy. That is the path taken when an SMM is added to a project
+    that was already being planned.
+  */
   const existing = await prisma.task.findFirst({
     where: {
       projectId,
       kind: "PLANNING",
       deletedAt: null,
       status: { not: "DONE" },
-      assignees: { some: { userId } },
     },
-    select: { id: true },
+    select: { id: true, assignees: { select: { userId: true } } },
   });
-  if (existing) return null;
+  if (existing) {
+    const already = new Set(existing.assignees.map((a) => a.userId));
+    const missing = userIds.filter((id) => !already.has(id));
+    if (missing.length > 0) {
+      await prisma.taskAssignee.createMany({
+        data: missing.map((id) => ({ ...newAssignment(id, opts.createdById), taskId: existing.id })),
+        skipDuplicates: true,
+      });
+    }
+    return existing.id;
+  }
 
   const project = await prisma.project.findUnique({
     where: { id: projectId },
@@ -88,7 +113,12 @@ export async function createPlanningTask(opts: {
       status: "TODO",
       priority: "HIGH",
       dueDate,
-      assignees: { create: [newAssignment(userId, opts.createdById)] },
+      // Whoever handed the project over reviews the plan. It used to be left
+      // Unassigned, so the one task that always has a clear senior behind it
+      // — an admin putting an SMM on a project — had nobody named to answer
+      // to, and the SMM had to guess who to chase.
+      managerId: opts.createdById ?? null,
+      assignees: { create: userIds.map((id) => newAssignment(id, opts.createdById)) },
     },
     select: { id: true },
   });
@@ -106,9 +136,8 @@ export async function createPlanningTask(opts: {
     userId: opts.createdById ?? null,
     note: "auto-created — project needs planning",
   });
-  await notify({
+  await notifyMany(userIds, {
     organizationId,
-    userId,
     type: "TASK_ASSIGNED",
     title: `Plan ${project.name}`,
     body: description,

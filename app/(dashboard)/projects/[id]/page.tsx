@@ -373,6 +373,31 @@ export default function ProjectDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [billables, toast]);
 
+  /**
+   * Opening a task from the project's own Tasks tab.
+   *
+   * A PLANNING task goes to the Plan, the same as everywhere else. Its panel
+   * is a form about the plan rather than the plan — an auto-written
+   * description, and status, priority and deadline fields the SMM is not
+   * supposed to edit — so landing there means reading a summary of the job and
+   * then going to do it somewhere else. Arriving on the Plan also starts it,
+   * because that is the work.
+   */
+  const openProjectTask = useCallback((task: Task) => {
+    if (task.kind === "PLANNING") {
+      if (task.status === "TODO") {
+        fetch(`/api/tasks/${task.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: "IN_PROGRESS" }),
+        }).catch(() => {});
+      }
+      setPageTab("plan");
+      return;
+    }
+    setTaskPanel({ open: true, task });
+  }, []);
+
   const fetchInvoices = useCallback(async () => {
     setInvoicesLoading(true);
     try {
@@ -939,7 +964,7 @@ export default function ProjectDetailPage() {
         ) : view === "kanban" ? (
           <TaskBoard
             tasks={tasks}
-            onOpen={(task) => setTaskPanel({ open: true, task })}
+            onOpen={openProjectTask}
             onStatusChange={handleStatusChange}
             onAddTask={canPlanProject ? (status) => setTaskModal({ open: true, defaultStatus: status }) : undefined}
             onAddSubtask={canPlanProject ? (parent) => setTaskModal({ open: true, parentTask: parent }) : undefined}
@@ -948,7 +973,7 @@ export default function ProjectDetailPage() {
         ) : (
           <TaskList
             tasks={tasks}
-            onOpen={(task) => setTaskPanel({ open: true, task })}
+            onOpen={openProjectTask}
             onStatusChange={handleStatusChange}
             onAddTask={canPlanProject ? () => setTaskModal({ open: true }) : undefined}
             onAddSubtask={canPlanProject ? (parent) => setTaskModal({ open: true, parentTask: parent }) : undefined}

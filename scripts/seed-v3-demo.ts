@@ -99,7 +99,7 @@ async function main() {
     data: { projectId: project.id, userId: smm.id, role: "SMM", addedById: admin.id },
   });
   await createPlanningTask({
-    organizationId: org.id, projectId: project.id, userId: smm.id, createdById: admin.id,
+    organizationId: org.id, projectId: project.id, userIds: [smm.id], createdById: admin.id,
   });
   console.log("  + SMM assigned — planning task created automatically");
 

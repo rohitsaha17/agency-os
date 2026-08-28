@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { newAssignment } from "@/lib/task-acceptance";
 import { assertAssignable } from "@/lib/assignment-guard";
+import { can } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { taskVisibilityScope } from "@/lib/api-permissions";
@@ -178,7 +179,10 @@ export async function POST(req: NextRequest) {
         status: status || "TODO",
         priority: priority || "MEDIUM",
         dueDate: dueDate ? new Date(dueDate) : null,
-        managerId: managerId || null,
+        // Whoever assigns the work reviews it, unless they named someone
+        // else. A junior adding their own to-do gets no reviewer — there is
+        // nobody above them in that act and inventing one would be noise.
+        managerId: managerId || (can(user, "tasks.review") ? user.id : null),
         preferredAssigneeId: preferredAssigneeId || null,
         assignmentStatus: routing.assignmentStatus,
         contentItemId: contentItemId || null,

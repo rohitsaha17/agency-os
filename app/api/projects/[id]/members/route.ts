@@ -79,15 +79,16 @@ export async function POST(req: NextRequest, { params }: Params) {
       update: { role: memberRole },
     });
 
-    // The event that starts the flow. createPlanningTask is idempotent, so
-    // re-adding an SMM never produces a second planning task.
+    // The event that starts the flow. One planning task exists per project, so
+    // adding a second SMM joins them to the existing one rather than creating
+    // a duplicate of the same job.
     let planningTaskId: string | null = null;
     if (memberRole === "SMM") {
       planningTaskId = await createPlanningTask({
         planningDueDate: planningDueAt ? new Date(planningDueAt) : null,
         organizationId: project.organizationId,
         projectId: id,
-        userId,
+        userIds: [userId],
         createdById: user.id,
       });
     }

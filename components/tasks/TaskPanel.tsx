@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   X, Trash2, ExternalLink,
   MessageSquare, Settings2,
@@ -15,7 +15,7 @@ import { DeliveryDialog } from "./DeliveryDialog";
 import { SubmitWorkDialog } from "./ReviewDialogs";
 import { Select } from "@/components/ui/Select";
 import { useCurrentUser } from "@/lib/useCurrentUser";
-import { can } from "@/lib/permissions";
+import { can, canAssignToUser } from "@/lib/permissions";
 import { AcceptanceBanner } from "@/components/tasks/AcceptanceBanner";
 import type {
   Task, TaskStatus, Priority, User,
@@ -281,7 +281,37 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
   })();
   // Requesting changes is a verdict on someone else's work. On your own task
   // it's a button that asks you to complain to yourself.
-  const canReview = can(me, "tasks.review") && !isMine;
+  /**
+   * Asking for changes only makes sense once there is work to change.
+   *
+   * It used to appear on any task that wasn't DONE, so a reviewer could
+   * request changes on something nobody had started — which reads to the
+   * assignee as a complaint about work they have not done yet. A review is a
+   * verdict on submitted work, so it waits for the work to arrive.
+   *
+   * Still never the assignee's own: a change request against yourself is a
+   * note to self, and the app already has one of those.
+   */
+  /**
+   * Who this person may hand work to.
+   *
+   * The picker listed everyone, so an SMM could assign a task to a manager or
+   * to the owner. Work goes down and sideways, not up: `canAssignTo` already
+   * encodes that and the API already enforces it, so the list was offering
+   * choices the server would refuse — and, worse, reading as though a junior
+   * could give the boss a job.
+   *
+   * Anyone already on the task stays in the list whatever their role, so an
+   * existing assignment never silently disappears from the form that is about
+   * to save it.
+   */
+  const assignableUsers = useMemo(
+    () => users.filter((u) => canAssignToUser(me, u) || assigneeIds.includes(u.id)),
+    [users, me, assigneeIds],
+  );
+
+  const REVIEWABLE = new Set(["IN_REVIEW", "SUBMITTED", "DONE"]);
+  const canReview = can(me, "tasks.review") && !isMine && REVIEWABLE.has(status);
 
   const hasChildren = (task.children?.length ?? 0) > 0;
 
@@ -518,7 +548,7 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
                 Resume task
               </button>
             )}
-            {status !== "DONE" && canReview && (
+            {canReview && (
               <button onClick={() => setShowChangeReq(true)}
                 className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors">
                 <AlertCircle className="w-3 h-3" />
@@ -713,7 +743,7 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
 
               {canPlan ? (
                 <div className="grid grid-cols-1 gap-3">
-                  <AssigneePicker users={users} assigneeIds={assigneeIds} managerId={managerId}
+                  <AssigneePicker users={assignableUsers} assigneeIds={assigneeIds} managerId={managerId}
                     onChangeAssignees={(ids) => { setAssigneeIds(ids); markDirty(); }}
                     onChangeManager={(id) => { setManagerId(id); markDirty(); }} />
                 </div>

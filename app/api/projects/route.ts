@@ -251,11 +251,12 @@ export async function POST(req: NextRequest) {
         if (memberRole === "SMM") smmIds.push(m.userId);
       }
     }
-    for (const userId of smmIds) {
+    // One task for all of them — see createPlanningTask.
+    if (smmIds.length > 0) {
       await createPlanningTask({
         organizationId: user.organizationId,
         projectId: project.id,
-        userId,
+        userIds: smmIds,
         createdById: user.id,
         planningDueDate: planningDueAt ? new Date(planningDueAt) : null,
       });

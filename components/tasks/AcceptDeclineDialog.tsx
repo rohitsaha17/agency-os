@@ -15,7 +15,7 @@
  */
 
 import { useState } from "react";
-import { Check, X } from "lucide-react";
+import { Check } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { MIN_DECLINE_REASON, MAX_DECLINE_REASON } from "@/lib/task-acceptance";
@@ -66,20 +66,33 @@ export function AcceptDeclineDialog({ taskId, taskTitle, open, onClose, onDone }
     <Modal
       open={open}
       onClose={() => { setDeclining(false); setError(null); onClose(); }}
-      title={declining ? "Why can't you take this on?" : "This has been assigned to you"}
-      width="max-w-md"
+      title={declining ? "Why can't you take this on?" : "Assigned to you"}
+      width="max-w-sm"
+      compact
       footer={
         declining ? (
-          <div className="flex items-center justify-end gap-2">
-            <Button variant="secondary" onClick={() => setDeclining(false)} disabled={busy}>Back</Button>
-            <Button onClick={() => respond("DECLINE")} loading={busy} disabled={!reasonOk}>Send</Button>
+          <div className="flex items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={() => setDeclining(false)}
+              disabled={busy}
+              className="text-[13px] font-medium text-gray-500 hover:text-gray-800 dark:text-slate-400 dark:hover:text-slate-200 disabled:opacity-50 px-1"
+            >
+              Back
+            </button>
+            <Button size="sm" onClick={() => respond("DECLINE")} loading={busy} disabled={!reasonOk}>Send</Button>
           </div>
         ) : (
-          <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2">
-            <Button variant="secondary" onClick={() => setDeclining(true)} disabled={busy} icon={<X className="w-3.5 h-3.5" />}>
+          <div className="flex items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={() => setDeclining(true)}
+              disabled={busy}
+              className="text-[13px] font-medium text-gray-500 hover:text-gray-800 dark:text-slate-400 dark:hover:text-slate-200 disabled:opacity-50 px-1"
+            >
               Not available
-            </Button>
-            <Button onClick={() => respond("ACCEPT")} loading={busy} icon={<Check className="w-3.5 h-3.5" />}>
+            </button>
+            <Button size="sm" onClick={() => respond("ACCEPT")} loading={busy} icon={<Check className="w-3.5 h-3.5" />}>
               Accept
             </Button>
           </div>
@@ -88,13 +101,13 @@ export function AcceptDeclineDialog({ taskId, taskTitle, open, onClose, onDone }
     >
       {declining ? (
         <div className="space-y-3">
-          <p className="text-xs text-gray-500 dark:text-slate-400">
-            This goes to whoever assigned it, so they can move the work or move
-            the date. A sentence is plenty.
+          <p className="text-[13px] text-gray-500 dark:text-slate-400 leading-snug">
+            This goes to whoever assigned it, so they can move the work or the
+            date. A sentence is plenty.
           </p>
           <textarea
             autoFocus
-            rows={4}
+            rows={3}
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             maxLength={MAX_DECLINE_REASON}
@@ -109,13 +122,15 @@ export function AcceptDeclineDialog({ taskId, taskTitle, open, onClose, onDone }
           </div>
         </div>
       ) : (
-        <div className="space-y-2">
+        <div>
           {taskTitle && (
-            <p className="text-sm font-medium text-gray-900 dark:text-slate-100">{taskTitle}</p>
+            <p className="text-[15px] font-semibold text-gray-900 dark:text-slate-100 leading-snug">
+              {taskTitle}
+            </p>
           )}
-          <p className="text-sm text-gray-600 dark:text-slate-400">
-            Take it on and you&rsquo;ll go straight to the work. If you can&rsquo;t,
-            say so and whoever assigned it can give it to someone else.
+          <p className="text-[13px] text-gray-500 dark:text-slate-400 mt-1.5 leading-snug">
+            Accept and you go straight to it. If you can&rsquo;t, say why and it
+            can go to someone else.
           </p>
         </div>
       )}

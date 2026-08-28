@@ -18,7 +18,14 @@ interface ModalProps {
    * scroll a form you have already filled in to find it.
    */
   footer?: ReactNode;
-  /** Opt out of the phone full-screen treatment for genuinely tiny dialogs. */
+  /**
+   * A small dialog — a confirm, a short prompt.
+   *
+   * Stays a centred card on phones instead of becoming a bottom sheet, and
+   * tightens the padding to match. The default chrome is sized for a form;
+   * around two lines of text it is mostly empty space, and the buttons end up
+   * looking oversized because there is nothing near them.
+   */
   compact?: boolean;
 }
 
@@ -70,8 +77,12 @@ export function Modal({
         )}
 
         {/* Header */}
-        <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200 dark:border-white/[0.08] flex-shrink-0">
-          <h2 className="text-base font-semibold text-gray-900 dark:text-slate-100 truncate pr-2">{title}</h2>
+        <div className={`flex items-center justify-between border-b border-gray-200 dark:border-white/[0.08] flex-shrink-0 ${
+          compact ? "px-5 py-3" : "px-4 sm:px-6 py-3 sm:py-4"
+        }`}>
+          <h2 className={`font-semibold text-gray-900 dark:text-slate-100 truncate pr-2 ${
+            compact ? "text-sm" : "text-base"
+          }`}>{title}</h2>
           <button
             onClick={onClose}
             aria-label="Close"
@@ -87,13 +98,17 @@ export function Modal({
             When there is no footer the body is the bottom edge of the sheet,
             so it carries the home-indicator inset itself; otherwise the
             footer does and doubling it would leave a gap. */}
-        <div className={`overflow-y-auto flex-1 px-4 sm:px-6 py-4 sm:py-5 ${footer ? "" : "safe-bottom"}`}>
+        <div className={`overflow-y-auto flex-1 ${
+          compact ? "px-5 py-4" : "px-4 sm:px-6 py-4 sm:py-5"
+        } ${footer ? "" : "safe-bottom"}`}>
           {children}
         </div>
 
         {/* Actions stay put while the body scrolls. */}
         {footer && (
-          <div className="flex-shrink-0 border-t border-gray-200 dark:border-white/[0.08] px-4 sm:px-6 py-3 sm:py-4 safe-bottom">
+          <div className={`flex-shrink-0 border-t border-gray-200 dark:border-white/[0.08] safe-bottom ${
+            compact ? "px-5 py-3" : "px-4 sm:px-6 py-3 sm:py-4"
+          }`}>
             {footer}
           </div>
         )}

@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Bell, CheckCheck } from "lucide-react";
+import { AcceptDeclineDialog } from "@/components/tasks/AcceptDeclineDialog";
+import { useCurrentUser } from "@/lib/useCurrentUser";
 
 interface NotificationItem {
   id: string;
@@ -80,6 +82,49 @@ export function NotificationBell({ align = "left" }: { align?: "left" | "right" 
     try { await fetch("/api/notifications/read-all", { method: "POST" }); } catch { /* ignore */ }
   }, []);
 
+  const { user: me } = useCurrentUser();
+  const [acceptTask, setAcceptTask] = useState<{ id: string; title: string; link: string } | null>(null);
+
+  /**
+   * Open what a notification points at — but answer it first if it is asking.
+   *
+   * Being told "you were assigned X", landing on the task and then having to
+   * find the Accept control is three steps for one decision. If the
+   * assignment is still unanswered the prompt comes up here; accepting sends
+   * you on to the work, declining leaves you where you were because there is
+   * nothing to go and do.
+   *
+   * The pending check costs one request and only runs for assignment
+   * notifications. Anything else, or any failure looking it up, navigates as
+   * before — a slow network must not stop a notification opening.
+   */
+  const follow = useCallback(async (n: NotificationItem) => {
+    if (!n.link) return;
+    const taskId = n.link.match(/[?&]task=([^&]+)/)?.[1];
+
+    if (n.type === "TASK_ASSIGNED" && taskId && me?.id) {
+      try {
+        const res = await fetch(`/api/tasks/${taskId}`);
+        if (res.ok) {
+          const t = await res.json();
+          const mine = (t.assignees ?? []).find(
+            (a: { userId?: string; user?: { id?: string }; acceptance?: string }) =>
+              (a.user?.id ?? a.userId) === me.id);
+          if (mine?.acceptance === "PENDING") {
+            setOpen(false);
+            setAcceptTask({ id: taskId, title: t.title ?? n.title, link: n.link });
+            return;
+          }
+        }
+      } catch {
+        // Fall through and just navigate.
+      }
+    }
+
+    setOpen(false);
+    router.push(n.link);
+  }, [me?.id, router]);
+
   return (
     <div ref={rootRef} className="relative">
       <button
@@ -128,13 +173,7 @@ export function NotificationBell({ align = "left" }: { align?: "left" | "right" 
                 {items.map((n) => (
                   <li key={n.id}>
                     <button
-                      onClick={() => {
-                        markRead(n);
-                        if (n.link) {
-                          setOpen(false);
-                          router.push(n.link);
-                        }
-                      }}
+                      onClick={() => { markRead(n); void follow(n); }}
                       className={`w-full text-left px-4 py-3 hover:bg-gray-50 dark:hover:bg-slate-700/40 transition-colors ${
                         n.readAt ? "opacity-70" : ""
                       }`}
@@ -164,6 +203,22 @@ export function NotificationBell({ align = "left" }: { align?: "left" | "right" 
             )}
           </div>
         </div>
+      )}
+
+      {/* Answer it here rather than making them find the control after
+          landing on the task. */}
+      {acceptTask && (
+        <AcceptDeclineDialog
+          open
+          taskId={acceptTask.id}
+          taskTitle={acceptTask.title}
+          onClose={() => setAcceptTask(null)}
+          onDone={(action) => {
+            const link = acceptTask.link;
+            setAcceptTask(null);
+            if (action === "ACCEPT") router.push(link);
+          }}
+        />
       )}
     </div>
   );

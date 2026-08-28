@@ -15,6 +15,7 @@ import { useCurrentUser } from "@/lib/useCurrentUser";
 import { can } from "@/lib/permissions";
 import { TaskPanel } from "@/components/tasks/TaskPanel";
 import { StatusDot, STATUS_DOT } from "@/components/tasks/TaskList";
+import { AcceptDeclineDialog } from "@/components/tasks/AcceptDeclineDialog";
 
 /**
  * Status you can read across a board.
@@ -426,6 +427,15 @@ function TasksBoardInner() {
    * Where a task row leads. Most open the drawer; a planning task opens the
    * project's Plan tab, because that IS the task.
    */
+  /**
+   * The task whose assignment is being answered.
+   *
+   * A PLANNING task opens the plan page rather than a panel, so the accept
+   * prompt inside the panel was unreachable for exactly the tasks that most
+   * often carry one. The badge itself opens this instead.
+   */
+  const [acceptFor, setAcceptFor] = useState<Task | null>(null);
+
   const openTaskOrPlan = (t: Task) => {
     if (t.kind === "PLANNING" && t.projectId) {
       router.push(`/projects/${t.projectId}?tab=plan`);
@@ -566,9 +576,14 @@ function TasksBoardInner() {
               if (!mine) return null;
               if (mine.acceptance === "PENDING") {
                 return (
-                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 bg-indigo-600 text-white rounded-full">
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setAcceptFor(t); }}
+                    title="Accept this, or say you can't take it"
+                    className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 bg-indigo-600 text-white rounded-full hover:bg-indigo-700 transition-colors"
+                  >
                     Accept?
-                  </span>
+                  </button>
                 );
               }
               if (mine.acceptance === "DECLINED") {
@@ -1151,6 +1166,27 @@ function TasksBoardInner() {
           taskTitle={deliveryFor.title}
           onClose={() => setDeliveryFor(null)}
           onCompleted={() => { setDeliveryFor(null); fetchAll(); broadcastChange("all"); }}
+        />
+      )}
+
+      {/* Answering an assignment, reachable from the row badge. A PLANNING
+          task opens the plan page rather than a panel, so the prompt inside
+          the panel could never be reached for exactly the tasks that carry
+          one most often. */}
+      {acceptFor && (
+        <AcceptDeclineDialog
+          open
+          taskId={acceptFor.id}
+          taskTitle={acceptFor.title}
+          onClose={() => setAcceptFor(null)}
+          onDone={(action) => {
+            const t = acceptFor;
+            setAcceptFor(null);
+            fetchAll();
+            // Accepting takes you straight to the work; declining leaves you
+            // here, because there is nothing to go and do.
+            if (action === "ACCEPT" && t) openTaskOrPlan(t);
+          }}
         />
       )}
     </div>

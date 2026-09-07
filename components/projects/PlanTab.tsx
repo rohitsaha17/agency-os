@@ -96,9 +96,9 @@ function QuotaMeter({ row }: { row: QuotaRow }) {
         </span>
       </div>
       <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden relative">
-        <div className={`h-full rounded-full transition-all ${row.full ? "bg-amber-400" : "bg-indigo-400"}`}
+        <div className={`h-full rounded-full transition-colors ${row.full ? "bg-amber-400" : "bg-indigo-400"}`}
           style={{ width: `${pct}%` }} />
-        <div className="h-full rounded-full bg-emerald-500 absolute inset-y-0 left-0 transition-all"
+        <div className="h-full rounded-full bg-emerald-500 absolute inset-y-0 left-0 transition-colors"
           style={{ width: `${postedPct}%` }} />
       </div>
       {(row.extra > 0 || row.carriedInExtra > 0 || row.carriedInQuota > 0) && (

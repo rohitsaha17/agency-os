@@ -118,7 +118,7 @@ function NavItem({
         data-tour={href === "/" ? "dashboard" : href.slice(1)}
         className={`
           relative flex items-center rounded-lg text-sm font-medium
-          transition-all duration-150 group overflow-hidden
+          transition-colors duration-150 group overflow-hidden
           ${collapsed ? "justify-center px-0 py-2.5" : "gap-3 px-3 py-2.5"}
           ${active
             ? "bg-indigo-600 text-white shadow-sm shadow-indigo-900/40"
@@ -131,7 +131,7 @@ function NavItem({
         <span
           className={`
             absolute right-0 inset-y-[22%] w-[3px] rounded-l-full
-            transition-all duration-200
+            transition-colors duration-200
             ${active ? "bg-indigo-300 opacity-100" : "opacity-0"}
           `}
         />
@@ -275,7 +275,7 @@ function NavContent({
               onClick={onClose}
               title={settingsLabel}
               data-tour="settings"
-              className="flex items-center justify-center py-2.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-white/[0.05] transition-all duration-150"
+              className="flex items-center justify-center py-2.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-white/[0.05] transition-colors duration-150"
             >
               <Settings className="w-4 h-4" />
             </Link>
@@ -302,7 +302,7 @@ function NavContent({
               href={settingsHref}
               onClick={onClose}
               data-tour="settings"
-              className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-400 hover:text-slate-100 hover:bg-white/[0.05] transition-all duration-150"
+              className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-400 hover:text-slate-100 hover:bg-white/[0.05] transition-colors duration-150"
             >
               <Settings className="w-4 h-4 text-slate-500" />
               {settingsLabel}
@@ -314,7 +314,7 @@ function NavContent({
                 try { await fetch("/api/auth/logout", { method: "POST" }); } catch { /* ignore */ }
                 window.location.href = "/login";
               }}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-400 hover:text-red-400 hover:bg-white/[0.05] transition-all duration-150"
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-400 hover:text-red-400 hover:bg-white/[0.05] transition-colors duration-150"
             >
               <LogOut className="w-4 h-4 text-slate-500" />
               Log out

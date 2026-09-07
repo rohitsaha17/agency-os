@@ -818,3 +818,30 @@ input[type="time"]::-webkit-calendar-picker-indicator:hover {
     transform: none !important;
   }
 }
+
+/* ──────────────────────────────────────────────────────────────
+   transition-surface
+   ──────────────────────────────────────────────────────────────
+   What `transition-all` was being used for, without what makes
+   it a problem.
+
+   `all` includes the layout properties — width, height, padding,
+   top/left — so a hover that was only meant to change a colour
+   will animate a reflow if any of those happen to change in the
+   same frame. It also animates properties nobody intended,
+   which is how you get a card that slides when its content
+   grows.
+
+   This is the set an interactive surface actually wants: the
+   paint and composite properties, and nothing that triggers
+   layout. Used where an element genuinely changes more than one
+   of them on hover; single-property cases use Tailwind's own
+   transition-colors / -opacity / -transform. */
+.transition-surface {
+  transition-property: color, background-color, border-color, box-shadow, opacity, transform;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  /* No duration on purpose. Setting one here would sit outside Tailwind's
+     layers and quietly beat any duration-* on the element, so a deliberate
+     duration-300 would do nothing and nobody would know why. Call sites say
+     how long, the same as they do for transition-colors. */
+}

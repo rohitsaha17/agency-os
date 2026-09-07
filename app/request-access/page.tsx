@@ -90,7 +90,11 @@ export default function RequestAccessPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className={labelCls}>Agency name *</label>
-                  <input className={inputCls} value={form.agencyName} onChange={(e) => set("agencyName", e.target.value)} placeholder="Studio Vibrnd" autoFocus />
+                  {/* Deliberately not autoFocus. There is a heading and an
+                      explanation of the trial above this field; focusing it on
+                      load scrolls past both and reads the label to a screen
+                      reader before the pitch it belongs to. */}
+                  <input className={inputCls} value={form.agencyName} onChange={(e) => set("agencyName", e.target.value)} placeholder="Studio Vibrnd" />
                 </div>
                 <div>
                   <label className={labelCls}>Your name *</label>

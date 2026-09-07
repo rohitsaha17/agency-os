@@ -212,7 +212,7 @@ export function AppTour() {
       {/* Overlay — with spotlight cutout when a target is highlighted */}
       {highlighted ? (
         <div
-          className="fixed rounded-xl ring-2 ring-indigo-400 transition-all duration-300"
+          className="fixed rounded-xl ring-2 ring-indigo-400 transition-colors duration-300"
           style={{
             top: anchorRect!.top - 4,
             left: anchorRect!.left - 4,
@@ -252,7 +252,7 @@ export function AppTour() {
             <button
               key={i}
               onClick={() => setStep(i)}
-              className={`h-1.5 rounded-full transition-all ${
+              className={`h-1.5 rounded-full transition-colors ${
                 i === step ? "w-5 bg-indigo-500" : "w-1.5 bg-slate-700 hover:bg-slate-600"
               }`}
               aria-label={`Step ${i + 1}`}

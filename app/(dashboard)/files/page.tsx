@@ -169,7 +169,7 @@ function ProjectContainerCard({
   return (
     <button
       onClick={() => onClick(project.id)}
-      className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-4 hover:bg-slate-700/60 hover:border-indigo-500/40 transition-all text-left group w-full"
+      className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-4 hover:bg-slate-700/60 hover:border-indigo-500/40 transition-colors text-left group w-full"
     >
       <div className="flex items-start justify-between mb-3">
         <div className="w-10 h-10 rounded-lg bg-indigo-500/15 flex items-center justify-center">
@@ -205,7 +205,7 @@ function ClientContainerCard({
   return (
     <button
       onClick={() => onClick(client.id)}
-      className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-4 hover:bg-slate-700/60 hover:border-emerald-500/40 transition-all text-left group w-full"
+      className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-4 hover:bg-slate-700/60 hover:border-emerald-500/40 transition-colors text-left group w-full"
     >
       <div className="w-10 h-10 rounded-lg bg-emerald-500/15 flex items-center justify-center mb-3">
         <Building2 className="w-5 h-5 text-emerald-400 group-hover:text-emerald-300" />
@@ -981,7 +981,7 @@ export default function FilesPage() {
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
                   <button
                     onClick={handleShowAllFiles}
-                    className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-4 hover:bg-slate-700/60 hover:border-slate-600 transition-all text-left group"
+                    className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-4 hover:bg-slate-700/60 hover:border-slate-600 transition-colors text-left group"
                   >
                     <div className="w-10 h-10 rounded-lg bg-slate-700 flex items-center justify-center mb-3">
                       <HardDrive className="w-5 h-5 text-slate-400 group-hover:text-slate-300" />
@@ -995,7 +995,7 @@ export default function FilesPage() {
                   {unlinkedCount > 0 && (
                     <button
                       onClick={handleShowUnlinked}
-                      className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-4 hover:bg-slate-700/60 hover:border-amber-500/40 transition-all text-left group"
+                      className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-4 hover:bg-slate-700/60 hover:border-amber-500/40 transition-colors text-left group"
                     >
                       <div className="w-10 h-10 rounded-lg bg-amber-500/15 flex items-center justify-center mb-3">
                         <FileIcon className="w-5 h-5 text-amber-400 group-hover:text-amber-300" />
@@ -1011,7 +1011,7 @@ export default function FilesPage() {
 
                   <button
                     onClick={() => { setPageMode("browse"); setHubLabel("Folders"); }}
-                    className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-4 hover:bg-slate-700/60 hover:border-slate-600 transition-all text-left group"
+                    className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-4 hover:bg-slate-700/60 hover:border-slate-600 transition-colors text-left group"
                   >
                     <div className="w-10 h-10 rounded-lg bg-amber-500/15 flex items-center justify-center mb-3">
                       <FolderIcon className="w-5 h-5 text-amber-400 group-hover:text-amber-300" />

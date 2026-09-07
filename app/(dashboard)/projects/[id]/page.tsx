@@ -1120,7 +1120,7 @@ export default function ProjectDetailPage() {
                 </div>
                 <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
                   <div
-                    className={`h-full rounded-full transition-all ${
+                    className={`h-full rounded-full transition-colors ${
                       expenseSummary.total > expenseSummary.budget ? "bg-red-400" :
                       expenseSummary.total / expenseSummary.budget > 0.8 ? "bg-amber-400" : "bg-emerald-400"
                     }`}
@@ -1217,7 +1217,7 @@ export default function ProjectDetailPage() {
                   };
                   return (
                     <Link key={contract.id} href={`/contracts/${contract.id}`}>
-                      <div className="bg-white border border-gray-200 rounded-xl p-4 hover:shadow-md hover:border-indigo-200 transition-all flex flex-wrap items-center justify-between gap-y-2 gap-4">
+                      <div className="bg-white border border-gray-200 rounded-xl p-4 hover:shadow-md hover:border-indigo-200 transition-surface duration-150 flex flex-wrap items-center justify-between gap-y-2 gap-4">
                         <div className="flex items-center gap-3 min-w-0">
                           <div className="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
                             <Scroll className="w-4 h-4 text-gray-400" />
@@ -1565,7 +1565,7 @@ export default function ProjectDetailPage() {
                       <button
                         onClick={handleChatSend}
                         disabled={!chatCompose.trim() || chatSending}
-                        className={`flex items-center justify-center w-8 h-8 rounded-lg transition-all flex-shrink-0 ${
+                        className={`flex items-center justify-center w-8 h-8 rounded-lg transition-colors flex-shrink-0 ${
                           chatCompose.trim() && !chatSending
                             ? "bg-indigo-600 text-white hover:bg-indigo-500"
                             : "bg-gray-100 text-gray-400 cursor-not-allowed"

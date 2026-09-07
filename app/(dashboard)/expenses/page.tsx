@@ -356,7 +356,7 @@ function ExpensesPageInner() {
                     <td className="px-5 py-3">
                       <button
                         onClick={() => handleDelete(exp.id)}
-                        className="opacity-0 group-hover:opacity-100 text-xs text-red-500 hover:text-red-700 transition-all"
+                        className="opacity-0 group-hover:opacity-100 text-xs text-red-500 hover:text-red-700 transition-surface duration-150"
                       >
                         Delete
                       </button>

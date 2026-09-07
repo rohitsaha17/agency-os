@@ -131,7 +131,7 @@ function StatCard({ icon, label, value, sub, color, href, accent = false }: {
   sub?: string; color: string; href?: string; accent?: boolean;
 }) {
   const inner = (
-    <div className={`bg-white border rounded-2xl px-5 py-4 flex items-center gap-4 transition-all group ${
+    <div className={`bg-white border rounded-2xl px-5 py-4 flex items-center gap-4 transition-colors group ${
       href ? "hover:shadow-md hover:border-indigo-200 hover:-translate-y-0.5 cursor-pointer" : ""
     } ${accent ? "border-indigo-200 bg-gradient-to-br from-indigo-50/50 to-white" : "border-gray-200"}`}>
       <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm ${color} transition-transform group-hover:scale-105`}>
@@ -154,7 +154,7 @@ function ProgressBar({ value, color = "bg-indigo-500", bg = "bg-gray-100" }: {
   return (
     <div className={`h-1.5 rounded-full overflow-hidden ${bg}`}>
       <div
-        className={`h-full rounded-full transition-all duration-500 ${color}`}
+        className={`h-full rounded-full transition-colors duration-500 ${color}`}
         style={{ width: `${Math.min(100, Math.max(0, value))}%` }}
       />
     </div>
@@ -189,7 +189,7 @@ function TaskBreakdown({ stats }: { stats: TaskStats }) {
         {bars.filter((b) => b.value > 0).map((b) => (
           <div
             key={b.label}
-            className={`${b.color} transition-all duration-500`}
+            className={`${b.color} transition-colors duration-500`}
             style={{ width: `${pct(b.value)}%` }}
             title={`${b.label}: ${b.value}`}
           />
@@ -405,9 +405,9 @@ function QuickActions() {
       {actions.map((a) => (
         <Link key={a.label} href={a.href}>
           <div
-            className={`flex flex-col items-center gap-2 p-3 rounded-2xl border ${a.accent} transition-all cursor-pointer group hover:shadow-sm hover:scale-[1.02] active:scale-[0.98]`}
+            className={`flex flex-col items-center gap-2 p-3 rounded-2xl border ${a.accent} transition-surface duration-150 cursor-pointer group hover:shadow-sm hover:scale-[1.02] active:scale-[0.98]`}
           >
-            <div className="w-9 h-9 flex items-center justify-center rounded-xl bg-white shadow-sm group-hover:shadow group-hover:bg-white dark:bg-slate-800 dark:group-hover:bg-slate-700 dark:ring-1 dark:ring-white/5 transition-all">
+            <div className="w-9 h-9 flex items-center justify-center rounded-xl bg-white shadow-sm group-hover:shadow group-hover:bg-white dark:bg-slate-800 dark:group-hover:bg-slate-700 dark:ring-1 dark:ring-white/5 transition-surface duration-150">
               {a.icon}
             </div>
             <span className="text-xs font-semibold text-center leading-tight">
@@ -611,7 +611,7 @@ export default function DashboardPage() {
               { icon: <Calendar className="w-5 h-5 text-pink-600" />, label: "Calendar", desc: "Deadlines and project timelines at a glance", href: "/calendar", color: "bg-pink-50" },
             ].map((m) => (
               <Link key={m.label} href={m.href}>
-                <div className="bg-white border border-gray-200 rounded-2xl p-5 hover:shadow-md hover:border-indigo-200 transition-all">
+                <div className="bg-white border border-gray-200 rounded-2xl p-5 hover:shadow-md hover:border-indigo-200 transition-surface duration-150">
                   <div className={`w-10 h-10 rounded-xl ${m.color} flex items-center justify-center mb-3`}>
                     {m.icon}
                   </div>

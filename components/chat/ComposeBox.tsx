@@ -143,7 +143,7 @@ export function ComposeBox({ channel, authorName = "You", onMessageSent }: Compo
           <button
             onClick={handleSend}
             disabled={!canSend}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
               canSend
                 ? "bg-indigo-600 text-white hover:bg-indigo-500"
                 : "bg-slate-700 text-slate-600 cursor-not-allowed"

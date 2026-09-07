@@ -593,7 +593,7 @@ function PreviewArea({
 
         <button
           onClick={() => setPinMode(!pinMode)}
-          className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
             pinMode
               ? "bg-yellow-400 text-black shadow-lg shadow-yellow-400/20"
               : "bg-slate-800 hover:bg-slate-700 text-slate-300"
@@ -620,7 +620,7 @@ function PreviewArea({
             {/* Floating comment button overlay */}
             <button
               onClick={captureVideoTimestamp}
-              className="absolute bottom-16 right-4 flex items-center gap-1.5 px-3 py-2 bg-indigo-600/90 hover:bg-indigo-600 backdrop-blur-sm text-white rounded-lg text-xs font-medium transition-all opacity-0 group-hover:opacity-100 shadow-lg"
+              className="absolute bottom-16 right-4 flex items-center gap-1.5 px-3 py-2 bg-indigo-600/90 hover:bg-indigo-600 backdrop-blur-sm text-white rounded-lg text-xs font-medium transition-surface duration-150 opacity-0 group-hover:opacity-100 shadow-lg"
             >
               <MessageCircle className="w-3.5 h-3.5" />
               Comment here

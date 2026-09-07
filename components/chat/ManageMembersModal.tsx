@@ -132,7 +132,7 @@ export function ManageMembersModal({ channel, open, onClose, onUpdated }: Manage
                       </span>
                       <button
                         onClick={() => removeUser(m.userId)}
-                        className="opacity-0 group-hover:opacity-100 p-1 rounded-lg text-slate-600 hover:text-red-400 hover:bg-red-400/10 transition-all"
+                        className="opacity-0 group-hover:opacity-100 p-1 rounded-lg text-slate-600 hover:text-red-400 hover:bg-red-400/10 transition-surface duration-150"
                         title="Remove member"
                       >
                         <Trash2 className="w-3.5 h-3.5" />

@@ -15,7 +15,7 @@ export function ClientCard({ client }: ClientCardProps) {
 
   return (
     <Link href={`/clients/${client.id}`}>
-      <div className="bg-white border border-gray-200 rounded-xl p-5 hover:border-indigo-300 hover:shadow-md transition-all group">
+      <div className="bg-white border border-gray-200 rounded-xl p-5 hover:border-indigo-300 hover:shadow-md transition-surface duration-150 group">
         {/* Header */}
         <div className="flex items-start justify-between mb-4">
           <div className="flex items-center gap-3 min-w-0">

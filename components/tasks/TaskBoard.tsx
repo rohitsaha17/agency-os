@@ -67,7 +67,7 @@ function TaskCard({
       onDragOver={onCardDragOver}
       onDragEnd={onDragEnd}
       onClick={() => onOpen(task)}
-      className={`bg-white border rounded-xl p-3.5 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all cursor-pointer group select-none ${
+      className={`bg-white border rounded-xl p-3.5 shadow-sm hover:shadow-md hover:border-indigo-200 transition-surface duration-150 cursor-pointer group select-none ${
         isDragging ? "opacity-30 ring-2 ring-indigo-300" : ""
       }`}
     >
@@ -93,7 +93,7 @@ function TaskCard({
           </div>
           <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
             <div
-              className={`h-full rounded-full transition-all ${progressColor}`}
+              className={`h-full rounded-full transition-colors ${progressColor}`}
               style={{ width: `${task.progress}%` }}
             />
           </div>

@@ -48,7 +48,7 @@ function ChannelSection({ label, icon, channels, activeId, onSelect, onAdd, defa
         {onAdd && (
           <span
             onClick={(e) => { e.stopPropagation(); onAdd(); }}
-            className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-white/10 rounded transition-all"
+            className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-white/10 rounded transition-surface duration-150"
           >
             <Plus className="w-3 h-3" />
           </span>
@@ -64,7 +64,7 @@ function ChannelSection({ label, icon, channels, activeId, onSelect, onAdd, defa
               <li key={ch.id}>
                 <button
                   onClick={() => onSelect(ch)}
-                  className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-sm transition-all text-left ${
+                  className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-sm transition-colors text-left ${
                     isActive
                       ? "bg-white/[0.1] text-white font-medium"
                       : hasUnread

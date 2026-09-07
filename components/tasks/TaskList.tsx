@@ -253,7 +253,7 @@ function TaskRow({ task, depth, onOpen, onStatusChange, onAddSubtask, draggingId
         onDragEnd={canDrag ? onDragEnd : undefined}
         onDrop={canDrag ? (e) => { e.preventDefault(); onDrop(); } : undefined}
         onClick={() => onOpen(task)}
-        className={`group flex items-center gap-2.5 py-2.5 border-l-2 border-b border-b-gray-100 dark:border-b-slate-800 transition-all cursor-pointer ${STATUS_ROW_LEFT[task.status]} ${isDone ? "opacity-60" : ""} ${isDragging ? "opacity-30 bg-indigo-50 dark:bg-indigo-500/10" : "hover:bg-gray-50/80 dark:hover:bg-slate-800/60"}`}
+        className={`group flex items-center gap-2.5 py-2.5 border-l-2 border-b border-b-gray-100 dark:border-b-slate-800 transition-surface duration-150 cursor-pointer ${STATUS_ROW_LEFT[task.status]} ${isDone ? "opacity-60" : ""} ${isDragging ? "opacity-30 bg-indigo-50 dark:bg-indigo-500/10" : "hover:bg-gray-50/80 dark:hover:bg-slate-800/60"}`}
         style={{ paddingLeft: `${12 + depth * 22}px`, paddingRight: "10px" }}
       >
         {/* Drag handle */}
@@ -288,7 +288,7 @@ function TaskRow({ task, depth, onOpen, onStatusChange, onAddSubtask, draggingId
             <div className="flex items-center gap-1.5 mt-0.5">
               <div className="w-16 h-1 bg-gray-100 rounded-full overflow-hidden">
                 <div
-                  className={`h-full rounded-full transition-all ${task.progress >= 75 ? "bg-emerald-400" : task.progress >= 40 ? "bg-indigo-400" : "bg-gray-300"}`}
+                  className={`h-full rounded-full transition-colors ${task.progress >= 75 ? "bg-emerald-400" : task.progress >= 40 ? "bg-indigo-400" : "bg-gray-300"}`}
                   style={{ width: `${task.progress}%` }}
                 />
               </div>

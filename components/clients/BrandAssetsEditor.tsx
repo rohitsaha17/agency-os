@@ -251,7 +251,7 @@ function ColorItem({ color, isEditing, onEdit, onCancel, onSave, onDelete }: {
 
   if (!isEditing) {
     return (
-      <div className="group flex items-center gap-3 p-3 rounded-xl border border-gray-200 bg-white hover:border-indigo-200 hover:shadow-sm transition-all">
+      <div className="group flex items-center gap-3 p-3 rounded-xl border border-gray-200 bg-white hover:border-indigo-200 hover:shadow-sm transition-surface duration-150">
         <div className="w-10 h-10 rounded-lg flex-shrink-0 border border-black/10 shadow-sm" style={{ backgroundColor: color.hex }} />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
@@ -502,7 +502,7 @@ function AssetItem({ asset, isEditing, onEdit, onCancel, onSave, onDelete, clien
     const typeLabel = ASSET_TYPES.find((t) => t.value === asset.type)?.label ?? asset.type;
     const displayName = asset.name || `${typeLabel} – ${asset.variant}`;
     return (
-      <div className="group flex items-start gap-3 p-3 rounded-xl border border-gray-200 bg-white hover:border-indigo-200 hover:shadow-sm transition-all">
+      <div className="group flex items-start gap-3 p-3 rounded-xl border border-gray-200 bg-white hover:border-indigo-200 hover:shadow-sm transition-surface duration-150">
         <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0 mt-0.5">
           <Icon className="w-4 h-4 text-gray-500" />
         </div>

@@ -109,7 +109,7 @@ export function CreateChannelModal({ open, onClose, onCreated }: CreateChannelMo
               <label className="block text-xs font-medium text-slate-400 mb-2">Channel Type</label>
               <div className="space-y-2">
                 {CHANNEL_TYPES.map((t) => (
-                  <label key={t.value} className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                  <label key={t.value} className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${
                     type === t.value
                       ? "border-indigo-500 bg-indigo-500/10"
                       : "border-slate-700 hover:border-slate-600"

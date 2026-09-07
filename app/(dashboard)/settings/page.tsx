@@ -803,7 +803,7 @@ function LetterheadTab({
               <button
                 key={opt.value}
                 onClick={() => set("letterheadTemplate", opt.value)}
-                className={`relative text-left p-2.5 rounded-xl border-2 transition-all ${isSelected ? "border-indigo-500 bg-indigo-50/50 shadow-sm" : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"}`}
+                className={`relative text-left p-2.5 rounded-xl border-2 transition-surface duration-150 ${isSelected ? "border-indigo-500 bg-indigo-50/50 shadow-sm" : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"}`}
               >
                 {isSelected && (
                   <span className="absolute top-2 right-2 w-4 h-4 rounded-full bg-indigo-500 flex items-center justify-center">
@@ -865,7 +865,7 @@ function LetterheadTab({
                 <div className="flex gap-1.5">
                   {(["left","center","right"] as const).map(pos => (
                     <button key={pos} onClick={() => setCfgK("logoPosition", pos)}
-                      className={`flex-1 py-1.5 text-xs rounded-lg border font-medium capitalize transition-all ${cfg.logoPosition === pos ? "border-indigo-500 bg-indigo-50 text-indigo-700" : "border-gray-200 text-gray-500 hover:border-gray-300"}`}>
+                      className={`flex-1 py-1.5 text-xs rounded-lg border font-medium capitalize transition-colors ${cfg.logoPosition === pos ? "border-indigo-500 bg-indigo-50 text-indigo-700" : "border-gray-200 text-gray-500 hover:border-gray-300"}`}>
                       {pos}
                     </button>
                   ))}
@@ -876,7 +876,7 @@ function LetterheadTab({
                 <div className="flex gap-1.5">
                   {(["sm","md","lg"] as const).map(sz => (
                     <button key={sz} onClick={() => setCfgK("logoSize", sz)}
-                      className={`flex-1 py-1.5 text-xs rounded-lg border font-medium uppercase transition-all ${cfg.logoSize === sz ? "border-indigo-500 bg-indigo-50 text-indigo-700" : "border-gray-200 text-gray-500 hover:border-gray-300"}`}>
+                      className={`flex-1 py-1.5 text-xs rounded-lg border font-medium uppercase transition-colors ${cfg.logoSize === sz ? "border-indigo-500 bg-indigo-50 text-indigo-700" : "border-gray-200 text-gray-500 hover:border-gray-300"}`}>
                       {sz}
                     </button>
                   ))}
@@ -932,7 +932,7 @@ function LetterheadTab({
                 <div className="mt-3 flex gap-2 flex-wrap">
                   {["#6366f1","#0ea5e9","#10b981","#f59e0b","#ef4444","#8b5cf6","#ec4899","#0f172a","#f97316","#14b8a6"].map(c => (
                     <button key={c} onClick={() => setColor(c)}
-                      className={`w-6 h-6 rounded-full border-2 transition-all ${(form.letterheadColor ?? "#6366f1") === c ? "border-gray-700 scale-110" : "border-transparent hover:scale-105"}`}
+                      className={`w-6 h-6 rounded-full border-2 transition-surface duration-150 ${(form.letterheadColor ?? "#6366f1") === c ? "border-gray-700 scale-110" : "border-transparent hover:scale-105"}`}
                       style={{ background: c }} title={c} />
                   ))}
                 </div>
@@ -948,7 +948,7 @@ function LetterheadTab({
                   <div className="mt-3 flex gap-2 flex-wrap">
                     {["#1e293b","#111827","#1a1a2e","#0f172a","#1e3a5f","#2d1b69","#1a3a2a","#3d0000","#1c1917","#292524"].map(c => (
                       <button key={c} onClick={() => setCfgK("headerBg", c)}
-                        className={`w-6 h-6 rounded-full border-2 transition-all ${cfg.headerBg === c ? "border-gray-400 scale-110" : "border-transparent hover:scale-105"}`}
+                        className={`w-6 h-6 rounded-full border-2 transition-surface duration-150 ${cfg.headerBg === c ? "border-gray-400 scale-110" : "border-transparent hover:scale-105"}`}
                         style={{ background: c }} title={c} />
                     ))}
                   </div>
@@ -956,7 +956,7 @@ function LetterheadTab({
                     <p className="text-xs text-gray-500 mr-2 self-center">Text on header:</p>
                     {(["light","dark"] as const).map(tc => (
                       <button key={tc} onClick={() => setCfgK("headerTextColor", tc)}
-                        className={`px-3 py-1 text-xs rounded-lg border font-medium capitalize transition-all ${cfg.headerTextColor === tc ? "border-indigo-500 bg-indigo-50 text-indigo-700" : "border-gray-200 text-gray-500 hover:border-gray-300"}`}>
+                        className={`px-3 py-1 text-xs rounded-lg border font-medium capitalize transition-colors ${cfg.headerTextColor === tc ? "border-indigo-500 bg-indigo-50 text-indigo-700" : "border-gray-200 text-gray-500 hover:border-gray-300"}`}>
                         {tc}
                       </button>
                     ))}
@@ -971,7 +971,7 @@ function LetterheadTab({
                     { value: "serif" as const, label: "Serif", sub: "Georgia / Times" },
                   ]).map(f => (
                     <button key={f.value} onClick={() => setCfgK("font", f.value)}
-                      className={`flex-1 p-3 rounded-xl border-2 text-left transition-all ${cfg.font === f.value ? "border-indigo-500 bg-indigo-50/50" : "border-gray-200 hover:border-gray-300"}`}>
+                      className={`flex-1 p-3 rounded-xl border-2 text-left transition-colors ${cfg.font === f.value ? "border-indigo-500 bg-indigo-50/50" : "border-gray-200 hover:border-gray-300"}`}>
                       <p className={`text-xs font-semibold ${cfg.font === f.value ? "text-indigo-700" : "text-gray-700"}`} style={{ fontFamily: f.value === "serif" ? "Georgia, serif" : undefined }}>{f.label}</p>
                       <p className="text-[10px] text-gray-400 mt-0.5">{f.sub}</p>
                     </button>
@@ -993,7 +993,7 @@ function LetterheadTab({
                   <div className="flex gap-1.5">
                     {(["left","center","right"] as const).map(a => (
                       <button key={a} onClick={() => setCfgK("footerAlign", a)}
-                        className={`flex-1 py-1.5 text-xs rounded-lg border font-medium capitalize transition-all ${cfg.footerAlign === a ? "border-indigo-500 bg-indigo-50 text-indigo-700" : "border-gray-200 text-gray-500 hover:border-gray-300"}`}>
+                        className={`flex-1 py-1.5 text-xs rounded-lg border font-medium capitalize transition-colors ${cfg.footerAlign === a ? "border-indigo-500 bg-indigo-50 text-indigo-700" : "border-gray-200 text-gray-500 hover:border-gray-300"}`}>
                         {a}
                       </button>
                     ))}
@@ -1954,7 +1954,7 @@ export default function SettingsPage() {
             <button
               key={id}
               onClick={() => setTab(id)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                 tab === id
                   ? "bg-white text-gray-900 shadow-sm"
                   : "text-gray-500 hover:text-gray-700"

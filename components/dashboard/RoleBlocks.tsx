@@ -178,7 +178,7 @@ export function RoleBlocks({ currency = "USD" }: { currency?: string }) {
                       </span>
                     </div>
                     <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
-                      <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                      <div className="h-full bg-emerald-500 rounded-full transition-colors" style={{ width: `${pct}%` }} />
                     </div>
                     {p.unplanned > 0 && (
                       <p className="text-[10px] text-amber-600 mt-1">

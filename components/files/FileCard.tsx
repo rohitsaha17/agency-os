@@ -135,7 +135,7 @@ export function FileCard({ file, onClick, view = "grid" }: FileCardProps) {
   return (
     <div
       {...clickable(() => onClick(file))}
-      className="group relative bg-slate-800/60 hover:bg-slate-800 border border-slate-700/50 hover:border-slate-600 rounded-xl overflow-hidden cursor-pointer transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+      className="group relative bg-slate-800/60 hover:bg-slate-800 border border-slate-700/50 hover:border-slate-600 rounded-xl overflow-hidden cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
     >
       {/* thumbnail area */}
       <div className="relative aspect-[4/3] bg-slate-900 flex items-center justify-center overflow-hidden">

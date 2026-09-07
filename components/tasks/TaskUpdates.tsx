@@ -173,7 +173,7 @@ export function TaskUpdates({ taskId }: TaskUpdatesProps) {
                 key={t.id}
                 type="button"
                 onClick={() => setUpdateType(t.id)}
-                className={`flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium rounded-full border transition-all ${
+                className={`flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium rounded-full border transition-colors ${
                   updateType === t.id
                     ? `${t.bg} ${t.color} shadow-sm`
                     : "bg-white border-gray-200 text-gray-500 hover:border-gray-300"

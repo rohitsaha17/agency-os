@@ -119,7 +119,7 @@ export function TimeTracker({ taskId, estimatedHours, loggedHours: initLogged, o
         <div>
           <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
             <div
-              className={`h-full rounded-full transition-all ${overBudget ? "bg-red-500" : "bg-emerald-500"}`}
+              className={`h-full rounded-full transition-colors ${overBudget ? "bg-red-500" : "bg-emerald-500"}`}
               style={{ width: `${Math.min(100, pct)}%` }}
             />
           </div>

@@ -290,7 +290,7 @@ export default function ContractDetailPage() {
               <div className="mb-5">
                 <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-emerald-400 rounded-full transition-all"
+                    className="h-full bg-emerald-400 rounded-full transition-colors"
                     style={{ width: `${(signedCount / contract.parties.length) * 100}%` }}
                   />
                 </div>

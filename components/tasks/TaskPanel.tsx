@@ -494,7 +494,7 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
             <button
               disabled={!canPlan}
               onClick={() => { if (!canPlan) return; setIsClientVisible((v) => !v); markDirty(); }}
-              className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium border transition-all ${
+              className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium border transition-colors ${
                 isClientVisible ? "bg-sky-50 text-sky-600 border-sky-200" : "bg-gray-50 text-gray-400 border-gray-200"
               } ${canPlan ? "hover:border-gray-300" : "cursor-default"}`}
               title={canPlan

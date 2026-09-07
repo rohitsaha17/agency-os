@@ -118,7 +118,7 @@ export function TemplatePickerModal({
                   type="button"
                   onClick={() => apply(template)}
                   disabled={!!applyingId}
-                  className={`w-full flex items-center gap-3 p-4 rounded-xl border text-left transition-all
+                  className={`w-full flex items-center gap-3 p-4 rounded-xl border text-left transition-colors
                     ${isMatch
                       ? "border-indigo-300 dark:border-indigo-500/50 bg-indigo-50/40 dark:bg-indigo-500/5 hover:bg-indigo-50 dark:hover:bg-indigo-500/10"
                       : "border-gray-200 dark:border-slate-700 hover:border-indigo-200 dark:hover:border-indigo-500/40 hover:bg-gray-50 dark:hover:bg-slate-800/60"

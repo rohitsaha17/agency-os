@@ -677,7 +677,7 @@ export default function CalendarPage() {
                            already carries whatever "Color by" is set to, and
                            the rest is in the tooltip and the day panel, so the
                            text gets the width instead. */
-                        className={`w-full text-left flex items-center mb-[3px] pl-1.5 pr-1 py-[3px] rounded-[5px] border border-l-[3px] shadow-[0_1px_1px_rgba(15,23,42,0.04)] hover:shadow-[0_2px_5px_rgba(15,23,42,0.12)] hover:-translate-y-px transition-all duration-150 ${chipClass(i)}`}
+                        className={`w-full text-left flex items-center mb-[3px] pl-1.5 pr-1 py-[3px] rounded-[5px] border border-l-[3px] shadow-[0_1px_1px_rgba(15,23,42,0.04)] hover:shadow-[0_2px_5px_rgba(15,23,42,0.12)] hover:-translate-y-px transition-surface duration-150 ${chipClass(i)}`}
                       >
                         <span className="text-[10.5px] font-medium truncate leading-[1.35] flex-1 min-w-0">
                           {i.topic}
@@ -874,7 +874,7 @@ export default function CalendarPage() {
                         return (
                           <button key={i.id} type="button" onClick={() => setSelectedItem(i)}
                             className="block w-full text-left mb-2">
-                            <div className={`border rounded-xl p-3 hover:shadow-sm transition-all ${meta.chip} ${i.isAdHoc ? "border-dashed" : ""}`}>
+                            <div className={`border rounded-xl p-3 hover:shadow-sm transition-surface duration-150 ${meta.chip} ${i.isAdHoc ? "border-dashed" : ""}`}>
                               <div className="flex flex-wrap items-center justify-between gap-y-2 mb-1">
                                 <span className="text-xs inline-flex items-center gap-1.5"><CreativeTypeDot color={i.creativeType.color} />{i.creativeType.name}</span>
                                 <span className="text-[10px] font-semibold uppercase">{meta.label}</span>
@@ -908,7 +908,7 @@ export default function CalendarPage() {
                   ))}
                   {showTasks && selectedLegacy.filter((e) => e.type === "task").map((e) => (
                     <Link key={`t-${e.id}`} href={`/projects/${e.projectId}`} className="block">
-                      <div className={`border rounded-xl p-3 transition-all ${PRIORITY_BG[e.priority ?? "MEDIUM"]}`}>
+                      <div className={`border rounded-xl p-3 transition-colors ${PRIORITY_BG[e.priority ?? "MEDIUM"]}`}>
                         <div className="flex items-center gap-1.5 mb-1">
                           <CheckSquare className="w-3 h-3" />
                           <span className="text-[10px] font-semibold uppercase">{e.priority}</span>

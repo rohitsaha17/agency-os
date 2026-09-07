@@ -72,7 +72,7 @@ function UploadZone({
       onDragLeave={() => setDragging(false)}
       onDrop={handleDrop}
       onClick={() => inputRef.current?.click()}
-      className={`border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-all ${
+      className={`border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-colors ${
         dragging ? "border-indigo-400 bg-indigo-50" : "border-gray-200 hover:border-indigo-300 hover:bg-gray-50"
       }`}
     >

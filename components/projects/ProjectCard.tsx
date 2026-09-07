@@ -26,7 +26,7 @@ export function ProjectCard({ project }: ProjectCardProps) {
 
   return (
     <Link href={`/projects/${project.id}`} className="block group">
-      <div className="bg-white border border-gray-200 rounded-xl p-5 hover:border-indigo-300 hover:shadow-md transition-all">
+      <div className="bg-white border border-gray-200 rounded-xl p-5 hover:border-indigo-300 hover:shadow-md transition-surface duration-150">
         {/* Header */}
         <div className="flex items-start justify-between mb-3">
           <div className="flex items-center gap-2.5 min-w-0">
@@ -71,7 +71,7 @@ export function ProjectCard({ project }: ProjectCardProps) {
           </div>
           <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
             <div
-              className={`h-full rounded-full transition-all ${progressColor}`}
+              className={`h-full rounded-full transition-colors ${progressColor}`}
               style={{ width: `${project.progress}%` }}
             />
           </div>

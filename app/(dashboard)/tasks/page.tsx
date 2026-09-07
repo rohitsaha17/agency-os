@@ -6,7 +6,7 @@ import Link from "next/link";
 import {
   Plus, Star, CheckCircle2, Circle, ChevronDown, ChevronRight, ChevronUp,
   MoreVertical, ListTodo, Clock, ShieldCheck, X, FolderKanban, Repeat,
-  Link2 as LinkIcon, Paperclip, FileText,
+  Link2 as LinkIcon, Paperclip, FileText, AlertCircle,
 } from "lucide-react";
 import { TaskModal } from "@/components/tasks/TaskModal";
 import { DeliveryDialog } from "@/components/tasks/DeliveryDialog";
@@ -16,7 +16,6 @@ import { can } from "@/lib/permissions";
 import { TaskPanel } from "@/components/tasks/TaskPanel";
 import { StatusDot, STATUS_DOT } from "@/components/tasks/TaskList";
 import { AcceptDeclineDialog } from "@/components/tasks/AcceptDeclineDialog";
-import { LoadError } from "@/components/ui/LoadError";
 import { clickable } from "@/lib/a11y";
 
 /**
@@ -353,6 +352,11 @@ function TasksBoardInner() {
         they had no work, confidently. The tasks response is the one that
         matters; personal items failing alone is not worth blocking the board.
       */
+      // Whatever did load, lands. Your own reminders are not less true
+      // because the task request failed, and throwing before this used to
+      // hide them along with everything else.
+      if (itemsRes.ok) setItems(await itemsRes.json());
+
       if (!tasksRes.ok) {
         throw new Error(
           tasksRes.status === 401
@@ -360,7 +364,6 @@ function TasksBoardInner() {
             : `The server returned ${tasksRes.status}.`,
         );
       }
-      if (itemsRes.ok) setItems(await itemsRes.json());
       const all = await tasksRes.json();
       // Keep everything the API was willing to return. It is already
       // scoped by taskVisibilityScope, so a junior only ever receives
@@ -814,20 +817,42 @@ function TasksBoardInner() {
           </div>
         )}
 
+        {/*
+          A warning ABOVE whatever did load, not in place of it.
+
+          The task request failing does not make your own reminders untrue, so
+          they stay. What the banner has to prevent is the reader taking the
+          list as complete — so it says which part is missing rather than
+          "something went wrong", and it stays until a retry succeeds.
+        */}
+        {!loading && loadError && (
+          <div
+            role="alert"
+            className="mx-2 mb-2 flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 dark:border-amber-500/30 dark:bg-amber-500/10 px-3 py-2.5"
+          >
+            <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-medium text-amber-900 dark:text-amber-200">
+                Assigned work couldn&rsquo;t be loaded
+              </p>
+              <p className="text-[11px] text-amber-800 dark:text-amber-300/90 mt-0.5">
+                {loadError} Your own reminders below are up to date; anything
+                assigned to you is missing from this list.
+              </p>
+              <button
+                onClick={() => fetchAll()}
+                className="mt-1.5 text-[11px] font-medium text-amber-900 dark:text-amber-200 underline underline-offset-2 hover:no-underline"
+              >
+                Try again
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="flex-1 overflow-y-auto px-2 pb-2 min-h-[120px]">
           {loading ? (
             <div className="space-y-2 px-2 pt-1">{[1, 2, 3].map((i) => <div key={i} className="h-10 bg-gray-100 rounded-xl animate-pulse" />)}</div>
-          ) : loadError ? (
-            /* Before the empty state, never instead of it. An empty board and
-               a board that failed to load look identical otherwise. */
-            <LoadError
-              compact
-              message="Couldn't load your tasks"
-              detail={loadError}
-              onRetry={() => fetchAll()}
-              retrying={loading}
-            />
-          ) : openOrg.length + openPersonal.length === 0 ? (
+          ) : openOrg.length + openPersonal.length === 0 && !loadError ? (
             <div className="flex flex-col items-center justify-center py-10 text-center px-4">
               <CheckCircle2 className="w-9 h-9 text-emerald-200 mb-2" />
               <p className="text-sm font-medium text-gray-600">Nothing open</p>

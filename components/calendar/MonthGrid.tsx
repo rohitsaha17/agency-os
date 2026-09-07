@@ -11,6 +11,8 @@
  * same grid.
  */
 
+import { clickable } from "@/lib/a11y";
+
 export const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 export const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
@@ -140,7 +142,12 @@ export function MonthGrid({
           return (
             <div
               key={i}
-              onClick={() => inMonth && onDayClick?.(day)}
+              // A day cell is the control for its day. Only when it does
+              // something: an out-of-month cell is inert and should not be a
+              // tab stop, or a month costs 42 presses to walk past.
+              {...(inMonth && onDayClick
+                ? clickable(() => onDayClick(day), { role: "gridcell" })
+                : {})}
               className={`relative transition-colors duration-150 flex flex-col ${surface} ${
                 inMonth ? "cursor-pointer hover:bg-indigo-50/60 dark:hover:bg-indigo-500/[0.07]" : ""
               } ${

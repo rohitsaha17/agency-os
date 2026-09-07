@@ -783,3 +783,38 @@ input[type="time"]::-webkit-calendar-picker-indicator:hover {
     min-height: 44px;
   }
 }
+
+/* ──────────────────────────────────────────────────────────────
+   Reduced motion
+   ──────────────────────────────────────────────────────────────
+   About 160 elements in this app transition, pulse or spin. For
+   most people that reads as the interface being responsive. For
+   someone with a vestibular disorder it can cause real nausea,
+   and the operating system already carries their answer — this
+   is just honouring it.
+
+   Not `animation: none`: removing a spinner entirely leaves a
+   loading state with nothing to say it is loading. Everything is
+   collapsed to effectively instant instead, so states still
+   change and nothing moves on the way.
+
+   Transforms are the ones that actually provoke it, so hover
+   lifts and scales are cancelled outright rather than shortened. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .hover\:-translate-y-px:hover,
+  .hover\:-translate-y-0\.5:hover,
+  .hover\:scale-105:hover,
+  .hover\:scale-\[1\.02\]:hover,
+  .group:hover .group-hover\:scale-110 {
+    transform: none !important;
+  }
+}

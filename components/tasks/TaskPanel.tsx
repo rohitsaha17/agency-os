@@ -16,6 +16,7 @@ import { SubmitWorkDialog } from "./ReviewDialogs";
 import { Select } from "@/components/ui/Select";
 import { useCurrentUser } from "@/lib/useCurrentUser";
 import { can, canAssignToUser } from "@/lib/permissions";
+import { toggleable } from "@/lib/a11y";
 import { AcceptanceBanner } from "@/components/tasks/AcceptanceBanner";
 import type {
   Task, TaskStatus, Priority, User,
@@ -776,7 +777,7 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
                   <span className="text-xs font-semibold text-gray-600">Client Visibility</span>
                 </div>
                 <label className="flex items-center gap-2.5 cursor-pointer select-none">
-                  <div onClick={() => { setIsClientVisible((v) => !v); markDirty(); }}
+                  <div {...toggleable(isClientVisible, () => { setIsClientVisible((v) => !v); markDirty(); })}
                     className={`relative w-8 h-4 rounded-full transition-colors cursor-pointer ${isClientVisible ? "bg-sky-500" : "bg-gray-300"}`}>
                     <div className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${isClientVisible ? "translate-x-4" : ""}`} />
                   </div>
@@ -784,7 +785,7 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
                 </label>
                 {isClientVisible && (
                   <label className="flex items-center gap-2.5 cursor-pointer select-none ml-4">
-                    <div onClick={() => { setShowSubtasksToClient((v) => !v); markDirty(); }}
+                    <div {...toggleable(showSubtasksToClient, () => { setShowSubtasksToClient((v) => !v); markDirty(); })}
                       className={`relative w-8 h-4 rounded-full transition-colors cursor-pointer ${showSubtasksToClient ? "bg-sky-500" : "bg-gray-300"}`}>
                       <div className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${showSubtasksToClient ? "translate-x-4" : ""}`} />
                     </div>

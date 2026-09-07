@@ -16,6 +16,7 @@ import { can } from "@/lib/permissions";
 import { TaskPanel } from "@/components/tasks/TaskPanel";
 import { StatusDot, STATUS_DOT } from "@/components/tasks/TaskList";
 import { AcceptDeclineDialog } from "@/components/tasks/AcceptDeclineDialog";
+import { clickable } from "@/lib/a11y";
 
 /**
  * Status you can read across a board.
@@ -584,8 +585,8 @@ function TasksBoardInner() {
       // The whole row opens the task, not just its title. Aiming at a line of
       // text to open something the size of a card is a small, constant tax.
       <div key={`org-${t.id}`}
-        onClick={() => openTaskOrPlan(t)}
-        className={`group flex items-start gap-2.5 pl-2.5 pr-3 py-2 rounded-xl border-l-[3px] transition-colors cursor-pointer ${STATUS_ROW_TINT[t.status]} ${done ? "opacity-60" : ""}`}>
+        {...clickable(() => openTaskOrPlan(t))}
+        className={`group flex items-start gap-2.5 pl-2.5 pr-3 py-2 rounded-xl border-l-[3px] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${STATUS_ROW_TINT[t.status]} ${done ? "opacity-60" : ""}`}>
         {/*
           The same control as the project board, deliberately. This used to be
           a tick that jumped a task straight to complete, so the same dot meant

@@ -16,6 +16,7 @@ import { can } from "@/lib/permissions";
 import { TaskPanel } from "@/components/tasks/TaskPanel";
 import { StatusDot, STATUS_DOT } from "@/components/tasks/TaskList";
 import { AcceptDeclineDialog } from "@/components/tasks/AcceptDeclineDialog";
+import { LoadError } from "@/components/ui/LoadError";
 import { clickable } from "@/lib/a11y";
 
 /**
@@ -234,6 +235,8 @@ function TasksBoardInner() {
   const [people, setPeople] = useState<{ id: string; name: string }[]>([]);
   const [pdfBusy, setPdfBusy] = useState(false);
   const [loading, setLoading] = useState(true);
+  /** Set when the load itself failed — distinct from having nothing. */
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [view, setView] = useState<SidebarView>("all");
   const [hiddenLists, setHiddenLists] = useState<Set<string>>(new Set());
   const [showCompleted, setShowCompleted] = useState<Set<string>>(new Set());
@@ -341,15 +344,36 @@ function TasksBoardInner() {
         fetch("/api/personal-items"),
         fetch("/api/tasks?includeCompleted=true&all=1"),
       ]);
-      if (itemsRes.ok) setItems(await itemsRes.json());
-      if (tasksRes.ok) {
-        const all = await tasksRes.json();
-        // Keep everything the API was willing to return. It is already
-        // scoped by taskVisibilityScope, so a junior only ever receives
-        // their own — narrowing again here is a display choice, not a
-        // permission, and it used to hide the whole org from an admin.
-        setAllVisible(Array.isArray(all) ? all : []);
+      /*
+        A failed load must not read as an empty one.
+
+        This used to be `if (res.ok)` with no else and no catch: a dropped
+        connection or a 500 left the arrays empty, loading went false, and the
+        board rendered "Nothing open" — telling somebody with a full week that
+        they had no work, confidently. The tasks response is the one that
+        matters; personal items failing alone is not worth blocking the board.
+      */
+      if (!tasksRes.ok) {
+        throw new Error(
+          tasksRes.status === 401
+            ? "Your session has expired. Sign in again to see your work."
+            : `The server returned ${tasksRes.status}.`,
+        );
       }
+      if (itemsRes.ok) setItems(await itemsRes.json());
+      const all = await tasksRes.json();
+      // Keep everything the API was willing to return. It is already
+      // scoped by taskVisibilityScope, so a junior only ever receives
+      // their own — narrowing again here is a display choice, not a
+      // permission, and it used to hide the whole org from an admin.
+      setAllVisible(Array.isArray(all) ? all : []);
+      setLoadError(null);
+    } catch (e) {
+      setLoadError(
+        e instanceof Error && e.message
+          ? e.message
+          : "Check your connection and try again.",
+      );
     } finally {
       setLoading(false);
     }
@@ -793,6 +817,16 @@ function TasksBoardInner() {
         <div className="flex-1 overflow-y-auto px-2 pb-2 min-h-[120px]">
           {loading ? (
             <div className="space-y-2 px-2 pt-1">{[1, 2, 3].map((i) => <div key={i} className="h-10 bg-gray-100 rounded-xl animate-pulse" />)}</div>
+          ) : loadError ? (
+            /* Before the empty state, never instead of it. An empty board and
+               a board that failed to load look identical otherwise. */
+            <LoadError
+              compact
+              message="Couldn't load your tasks"
+              detail={loadError}
+              onRetry={() => fetchAll()}
+              retrying={loading}
+            />
           ) : openOrg.length + openPersonal.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-10 text-center px-4">
               <CheckCircle2 className="w-9 h-9 text-emerald-200 mb-2" />

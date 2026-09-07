@@ -12,6 +12,7 @@ import { can } from "@/lib/permissions";
 import { Button } from "@/components/ui/Button";
 import { TaskModal } from "@/components/tasks/TaskModal";
 import { MonthGrid, MONTH_NAMES, isSameDay } from "@/components/calendar/MonthGrid";
+import { LoadError } from "@/components/ui/LoadError";
 import { useWheelPeriod } from "@/components/calendar/useWheelPeriod";
 import { CONTENT_STATUS_META, contentStatusChip } from "@/components/content/ContentCalendarTab";
 import { CreativeTypeDot } from "@/components/content/CreativeTypeDot";
@@ -121,6 +122,9 @@ export default function CalendarPage() {
   const [orgEvents, setOrgEvents] = useState<OrgEvent[]>([]);
   const [events, setEvents] = useState<CalendarEvent[]>([]); // legacy layers
   const [loading, setLoading] = useState(true);
+  /** Set when the load itself failed — an empty month and a failed one are
+      not the same thing and must not look the same. */
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Date | null>(null);
 
   // v3 Phase 0 (defect 4): clicking a content chip opens THAT item in the
@@ -187,11 +191,27 @@ export default function CalendarPage() {
       if (extraOnly) params.set("extraOnly", "1");
       if (adHocOnly) params.set("adHocOnly", "1");
       const res = await fetch(`/api/master-calendar?${params}`);
-      const data = await res.json();
-      if (res.ok) {
-        setItems(data.items ?? []);
-        setOrgEvents(data.events ?? []);
+      /*
+        A month that failed to load must not look like a month with nothing
+        planned. This was `if (res.ok)` with no else and no catch, so a dropped
+        connection rendered an empty grid — which for a calendar is a specific
+        and expensive lie: it says the month is free.
+      */
+      if (!res.ok) {
+        throw new Error(
+          res.status === 401
+            ? "Your session has expired. Sign in again to see the calendar."
+            : `The server returned ${res.status}.`,
+        );
       }
+      const data = await res.json();
+      setItems(data.items ?? []);
+      setOrgEvents(data.events ?? []);
+      setLoadError(null);
+    } catch (e) {
+      setLoadError(
+        e instanceof Error && e.message ? e.message : "Check your connection and try again.",
+      );
     } finally {
       setLoading(false);
     }
@@ -583,6 +603,20 @@ export default function CalendarPage() {
         )}
 
         <div ref={gridWrapRef} className="flex-1 min-w-0 min-h-0 flex flex-col px-3 sm:px-5 py-3">
+          {/* Said in place of the grid, not above it. An empty month grid is
+              a specific claim — "nothing is planned" — and leaving it visible
+              under a warning still makes that claim to anyone who skims. */}
+          {loadError ? (
+            <div className="flex-1 min-h-0 border border-gray-200 dark:border-white/[0.07] rounded-xl overflow-hidden flex items-center justify-center">
+              <LoadError
+                message="Couldn't load this month"
+                detail={loadError}
+                onRetry={() => fetchMaster()}
+                retrying={loading}
+              />
+            </div>
+          ) : (
+          <>
           {/* The grid is the page's one object — give it an edge and a
               shadow so it sits ON the page rather than being a region of it. */}
           <div className="flex-1 min-h-0 border border-gray-200 dark:border-white/[0.07] rounded-xl overflow-hidden shadow-[0_1px_2px_rgba(15,23,42,0.05),0_10px_28px_-16px_rgba(15,23,42,0.18)] dark:shadow-[0_10px_30px_-18px_rgba(0,0,0,0.9)]">
@@ -709,6 +743,8 @@ export default function CalendarPage() {
           />
 
           </div>
+          </>
+          )}
 
           {/* Legend — one compact line so the grid keeps the height */}
           <div className="flex items-center gap-2 mt-2 pt-2 border-t border-gray-100 text-[11px] text-gray-500 overflow-x-auto flex-shrink-0">

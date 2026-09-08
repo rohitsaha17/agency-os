@@ -357,7 +357,7 @@ function InvoiceFormModal({
 
 // ── Main page ──────────────────────────────────────────────────
 
-export default function InvoicesPage() {
+function InvoicesPageBody() {
   // v3: the API refuses an SMM outright; this keeps the page honest rather
   // than rendering a shell full of 403s.
   return (
@@ -705,5 +705,14 @@ function InvoicesPageInner() {
         onCreated={fetchInvoices} clients={clients} projects={projects}
       />
     </div>
+  );
+}
+
+// Hiding the nav link was never a guard — the URL still worked.
+export default function InvoicesPage() {
+  return (
+    <RequireCapability capability="invoices.manage" what="Invoices">
+      <InvoicesPageBody />
+    </RequireCapability>
   );
 }

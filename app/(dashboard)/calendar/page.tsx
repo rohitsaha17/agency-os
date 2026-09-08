@@ -1,5 +1,6 @@
 "use client";
 
+import { RequireCapability } from "@/components/layout/RequireCapability";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 import {
@@ -113,7 +114,7 @@ interface FilterOption { id: string; name: string }
 
 // ── Component ────────────────────────────────────────────────
 
-export default function CalendarPage() {
+function CalendarPageBody() {
   const now = new Date();
   const { user: currentUser } = useCurrentUser();
 
@@ -1139,5 +1140,14 @@ function AddEventDialog({
         </div>
       </div>
     </div>
+  );
+}
+
+// Hiding the nav link was never a guard — the URL still worked.
+export default function CalendarPage() {
+  return (
+    <RequireCapability capability="content.plan" what="The team calendar">
+      <CalendarPageBody />
+    </RequireCapability>
   );
 }

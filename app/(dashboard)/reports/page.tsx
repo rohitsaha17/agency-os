@@ -26,7 +26,7 @@ const REPORTS: { id: string; label: string; hint: string; needsAll?: boolean }[]
   { id: "financial", label: "Revenue & margin", hint: "Invoiced, collected and spent per client", needsAll: true },
 ];
 
-export default function ReportsPage() {
+function ReportsPageBody() {
   return (
     <RequireCapability capability="reports.delivery" what="Reports">
       <ReportsPageInner />
@@ -141,5 +141,14 @@ function ReportsPageInner() {
         )}
       </div>
     </div>
+  );
+}
+
+// Hiding the nav link was never a guard — the URL still worked.
+export default function ReportsPage() {
+  return (
+    <RequireCapability capability="reports.delivery" what="Reports">
+      <ReportsPageBody />
+    </RequireCapability>
   );
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { RequireCapability } from "@/components/layout/RequireCapability";
 import { useEffect, useState, useCallback, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -485,10 +486,19 @@ function ExpensesPageInner() {
   );
 }
 
-export default function ExpensesPage() {
+function ExpensesPageBody() {
   return (
     <Suspense fallback={<div className="flex items-center justify-center h-full"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500" /></div>}>
       <ExpensesPageInner />
     </Suspense>
+  );
+}
+
+// Hiding the nav link was never a guard — the URL still worked.
+export default function ExpensesPage() {
+  return (
+    <RequireCapability capability="expenses.create" what="Expenses">
+      <ExpensesPageBody />
+    </RequireCapability>
   );
 }

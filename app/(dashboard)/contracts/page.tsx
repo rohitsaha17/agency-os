@@ -236,7 +236,7 @@ function ContractsPageInner() {
   );
 }
 
-export default function ContractsPage() {
+function ContractsPageBody() {
   // v3: the API refuses this outright without financials.view — say so
   // rather than rendering a shell that 403s behind the scenes.
   return (
@@ -244,6 +244,15 @@ export default function ContractsPage() {
       <Suspense fallback={<div className="flex items-center justify-center h-full"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500" /></div>}>
         <ContractsPageInner />
       </Suspense>
+    </RequireCapability>
+  );
+}
+
+// Hiding the nav link was never a guard — the URL still worked.
+export default function ContractsPage() {
+  return (
+    <RequireCapability capability="financials.view" what="Contracts">
+      <ContractsPageBody />
     </RequireCapability>
   );
 }

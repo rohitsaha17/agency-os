@@ -27,27 +27,27 @@ export function RequireCapability({
   if (loading) {
     return (
       <div className="p-6 space-y-3">
-        <div className="h-8 w-48 bg-gray-100 rounded animate-pulse" />
-        <div className="h-40 bg-gray-100 rounded-xl animate-pulse" />
+        <div className="h-8 w-48 bg-gray-100 dark:bg-white/[0.06] rounded animate-pulse" />
+        <div className="h-40 bg-gray-100 dark:bg-white/[0.06] rounded-xl animate-pulse" />
       </div>
     );
   }
 
   if (!can(user, capability)) {
     return (
-      <div className="flex flex-col items-center justify-center py-24 px-6 text-center">
-        <div className="w-12 h-12 rounded-2xl bg-gray-100 flex items-center justify-center mb-4">
-          <Lock className="w-5 h-5 text-gray-400" />
+      <div role="alert" className="flex flex-col items-center justify-center py-24 px-6 text-center">
+        <div className="w-12 h-12 rounded-2xl bg-gray-100 dark:bg-white/[0.06] flex items-center justify-center mb-4">
+          <Lock className="w-5 h-5 text-gray-400 dark:text-slate-400" />
         </div>
-        <p className="text-base font-semibold text-gray-800">
+        <p className="text-base font-semibold text-gray-800 dark:text-slate-100">
           {what ?? "This page"} isn&rsquo;t part of your access
         </p>
-        <p className="text-sm text-gray-500 mt-1 max-w-sm">
+        <p className="text-sm text-gray-500 dark:text-slate-400 mt-1 max-w-sm">
           Your role doesn&rsquo;t include it. If you think it should, ask an admin —
           roles are managed in Settings.
         </p>
         <Link href="/"
-          className="mt-5 px-4 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors">
+          className="mt-5 px-4 py-2 text-sm font-medium text-indigo-600 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-500/10 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-500/20 transition-colors">
           Back to dashboard
         </Link>
       </div>

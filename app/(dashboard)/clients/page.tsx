@@ -1,5 +1,6 @@
 "use client";
 
+import { RequireCapability } from "@/components/layout/RequireCapability";
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { Search, Plus, Users, TrendingUp, UserCheck } from "lucide-react";
@@ -15,7 +16,7 @@ const STATUS_FILTERS: { label: string; value: ClientStatus | "ALL" }[] = [
   { label: "Archived", value: "ARCHIVED" },
 ];
 
-export default function ClientsPage() {
+function ClientsPageBody() {
   const [clients, setClients] = useState<ClientSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -177,5 +178,14 @@ export default function ClientsPage() {
         )}
       </div>
     </div>
+  );
+}
+
+// Hiding the nav link was never a guard — the URL still worked.
+export default function ClientsPage() {
+  return (
+    <RequireCapability capability="clients.manage" what="Clients">
+      <ClientsPageBody />
+    </RequireCapability>
   );
 }

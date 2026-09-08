@@ -15,6 +15,8 @@ import { MonthGrid, MONTH_NAMES, isSameDay } from "@/components/calendar/MonthGr
 import { LoadError } from "@/components/ui/LoadError";
 import { useWheelPeriod } from "@/components/calendar/useWheelPeriod";
 import { CONTENT_STATUS_META, contentStatusChip } from "@/components/content/ContentCalendarTab";
+import { isSettled } from "@/lib/content-status";
+import { dayString } from "@/lib/availability";
 import { CreativeTypeDot } from "@/components/content/CreativeTypeDot";
 import { Select } from "@/components/ui/Select";
 import { todayKey } from "@/lib/date-key";
@@ -351,6 +353,27 @@ export default function CalendarPage() {
    * searches the things you'd actually search by — what the piece is, who
    * it's for, and which project it belongs to.
    */
+  /**
+   * A planned date that has passed with the work not settled.
+   *
+   * The most important thing on a content calendar is what did NOT go out, and
+   * this page had no concept of it — a Reel dated three weeks ago and still
+   * sitting in Planned looked exactly like one due on Friday. My Calendar
+   * flags overdue work; the team view, where somebody could actually do
+   * something about it, did not.
+   *
+   * "Settled" is approved, scheduled or posted — see lib/content-status.ts.
+   * Anything else, dated before today, is late.
+   */
+  const isLate = useCallback((i: MasterItem) => {
+    if (isSettled(i.status)) return false;
+    const d = new Date(i.date);
+    const today = new Date();
+    return dayString(d) < dayString(today);
+  }, []);
+
+  const lateCount = useMemo(() => items.filter(isLate).length, [items, isLate]);
+
   const searchedItems = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return items;
@@ -537,6 +560,11 @@ export default function CalendarPage() {
             </h1>
             <p className="text-[11px] text-gray-400 truncate">
               {items.length} item{items.length !== 1 ? "s" : ""}
+              {lateCount > 0 && (
+                <span className="text-red-600 dark:text-red-400 font-semibold">
+                  {" · "}{lateCount} late
+                </span>
+              )}
               {activeClientName ? ` · ${activeClientName}` : " · all clients"}
               {activeFilterCount > 0 && ` · ${activeFilterCount} filter${activeFilterCount !== 1 ? "s" : ""}`}
               {!can(currentUser, "clients.manage") && " · your linked work"}
@@ -711,7 +739,13 @@ export default function CalendarPage() {
                            already carries whatever "Color by" is set to, and
                            the rest is in the tooltip and the day panel, so the
                            text gets the width instead. */
-                        className={`w-full text-left flex items-center mb-[3px] pl-1.5 pr-1 py-[3px] rounded-[5px] border border-l-[3px] shadow-[0_1px_1px_rgba(15,23,42,0.04)] hover:shadow-[0_2px_5px_rgba(15,23,42,0.12)] hover:-translate-y-px transition-surface duration-150 ${chipClass(i)}`}
+                        /* A late item keeps its Color-by fill and takes a red
+                           left edge. The fill already means whatever "Color
+                           by" is set to, so overloading it would break that;
+                           the edge is the one part not already spoken for. */
+                        className={`w-full text-left flex items-center mb-[3px] pl-1.5 pr-1 py-[3px] rounded-[5px] border border-l-[3px] shadow-[0_1px_1px_rgba(15,23,42,0.04)] hover:shadow-[0_2px_5px_rgba(15,23,42,0.12)] hover:-translate-y-px transition-surface duration-150 ${chipClass(i)} ${
+                          isLate(i) ? "!border-l-red-500" : ""
+                        }`}
                       >
                         <span className="text-[10.5px] font-medium truncate leading-[1.35] flex-1 min-w-0">
                           {i.topic}
@@ -759,6 +793,10 @@ export default function CalendarPage() {
             <span className="text-gray-300 flex-shrink-0">|</span>
             <span className="flex items-center gap-1 flex-shrink-0"><PartyPopper className="w-3 h-3 text-amber-500" /> event</span>
             <span className="flex items-center gap-1 flex-shrink-0"><Zap className="w-3 h-3 text-amber-500" /> ad-hoc</span>
+            <span className="flex items-center gap-1 flex-shrink-0">
+              <span className="w-2.5 h-3 rounded-sm border-l-[3px] border-l-red-500 border border-gray-200 inline-block" />
+              past its date, not out yet
+            </span>
             <span className="flex-shrink-0 text-gray-400">· dot = status · click a day for details</span>
           </div>
         </div>

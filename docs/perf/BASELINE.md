@@ -1,5 +1,8 @@
 # Performance baseline — measured 2026-09-14, before any change
 
+> Superseded by [RESULTS.md](RESULTS.md), which has the after-numbers taken the
+> same way. This file is kept as the record of what was true beforehand.
+
 All timings are medians of 12 requests from a residential connection in India
 against production (`studio-flow.vibrnd.in`), warmed first.
 

@@ -58,6 +58,32 @@ export async function GET(req: NextRequest) {
     const [tasks, total] = await Promise.all([
       prisma.task.findMany({
         where,
+        /*
+          The board asks for every task in the org, completed ones included,
+          and refetches every 25 seconds while the tab is open. It renders a
+          title, a status, a due date and some avatars.
+
+          `include` returns every scalar column, and four of them are
+          unbounded free text: the description, the SMM's brief, the topic and
+          the extra note. A brief can run to paragraphs. Multiplied by every
+          task in the org and sent again every 25 seconds, they were the
+          payload — the rest of the row is a few hundred bytes of ids, enums
+          and dates.
+
+          `omit` rather than a hand-written `select` on purpose: a select is a
+          list of what to keep, so a column added later silently stops being
+          returned and something breaks a long way from here. This names the
+          four fields being withheld and nothing else.
+
+          Only TaskPanel reads them, and it now asks for the task it is
+          showing (GET /api/tasks/[id]) — one record, when somebody opens one.
+        */
+        omit: {
+          description: true,
+          content: true,
+          topic: true,
+          extraNote: true,
+        },
         include: {
           project: {
             select: {

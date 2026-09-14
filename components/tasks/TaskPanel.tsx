@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   X, Trash2, ExternalLink,
   MessageSquare, Settings2,
@@ -174,6 +174,25 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
   const { user: me } = useCurrentUser();
   const [tab, setTab] = useState<Tab>("details");
   const [users, setUsers] = useState<User[]>([]);
+  /*
+    The board's list withholds the four long free-text fields — they were the
+    whole payload, sent for every task in the org every 25 seconds, to render
+    a title and a due date (see GET /api/tasks).
+
+    So the panel asks for the one task it is actually showing. `brief` holds
+    what comes back; everything renders from `full`, which is the summary
+    until the detail lands and the detail after. The panel is never blank
+    waiting for it — the title, status, dates and assignees were all in the
+    row that was clicked.
+  */
+  type Brief = Pick<Task, "description" | "topic" | "content" | "extraNote">;
+  const [brief, setBrief] = useState<Brief | null>(null);
+  // Only the four withheld fields are merged, never the whole detail payload:
+  // GET /api/tasks/[id] narrows `assignees` to {userId, user} on the way out,
+  // so spreading all of it over the row would quietly drop each assignee's
+  // acceptance — the thing the Accept/Decline flow turns on.
+  const full = { ...task, ...(brief ?? {}) };
+
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description ?? "");
   const [status, setStatus] = useState<TaskStatus>(task.status);
@@ -204,9 +223,27 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
   const [submittingCR, setSubmittingCR] = useState(false);
 
   useEffect(() => {
+    setBrief(null);
     fetch("/api/users").then((r) => r.json()).then((data) => { if (Array.isArray(data)) setUsers(data); });
     fetch(`/api/tasks/${task.id}/delivery`).then((r) => (r.ok ? r.json() : []))
       .then((d) => { if (Array.isArray(d)) setDeliveries(d); }).catch(() => {});
+    // Joins the two requests above rather than following them, so opening a
+    // task costs the same round trip it always did.
+    fetch(`/api/tasks/${task.id}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d?.id) return;
+        setBrief({
+          description: d.description ?? null,
+          topic: d.topic ?? null,
+          content: d.content ?? null,
+          extraNote: d.extraNote ?? null,
+        });
+        // Seed the editor too — but never over something already typed. The
+        // detail can land after somebody has started writing.
+        setDescription((cur) => (cur === "" && !dirtyRef.current ? d.description ?? "" : cur));
+      })
+      .catch(() => { /* the summary is still on screen; nothing to undo */ });
   }, [task.id]);
 
   useEffect(() => {
@@ -222,7 +259,10 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
     return () => window.removeEventListener("keydown", h);
   }, [onClose]);
 
-  const markDirty = useCallback(() => setDirty(true), []);
+  // `dirty` in a promise callback would be the value captured when the
+  // request went out, which is exactly when it was false.
+  const dirtyRef = useRef(false);
+  const markDirty = useCallback(() => { dirtyRef.current = true; setDirty(true); }, []);
 
   /**
    * Who owns what on a task.
@@ -648,24 +688,24 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
           {tab === "details" && (
             <div className="space-y-4">
               {/* v2: brief block (topic / content / reference / extra note) */}
-              {(task.topic || task.content || task.referenceUrl || task.extraNote) && (
+              {(full.topic || full.content || full.referenceUrl || full.extraNote) && (
                 <div className="border border-indigo-100 bg-indigo-50/50 rounded-xl p-3 space-y-1.5">
-                  {task.topic && (
+                  {full.topic && (
                     <p className="text-xs"><span className="font-semibold text-indigo-700">Topic:</span>{" "}
-                      <span className="text-gray-700">{task.topic}</span></p>
+                      <span className="text-gray-700">{full.topic}</span></p>
                   )}
-                  {task.content && (
+                  {full.content && (
                     <p className="text-xs"><span className="font-semibold text-indigo-700">Content:</span>{" "}
-                      <span className="text-gray-700 whitespace-pre-wrap">{task.content}</span></p>
+                      <span className="text-gray-700 whitespace-pre-wrap">{full.content}</span></p>
                   )}
                   {task.referenceUrl && (
                     <p className="text-xs"><span className="font-semibold text-indigo-700">Reference:</span>{" "}
                       <a href={task.referenceUrl} target="_blank" rel="noreferrer"
                         className="text-indigo-600 underline underline-offset-2 break-all">{task.referenceUrl}</a></p>
                   )}
-                  {task.extraNote && (
+                  {full.extraNote && (
                     <p className="text-xs"><span className="font-semibold text-indigo-700">Note:</span>{" "}
-                      <span className="text-gray-700">{task.extraNote}</span></p>
+                      <span className="text-gray-700">{full.extraNote}</span></p>
                   )}
                 </div>
               )}

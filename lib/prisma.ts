@@ -6,6 +6,20 @@ import { getRuntimeDatabaseUrl } from "@/lib/db-url";
 // Prevent multiple Prisma Client instances during Next.js hot reload
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };
 
+/**
+ * How many connections this instance may hold, decided by what it is talking
+ * to. Supabase's transaction pooler answers on 6543 and is built to be given
+ * many short-lived connections; anything else gets a cautious number.
+ */
+function poolMax(connectionString: string): number {
+  const override = Number(process.env.DB_POOL_MAX);
+  if (Number.isFinite(override) && override >= 1) return Math.floor(override);
+
+  let port = "";
+  try { port = new URL(connectionString).port; } catch { /* unparseable — be cautious */ }
+  return port === "6543" ? 5 : 2;
+}
+
 function createPrismaClient() {
   // DATABASE_URL only. Throws, naming the variable, if it isn't set —
   // see lib/db-url.ts for why the POSTGRES_* fallbacks were removed.
@@ -30,11 +44,15 @@ function createPrismaClient() {
     // waiting no amount of Promise.all could remove.
     //
     // A handful of connections per instance is what the Supabase pooler in
-    // TRANSACTION mode (port 6543) is built for — it multiplexes them onto far
-    // fewer real backends. On the SESSION pooler (port 5432) each one is a
-    // real Postgres backend and the ceiling is low, so if this deployment is
-    // on 5432, set DB_POOL_MAX=1 until it moves.
-    max: Math.max(1, Number(process.env.DB_POOL_MAX ?? 5) || 5),
+    // TRANSACTION mode (port 6543) is built for: it multiplexes them onto far
+    // fewer real backends, so five per lambda is nothing.
+    //
+    // On the SESSION pooler or a direct connection (5432) each one is a real
+    // Postgres backend and the ceiling is low — five per instance across a
+    // dozen warm lambdas would exhaust it, and running out of connections is
+    // a worse outcome than running slowly. So the port decides, rather than a
+    // comment asking somebody to remember. DB_POOL_MAX overrides either way.
+    max: poolMax(connectionString),
 
     // This was 10 seconds, to dodge a real failure: a frozen lambda holds a
     // TCP connection that Supavisor eventually reaps, and the next thaw

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useCurrentUser } from "@/lib/useCurrentUser";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -413,14 +414,16 @@ function Logo() {
 /* ─────────────────────────────────────────────────────────────
    Main Sidebar component
    ───────────────────────────────────────────────────────────── */
-interface AppUser { id: string; name: string; email: string; role: string; }
 
 const COLLAPSE_KEY = "vsf_sidebar_collapsed";
 
 export function Sidebar() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const [appUser, setAppUser] = useState<AppUser | null>(null);
+  // Shared with the rest of the app rather than fetched again: this component
+  // had its own copy of /api/users/me, which on a fresh load raced the three
+  // other callers for the same row.
+  const { user: appUser } = useCurrentUser();
   const [unreadCount, setUnreadCount] = useState(0);
   const [collapsed, setCollapsed] = useState(false);
 
@@ -453,19 +456,13 @@ export function Sidebar() {
      layer lands — this cuts request volume ~50% vs. the old 30s cadence. */
   useEffect(() => {
     fetchUnread();
-    const interval = setInterval(fetchUnread, 60_000);
+    // Only while somebody is actually looking. This fired every 60s in every
+    // background tab, forever — useLiveRefresh already gates its own poll on
+    // visibility, and this one did not.
+    const tick = () => { if (document.visibilityState === "visible") fetchUnread(); };
+    const interval = setInterval(tick, 60_000);
     return () => clearInterval(interval);
   }, [fetchUnread]);
-
-  useEffect(() => {
-    // The footer identity is the LOGGED-IN user, not "some admin".
-    fetch("/api/users/me")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data: AppUser | null) => {
-        if (data && data.id) setAppUser(data);
-      })
-      .catch(() => {});
-  }, []);
 
   /* Close drawer on route change */
   useEffect(() => { setOpen(false); }, [pathname]);

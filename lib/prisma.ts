@@ -20,8 +20,21 @@ function createPrismaClient() {
     connectionString,
     // ── Serverless (Vercel) + Supabase pooler (Supavisor) tuning ──
     //
-    // One backend per lambda instance; Supavisor multiplexes the rest.
-    max: 1,
+    // One backend per lambda instance was the conservative default, and it
+    // quietly turned every Promise.all in this codebase into a queue.
+    //
+    // pg serialises queries over a single connection: with max 1, five
+    // "parallel" queries are five round trips one after another. A database
+    // round trip costs ~193ms from the function's region
+    // (docs/perf/BASELINE.md), so the dashboard's 14 queries were ~2.7s of
+    // waiting no amount of Promise.all could remove.
+    //
+    // A handful of connections per instance is what the Supabase pooler in
+    // TRANSACTION mode (port 6543) is built for — it multiplexes them onto far
+    // fewer real backends. On the SESSION pooler (port 5432) each one is a
+    // real Postgres backend and the ceiling is low, so if this deployment is
+    // on 5432, set DB_POOL_MAX=1 until it moves.
+    max: Math.max(1, Number(process.env.DB_POOL_MAX ?? 5) || 5),
 
     // This was 10 seconds, to dodge a real failure: a frozen lambda holds a
     // TCP connection that Supavisor eventually reaps, and the next thaw

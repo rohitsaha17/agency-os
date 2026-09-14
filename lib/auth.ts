@@ -14,6 +14,24 @@ export type AuthUser = {
   /** The organization this user belongs to. All tenant-scoped queries
    *  MUST filter by this id. */
   organizationId: string;
+  createdAt?: Date;
+  /** Whether a password is set — never the hash itself. */
+  hasPassword?: boolean;
+  /**
+   * The org, joined in the same round trip as the user (see
+   * lib/current-user.ts). Routes that need the tenant's currency, timezone
+   * or date format already have them and must not query again for one row.
+   */
+  organization?: {
+    id: string;
+    name: string;
+    slug: string;
+    logoUrl: string | null;
+    currency: string;
+    timezone: string;
+    dateFormat: string;
+    onboardingCompleted: boolean;
+  } | null;
 };
 
 /** v2: can this user act on the Head-of-Design approval queue? */

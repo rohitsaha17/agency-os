@@ -6,12 +6,38 @@ import { handleApiError } from "@/lib/api-errors";
 import { can } from "@/lib/permissions";
 
 /**
+ * Promise.all with names.
+ *
+ * Keeping the keys means a query can be added or removed without renumbering
+ * a positional destructure — which is how a parallel group this size quietly
+ * acquires a bug.
+ */
+async function resolveAll<T extends Record<string, Promise<unknown>>>(
+  obj: T,
+): Promise<{ [K in keyof T]: Awaited<T[K]> }> {
+  const keys = Object.keys(obj);
+  const values = await Promise.all(Object.values(obj));
+  return Object.fromEntries(keys.map((k, i) => [k, values[i]])) as never;
+}
+
+/**
  * GET /api/dashboard/v3 — the blocks THIS user's dashboard should show.
  *
  * One endpoint, capability-driven blocks (docs/V3_CONTEXT.md §8). Each role
  * lands somewhere useful rather than on the same page with things greyed
  * out, and money simply isn't computed for anyone without financials.view —
  * jsonFor strips it on the way out as a second layer.
+ *
+ * Every query is now issued in ONE parallel group. It used to be six groups
+ * awaited one after another — my work, then review, then projects, then
+ * cycles, then money, then workload — none of which needed anything from the
+ * one before it. At ~193ms per database round trip (docs/perf/BASELINE.md),
+ * fourteen queries in a queue is roughly 2.7 seconds of pure waiting, and it
+ * was the single biggest cost on the page everybody opens first.
+ *
+ * The capability guards still decide what is BUILT, not merely what is shown:
+ * a promise is only created for a block the user may see, so money is still
+ * never computed for anyone without financials.view.
  */
 export async function GET(req: NextRequest) {
   try {
@@ -26,16 +52,20 @@ export async function GET(req: NextRequest) {
     const reviews = can(user, "tasks.review");
     const managesClients = can(user, "clients.manage");
 
-    // ── Everyone: their own work ──
-    const [myOpen, myOverdue, myChangesRequested, myPostDue] = await Promise.all([
-      prisma.task.count({
+    const {
+      myOpen, myOverdue, myChangesRequested, myPostDue,
+      awaitingMyReview, myProjects, closingSoon,
+      invoices, receipts, expenses, needsPricing, overdueOrg, workload,
+    } = await resolveAll({
+      // ── Everyone: their own work ──
+      myOpen: prisma.task.count({
         where: {
           organizationId: orgId, deletedAt: null,
           status: { notIn: ["DONE"] },
           assignees: { some: { userId: user.id } },
         },
       }),
-      prisma.task.findMany({
+      myOverdue: prisma.task.findMany({
         where: {
           organizationId: orgId, deletedAt: null,
           status: { notIn: ["DONE"] },
@@ -49,7 +79,7 @@ export async function GET(req: NextRequest) {
         orderBy: { dueDate: "asc" },
         take: 8,
       }),
-      prisma.task.findMany({
+      myChangesRequested: prisma.task.findMany({
         where: {
           organizationId: orgId, deletedAt: null,
           status: "CHANGES_REQUESTED",
@@ -62,7 +92,7 @@ export async function GET(req: NextRequest) {
         take: 8,
       }),
       // The posting tasks that make an SMM's day
-      prisma.task.findMany({
+      myPostDue: prisma.task.findMany({
         where: {
           organizationId: orgId, deletedAt: null, kind: "POST",
           status: { not: "DONE" },
@@ -76,49 +106,119 @@ export async function GET(req: NextRequest) {
         orderBy: { dueDate: "asc" },
         take: 8,
       }),
-    ]);
 
-    // ── Reviewers: what's waiting on them ──
-    const awaitingMyReview = reviews
-      ? await prisma.task.count({
-          where: {
-            organizationId: orgId, deletedAt: null, status: "IN_REVIEW",
-            ...(managesClients
-              ? {}
-              : {
-                  OR: [
-                    { approverId: user.id },
-                    { project: { members: { some: { userId: user.id, role: "SMM" } } } },
-                  ],
-                }),
-          },
-        })
-      : 0;
-
-    // ── Planners: their projects and how each cycle is going ──
-    const myProjects = plans
-      ? await prisma.project.findMany({
-          where: {
-            organizationId: orgId,
-            status: { in: ["ACTIVE", "DRAFT"] },
-            ...(managesClients ? {} : { members: { some: { userId: user.id, role: "SMM" } } }),
-          },
-          select: {
-            id: true, name: true, type: true,
-            client: { select: { id: true, name: true } },
-            deliverables: { select: { qtyPerCycle: true } },
-            cycles: {
-              where: { status: "OPEN", startDate: { lte: now }, endDate: { gte: now } },
-              select: {
-                id: true, label: true, endDate: true,
-                contentItems: { select: { status: true, isExtra: true } },
-              },
-              take: 1,
+      // ── Reviewers: what's waiting on them ──
+      awaitingMyReview: reviews
+        ? prisma.task.count({
+            where: {
+              organizationId: orgId, deletedAt: null, status: "IN_REVIEW",
+              ...(managesClients
+                ? {}
+                : {
+                    OR: [
+                      { approverId: user.id },
+                      { project: { members: { some: { userId: user.id, role: "SMM" } } } },
+                    ],
+                  }),
             },
-          },
-          take: 12,
-        })
-      : [];
+          })
+        : Promise.resolve(0),
+
+      // ── Planners: their projects and how each cycle is going ──
+      myProjects: plans
+        ? prisma.project.findMany({
+            where: {
+              organizationId: orgId,
+              status: { in: ["ACTIVE", "DRAFT"] },
+              ...(managesClients ? {} : { members: { some: { userId: user.id, role: "SMM" } } }),
+            },
+            select: {
+              id: true, name: true, type: true,
+              client: { select: { id: true, name: true } },
+              deliverables: { select: { qtyPerCycle: true } },
+              cycles: {
+                where: { status: "OPEN", startDate: { lte: now }, endDate: { gte: now } },
+                select: {
+                  id: true, label: true, endDate: true,
+                  contentItems: { select: { status: true, isExtra: true } },
+                },
+                take: 1,
+              },
+            },
+            take: 12,
+          })
+        : Promise.resolve([]),
+
+      // ── Cycles closing soon: worth a nudge before the month ends ──
+      closingSoon: plans
+        ? prisma.projectCycle.findMany({
+            where: {
+              status: "OPEN",
+              endDate: { gte: today, lte: weekAhead },
+              project: {
+                organizationId: orgId,
+                ...(managesClients ? {} : { members: { some: { userId: user.id, role: "SMM" } } }),
+              },
+            },
+            select: {
+              id: true, label: true, endDate: true,
+              project: { select: { id: true, name: true, client: { select: { name: true } } } },
+            },
+            orderBy: { endDate: "asc" },
+            take: 6,
+          })
+        : Promise.resolve([]),
+
+      // ── Money: only built at all for those allowed to see it ──
+      invoices: seesMoney
+        ? prisma.invoice.findMany({
+            where: { organizationId: orgId, status: { notIn: ["CANCELLED"] } },
+            select: {
+              status: true, discountPct: true, taxPct: true,
+              lineItems: { select: { quantity: true, unitPrice: true } },
+            },
+          })
+        : Promise.resolve([]),
+      receipts: seesMoney
+        ? prisma.receipt.aggregate({ where: { organizationId: orgId }, _sum: { amount: true } })
+        : Promise.resolve(null),
+      expenses: seesMoney
+        ? prisma.expense.aggregate({
+            where: { organizationId: orgId, status: { in: ["APPROVED", "PAID"] } },
+            _sum: { amount: true },
+          })
+        : Promise.resolve(null),
+      needsPricing: seesMoney
+        ? prisma.billableItem.count({
+            where: { organizationId: orgId, status: "PENDING_PRICING" },
+          })
+        : Promise.resolve(0),
+      overdueOrg: seesMoney
+        ? prisma.task.count({
+            where: {
+              organizationId: orgId, deletedAt: null,
+              status: { not: "DONE" }, dueDate: { lt: today },
+            },
+          })
+        : Promise.resolve(0),
+
+      // ── Team workload: who's carrying what (managers and above) ──
+      workload: managesClients
+        ? prisma.user.findMany({
+            where: { organizationId: orgId, isActive: true },
+            select: {
+              id: true, name: true,
+              jobTitle: { select: { name: true } },
+              taskAssignments: {
+                where: { task: { deletedAt: null, status: { notIn: ["DONE"] } } },
+                // The task id was selected and never read. It is one column
+                // per open assignment across the whole org, on every load.
+                select: { task: { select: { status: true, dueDate: true } } },
+              },
+            },
+          })
+        : Promise.resolve([]),
+    });
 
     const projectProgress = myProjects
       .filter((p) => p.cycles.length > 0)
@@ -139,85 +239,25 @@ export async function GET(req: NextRequest) {
         };
       });
 
-    // ── Cycles closing soon: worth a nudge before the month ends ──
-    const closingSoon = plans
-      ? await prisma.projectCycle.findMany({
-          where: {
-            status: "OPEN",
-            endDate: { gte: today, lte: weekAhead },
-            project: {
-              organizationId: orgId,
-              ...(managesClients ? {} : { members: { some: { userId: user.id, role: "SMM" } } }),
-            },
-          },
-          select: {
-            id: true, label: true, endDate: true,
-            project: { select: { id: true, name: true, client: { select: { name: true } } } },
-          },
-          orderBy: { endDate: "asc" },
-          take: 6,
-        })
-      : [];
-
-    // ── Money: only computed at all for those allowed to see it ──
     let money: Record<string, unknown> | null = null;
     if (seesMoney) {
-      const [invoices, receipts, expenses, needsPricing, overdueOrg] = await Promise.all([
-        prisma.invoice.findMany({
-          where: { organizationId: orgId, status: { notIn: ["CANCELLED"] } },
-          select: {
-            status: true, discountPct: true, taxPct: true,
-            lineItems: { select: { quantity: true, unitPrice: true } },
-          },
-        }),
-        prisma.receipt.aggregate({ where: { organizationId: orgId }, _sum: { amount: true } }),
-        prisma.expense.aggregate({
-          where: { organizationId: orgId, status: { in: ["APPROVED", "PAID"] } },
-          _sum: { amount: true },
-        }),
-        prisma.billableItem.count({
-          where: { organizationId: orgId, status: "PENDING_PRICING" },
-        }),
-        prisma.task.count({
-          where: {
-            organizationId: orgId, deletedAt: null,
-            status: { not: "DONE" }, dueDate: { lt: today },
-          },
-        }),
-      ]);
-
       const lineTotal = (inv: (typeof invoices)[number]) => {
         const sub = inv.lineItems.reduce((s, li) => s + Number(li.quantity) * Number(li.unitPrice), 0);
         const disc = sub * (Number(inv.discountPct ?? 0) / 100);
         return (sub - disc) * (1 + Number(inv.taxPct ?? 0) / 100);
       };
       const invoiced = invoices.reduce((s, i) => s + lineTotal(i), 0);
-      const collected = Number(receipts._sum.amount ?? 0);
+      const collected = Number(receipts?._sum.amount ?? 0);
 
       money = {
         invoiced,
         collected,
         outstanding: Math.max(0, invoiced - collected),
-        expenses: Number(expenses._sum.amount ?? 0),
+        expenses: Number(expenses?._sum.amount ?? 0),
         needsPricing,
         overdueAcrossOrg: overdueOrg,
       };
     }
-
-    // ── Team workload: who's carrying what (managers and above) ──
-    const workload = managesClients
-      ? await prisma.user.findMany({
-          where: { organizationId: orgId, isActive: true },
-          select: {
-            id: true, name: true,
-            jobTitle: { select: { name: true } },
-            taskAssignments: {
-              where: { task: { deletedAt: null, status: { notIn: ["DONE"] } } },
-              select: { task: { select: { id: true, status: true, dueDate: true } } },
-            },
-          },
-        })
-      : [];
 
     return jsonFor(user, {
       role: user.role,

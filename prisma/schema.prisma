@@ -467,6 +467,7 @@ model ClientContact {
 
   client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
+  @@index([clientId])
   @@map("client_contacts")
 }
 
@@ -538,6 +539,10 @@ model ProjectMember {
   addedBy User?   @relation("ProjectMembersAdded", fields: [addedById], references: [id], onDelete: SetNull)
 
   @@id([projectId, userId])
+  // Membership is read by USER far more often than by project — "which
+  // projects am I the SMM on" gates the dashboard, the calendar and reports.
+  // The composite id leads with projectId, so that question had no index.
+  @@index([userId])
   @@map("project_members")
 }
 
@@ -976,6 +981,7 @@ model TimeEntry {
   task Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
   user User? @relation(fields: [userId], references: [id])
 
+  @@index([taskId])
   @@map("time_entries")
 }
 
@@ -1078,6 +1084,9 @@ model InvoiceLineItem {
   invoice     Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   contentItem ContentItem? @relation("BilledContentItems", fields: [contentItemId], references: [id])
 
+  // Postgres does not index a foreign key for you, and no invoice is ever
+  // loaded without its lines.
+  @@index([invoiceId])
   @@map("invoice_line_items")
 }
 
@@ -1344,6 +1353,7 @@ model FileComment {
   replies FileComment[] @relation("FileCommentThread")
   task    Task?         @relation(fields: [taskId], references: [id])
 
+  @@index([fileId])
   @@map("file_comments")
 }
 
@@ -1364,6 +1374,7 @@ model Comment {
   task   Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
   author User? @relation(fields: [authorId], references: [id])
 
+  @@index([taskId, createdAt])
   @@map("comments")
 }
 
@@ -1417,6 +1428,8 @@ model ChannelMember {
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([channelId, userId])
+  // The sidebar unread badge asks by userId, once a minute, for everyone.
+  @@index([userId])
   @@map("channel_members")
 }
 
@@ -1445,6 +1458,7 @@ model ChatMessage {
   replies     ChatMessage[]       @relation("MessageThread")
   attachments MessageAttachment[]
 
+  @@index([channelId, createdAt])
   @@map("chat_messages")
 }
 

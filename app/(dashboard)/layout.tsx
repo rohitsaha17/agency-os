@@ -6,6 +6,8 @@ import { ToastProvider } from "@/components/ui/Toast";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import { DateInputAutoOpen } from "@/components/ui/DateInputAutoOpen";
 import { AppTour } from "@/components/onboarding/AppTour";
+import { CurrentUserSeed } from "@/components/layout/CurrentUserSeed";
+import type { CurrentUser } from "@/lib/useCurrentUser";
 
 /**
  * Dashboard shell — server-gated.
@@ -24,13 +26,25 @@ export default async function DashboardLayout({
   if (!userId) redirect("/login");
 
   let gate: "login" | "onboarding" | "set-password" | "trial-ended" | null = null;
+  let seed: CurrentUser | null = null;
   try {
+    // Widened from the four gate fields to the whole shape the client needs.
+    // It is the same round trip either way, and it saves the browser asking
+    // /api/users/me for a user the server has already resolved.
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: {
+        id: true, name: true, email: true, role: true, designation: true,
+        avatarUrl: true, organizationId: true,
         isActive: true,
         passwordHash: true,
-        organization: { select: { onboardingCompleted: true, plan: true, trialEndsAt: true } },
+        organization: {
+          select: {
+            id: true, name: true, slug: true, logoUrl: true, currency: true,
+            timezone: true, dateFormat: true,
+            onboardingCompleted: true, plan: true, trialEndsAt: true,
+          },
+        },
       },
     });
     if (!user || !user.isActive) gate = "login";
@@ -42,6 +56,14 @@ export default async function DashboardLayout({
       user.organization.trialEndsAt.getTime() < Date.now()
     ) {
       gate = "trial-ended";
+    }
+
+    // Everything the client's useCurrentUser would have gone and fetched.
+    // `plan` and `trialEndsAt` are gate-only and stay on the server.
+    if (user && gate === null) {
+      const { isActive: _a, passwordHash, organization: org, ...rest } = user;
+      const { plan: _plan, trialEndsAt: _t, ...orgSafe } = org;
+      seed = { ...rest, hasPassword: !!passwordHash, organization: orgSafe } as CurrentUser;
     }
   } catch {
     // DB unreachable — let the page render; individual API calls will
@@ -55,6 +77,7 @@ export default async function DashboardLayout({
   return (
     <ToastProvider>
       <ConfirmProvider>
+        <CurrentUserSeed user={seed} />
         <DateInputAutoOpen />
         <div className="min-h-screen bg-gray-50">
           <Sidebar />

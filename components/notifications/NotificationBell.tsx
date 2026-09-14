@@ -51,7 +51,9 @@ export function NotificationBell({ align = "left" }: { align?: "left" | "right" 
 
   useEffect(() => {
     refresh();
-    const interval = setInterval(refresh, 60_000);
+    // Same as the sidebar's unread count: a hidden tab has nobody to notify.
+    const tick = () => { if (document.visibilityState === "visible") refresh(); };
+    const interval = setInterval(tick, 60_000);
     return () => clearInterval(interval);
   }, [refresh]);
 

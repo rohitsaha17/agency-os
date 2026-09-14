@@ -23,6 +23,16 @@ import { readFileSync } from "fs";
 
 const WITHHELD = ["description", "content", "topic", "extraNote"];
 
+/**
+ * The same split, applied to the other list endpoints that return tasks.
+ * `/api/projects/[id]/tasks` keeps `description` because the shared Task type
+ * requires it and it is a line rather than a brief.
+ */
+const ALSO_WITHHOLDING: Array<[string, string[]]> = [
+  ["app/api/projects/[id]/tasks/route.ts", ["content", "topic", "extraNote"]],
+  ["app/api/tasks/approvals/route.ts", ["description", "content", "topic", "extraNote"]],
+];
+
 /** Files that render a task straight from the list response. */
 const LIST_CONSUMERS = [
   "app/(dashboard)/tasks/page.tsx",
@@ -74,7 +84,34 @@ for (const field of WITHHELD.filter((f) => f !== "description")) {
   );
 }
 
-// ── 4. The detail route must not have picked up an omit of its own ──
+// ── 4. The other task lists withhold the brief too ──
+for (const [file, fields] of ALSO_WITHHOLDING) {
+  const src = readFileSync(file, "utf8");
+  const block = src.match(/omit:\s*\{([^}]*)\}/);
+  const omitted = block ? [...block[1].matchAll(/(\w+)\s*:\s*true/g)].map((m) => m[1]).sort() : [];
+  const want = [...fields].sort();
+  check(
+    JSON.stringify(omitted) === JSON.stringify(want),
+    `${file.replace("app/api/", "").replace("/route.ts", "")} omits [${want.join(", ")}]` +
+      (JSON.stringify(omitted) === JSON.stringify(want) ? "" : ` — found [${omitted.join(", ")}]`),
+  );
+}
+
+// ── 5. content-items must not go back to the whole creativeType row ──
+for (const file of ["app/api/content-items/route.ts", "app/api/content-items/[id]/route.ts"]) {
+  const src = readFileSync(file, "utf8");
+  check(
+    !/creativeType:\s*true/.test(src),
+    `${file.replace("app/api/", "").replace("/route.ts", "")} selects creativeType fields rather than the whole row`,
+  );
+}
+
+// ── 6. expenses withholds the description nothing renders ──
+const expenses = readFileSync("app/api/expenses/route.ts", "utf8");
+check(/omit:\s*\{\s*description:\s*true\s*\}/.test(expenses),
+  "GET /api/expenses omits description (notes stays — the client page shows it)");
+
+// ── 7. The detail route must not have picked up an omit of its own ──
 const detail = readFileSync("app/api/tasks/[id]/route.ts", "utf8");
 check(!/omit:\s*\{/.test(detail), "GET /api/tasks/[id] still returns the full record");
 

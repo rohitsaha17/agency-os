@@ -9,7 +9,10 @@ import { quotaCheck } from "@/lib/cycle-quota";
 import { createContentWorkTask, syncPlanningTask } from "@/lib/auto-tasks";
 
 const ITEM_INCLUDE = {
-  creativeType: true,
+  // Only id/name/color/icon are read anywhere in the app; the full row
+  // also carries organizationId, slug, countsAsShoot, isActive and sortOrder,
+  // repeated on every item in the month.
+  creativeType: { select: { id: true, name: true, color: true, icon: true } },
   client: { select: { id: true, name: true } },
   // v3: the client roll-up groups and colours by project
   project: { select: { id: true, name: true } },

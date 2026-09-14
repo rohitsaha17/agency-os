@@ -53,6 +53,10 @@ export async function GET(req: NextRequest) {
     const expenses = await prisma.expense.findMany({
       where,
       orderBy: { date: "desc" },
+      // `notes` stays — the client detail page shows it under each expense.
+      // `description` is fetched by every consumer of this list and rendered
+      // by none of them; measured at 41% of this payload together with notes.
+      omit: { description: true },
       include: expenseInclude,
     });
 

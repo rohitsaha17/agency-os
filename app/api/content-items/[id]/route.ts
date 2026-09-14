@@ -10,7 +10,10 @@ import { createContentWorkTask, syncPlanningTask } from "@/lib/auto-tasks";
 type Params = { params: Promise<{ id: string }> };
 
 const ITEM_INCLUDE = {
-  creativeType: true,
+  // Only id/name/color/icon are read anywhere in the app; the full row
+  // also carries organizationId, slug, countsAsShoot, isActive and sortOrder,
+  // repeated on every item in the month.
+  creativeType: { select: { id: true, name: true, color: true, icon: true } },
   client: { select: { id: true, name: true } },
   carriedFrom: { select: { id: true, date: true } },
   createdBy: { select: { id: true, name: true } },

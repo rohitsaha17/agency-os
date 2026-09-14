@@ -5,16 +5,7 @@ import { useRouter } from "next/navigation";
 import { Bell, CheckCheck } from "lucide-react";
 import { AcceptDeclineDialog } from "@/components/tasks/AcceptDeclineDialog";
 import { useCurrentUser } from "@/lib/useCurrentUser";
-
-interface NotificationItem {
-  id: string;
-  type: string;
-  title: string;
-  body: string | null;
-  link: string | null;
-  readAt: string | null;
-  createdAt: string;
-}
+import { useNotifications, patchNotifications, type NotificationItem } from "@/lib/useNotifications";
 
 function timeAgo(iso: string) {
   const diff = Date.now() - new Date(iso).getTime();
@@ -34,28 +25,9 @@ function timeAgo(iso: string) {
 export function NotificationBell({ align = "left" }: { align?: "left" | "right" }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [items, setItems] = useState<NotificationItem[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);
-
-  const refresh = useCallback(() => {
-    fetch("/api/notifications?limit=15")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data: { notifications?: NotificationItem[]; unreadCount?: number } | null) => {
-        if (!data) return;
-        if (Array.isArray(data.notifications)) setItems(data.notifications);
-        if (typeof data.unreadCount === "number") setUnreadCount(data.unreadCount);
-      })
-      .catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    refresh();
-    // Same as the sidebar's unread count: a hidden tab has nobody to notify.
-    const tick = () => { if (document.visibilityState === "visible") refresh(); };
-    const interval = setInterval(tick, 60_000);
-    return () => clearInterval(interval);
-  }, [refresh]);
+  // Shared across every mounted bell — the sidebar renders three of them.
+  const { items, unreadCount } = useNotifications();
 
   /* Close on outside click */
   useEffect(() => {
@@ -70,8 +42,10 @@ export function NotificationBell({ align = "left" }: { align?: "left" | "right" 
   const markRead = useCallback(
     async (n: NotificationItem) => {
       if (!n.readAt) {
-        setItems((prev) => prev.map((x) => (x.id === n.id ? { ...x, readAt: new Date().toISOString() } : x)));
-        setUnreadCount((c) => Math.max(0, c - 1));
+        patchNotifications((s) => ({
+          items: s.items.map((x) => (x.id === n.id ? { ...x, readAt: new Date().toISOString() } : x)),
+          unreadCount: Math.max(0, s.unreadCount - 1),
+        }));
         try { await fetch(`/api/notifications/${n.id}/read`, { method: "PATCH" }); } catch { /* ignore */ }
       }
     },
@@ -79,8 +53,10 @@ export function NotificationBell({ align = "left" }: { align?: "left" | "right" 
   );
 
   const markAllRead = useCallback(async () => {
-    setItems((prev) => prev.map((x) => (x.readAt ? x : { ...x, readAt: new Date().toISOString() })));
-    setUnreadCount(0);
+    patchNotifications((s) => ({
+      items: s.items.map((x) => (x.readAt ? x : { ...x, readAt: new Date().toISOString() })),
+      unreadCount: 0,
+    }));
     try { await fetch("/api/notifications/read-all", { method: "POST" }); } catch { /* ignore */ }
   }, []);
 

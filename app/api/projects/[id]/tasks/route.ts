@@ -34,10 +34,11 @@ type PrismaTask = {
   approver: { id: string; name: string } | null;
   revision: number;
   assignees: { userId: string; user: { id: string; organizationId: string; name: string; email: string; avatarUrl: string | null; role: string } }[];
-  // v2 fields
-  topic: string | null; content: string | null;
+  // v2 fields. topic/content/extraNote are deliberately absent: this list
+  // omits them, and a type that claimed otherwise would only be true until
+  // somebody read one.
   referenceUrl: string | null; referenceFileId: string | null;
-  extraNote: string | null; clientId: string | null;
+  clientId: string | null;
   contentItemId: string | null; preferredAssigneeId: string | null;
   assignmentStatus: string; sortOrder: number; isAdHoc: boolean;
 };
@@ -64,9 +65,8 @@ function buildTree(flat: PrismaTask[]): Task[] {
       isClientVisible: t.isClientVisible,
       showSubtasksToClient: t.showSubtasksToClient,
       // v2 fields
-      topic: t.topic, content: t.content,
       referenceUrl: t.referenceUrl, referenceFileId: t.referenceFileId,
-      extraNote: t.extraNote, clientId: t.clientId,
+      clientId: t.clientId,
       contentItemId: t.contentItemId, preferredAssigneeId: t.preferredAssigneeId,
       assignmentStatus: t.assignmentStatus as Task["assignmentStatus"],
       sortOrder: t.sortOrder, isAdHoc: t.isAdHoc,
@@ -125,6 +125,11 @@ export async function GET(req: NextRequest, { params }: Params) {
         projectId: id, deletedAt: null, organizationId: user.organizationId,
         AND: [taskVisibilityScope(user)],
       },
+      // The brief, withheld for the same reason as GET /api/tasks: only
+      // TaskPanel reads it, and it fetches the one task it is showing.
+      // `description` stays — the shared Task type requires it and it is a
+      // line, not a brief. See scripts/check-task-list-payload.ts.
+      omit: { content: true, topic: true, extraNote: true },
       include: {
         manager: { select: { id: true, name: true } },
         // The reviewer, so the panel can say who the work goes back to.

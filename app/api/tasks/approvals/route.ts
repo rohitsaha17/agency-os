@@ -39,6 +39,10 @@ export async function GET(req: NextRequest) {
                 ],
               }),
         },
+        // The four unbounded free-text columns, withheld for the same reason as
+        // GET /api/tasks: only TaskPanel reads them, and it fetches the one
+        // task it is showing. See scripts/check-task-list-payload.ts.
+        omit: { description: true, content: true, topic: true, extraNote: true },
         include: {
           project: { select: { id: true, name: true, client: { select: { id: true, name: true } } } },
           client: { select: { id: true, name: true } },

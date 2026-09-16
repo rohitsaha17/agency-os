@@ -35,7 +35,23 @@ export type Capability =
   | "expenses.create"
   | "invoices.manage"
   | "reports.all"
-  | "reports.delivery";
+  | "reports.delivery"
+  // ── HR ──
+  /** Check yourself in, and ask for leave. Everybody. */
+  | "attendance.mark"
+  /** See who is in today and who is on leave — the people who hand out work. */
+  | "hr.view"
+  /** Staff records, and deciding leave. */
+  | "hr.manage"
+  /**
+   * Salary, the salary sheet, advances and loans.
+   *
+   * Deliberately NOT financials.view, which a Manager has. A manager seeing
+   * every client invoice is the job; a manager seeing every colleague's pay
+   * is a different thing, and the safe default for it is no. Widening this is
+   * one line here if an agency wants it that way.
+   */
+  | "payroll.manage";
 
 /** Who a role may hand work to. */
 export type AssignScope = "anyone" | "smmAndBelow" | "juniorsOnly" | "selfOnly";
@@ -63,6 +79,7 @@ const MATRIX: Record<Exclude<Role, "MEMBER">, Record<Capability, boolean>> = {
     "tasks.assign": true, "tasks.review": true, "cycles.close": true,
     "billing.flag": true, "financials.view": true, "expenses.create": true,
     "invoices.manage": true, "reports.all": true, "reports.delivery": true,
+    "attendance.mark": true, "hr.view": true, "hr.manage": true, "payroll.manage": true,
   },
   ADMIN: {
     "users.manage": true, "settings.manage": true, "clients.manage": true, "projects.manage": true,
@@ -70,6 +87,7 @@ const MATRIX: Record<Exclude<Role, "MEMBER">, Record<Capability, boolean>> = {
     "tasks.assign": true, "tasks.review": true, "cycles.close": true,
     "billing.flag": true, "financials.view": true, "expenses.create": true,
     "invoices.manage": true, "reports.all": true, "reports.delivery": true,
+    "attendance.mark": true, "hr.view": true, "hr.manage": true, "payroll.manage": true,
   },
   MANAGER: {
     "users.manage": false, // read-only on Settings ▸ Users
@@ -83,6 +101,7 @@ const MATRIX: Record<Exclude<Role, "MEMBER">, Record<Capability, boolean>> = {
     "invoices.manage": true,
     "reports.all": false, // no org P&L / revenue / margin
     "reports.delivery": true,
+    "attendance.mark": true, "hr.view": true, "hr.manage": true, "payroll.manage": false,
   },
   SMM: {
     "users.manage": false, "settings.manage": false, "clients.manage": false, "projects.manage": false,
@@ -93,6 +112,7 @@ const MATRIX: Record<Exclude<Role, "MEMBER">, Record<Capability, boolean>> = {
     "financials.view": false, // THE money blackout
     "expenses.create": true, "invoices.manage": false,
     "reports.all": false, "reports.delivery": true, // own projects only
+    "attendance.mark": true, "hr.view": true, "hr.manage": false, "payroll.manage": false,
   },
   TEAM: {
     "users.manage": false, "settings.manage": false, "clients.manage": false, "projects.manage": false,
@@ -105,6 +125,7 @@ const MATRIX: Record<Exclude<Role, "MEMBER">, Record<Capability, boolean>> = {
     "expenses.create": true,
     "invoices.manage": false,
     "reports.all": false, "reports.delivery": false, // own tasks only
+    "attendance.mark": true, "hr.view": false, "hr.manage": false, "payroll.manage": false,
   },
 };
 

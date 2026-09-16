@@ -321,6 +321,14 @@ model User {
   projectMemberships ProjectMember[]
   statusChanges      StatusHistory[] @relation("StatusChanges")
   notifications      Notification[]
+  // ── HR ──
+  attendance         Attendance[]    @relation("AttendanceUser")
+  attendanceRecorded Attendance[]    @relation("AttendanceRecorder")
+  leaveRequests      LeaveRequest[]  @relation("LeaveUser")
+  leaveDecisions     LeaveRequest[]  @relation("LeaveDecider")
+  staffProfile       StaffProfile?
+  salaryPayments     SalaryPayment[]
+  advances           StaffAdvance[]
   preferredForTasks  Task[]          @relation("TaskPreferredAssignee")
   deliveries         TaskDelivery[]  @relation("Deliveries")
   changeRequests     ChangeRequest[] @relation("ChangeRequests")
@@ -1559,6 +1567,12 @@ model Organization {
   reviewBatches ReviewBatch[]
   billableItems BillableItem[]
 
+  // ── HR ──
+  attendance     Attendance[]
+  leaveRequests  LeaveRequest[]
+  staffProfiles  StaffProfile[]
+  salaryPayments SalaryPayment[]
+  staffAdvances  StaffAdvance[]
   @@map("organizations")
 }
 
@@ -1788,4 +1802,190 @@ model Notification {
   @@index([userId, readAt])
   @@index([userId, createdAt])
   @@map("notifications")
+}
+
+// ════════════════════════════════════════════════════════════════════════
+//  HR — attendance, staff records, leave, payroll
+//
+//  The rule that shapes all of this: the agency does not pay by the hour.
+//  Nobody is being timed. Attendance answers "who is in today" so work can
+//  be handed out, and "was this person here" when the month is reviewed —
+//  not "how long did they work". So there is a check-in and no check-out,
+//  and no hours are derived from any of it.
+// ════════════════════════════════════════════════════════════════════════
+
+/// Who recorded an attendance row. ADMIN covers the person who forgot.
+enum AttendanceSource {
+  SELF
+  ADMIN
+}
+
+/// One row per person per day they were in.
+///
+/// Absence is the absence of a row. That is deliberate: a table that also
+/// stored "not in today" would need something to write it, every day, for
+/// everyone, and would be wrong every time that job didn't run.
+model Attendance {
+  id             String           @id @default(cuid())
+  organizationId String
+  userId         String
+  /// Midnight UTC of the day, always written through lib/hr-dates.ts dayKey()
+  /// so two spellings of the same date can never become two rows.
+  date           DateTime
+  checkedInAt    DateTime         @default(now())
+  note           String?
+  source         AttendanceSource @default(SELF)
+  /// Set when an admin marked somebody present, so the record says who did.
+  recordedById   String?
+  createdAt      DateTime         @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation("AttendanceUser", fields: [userId], references: [id], onDelete: Cascade)
+  recordedBy   User?        @relation("AttendanceRecorder", fields: [recordedById], references: [id], onDelete: SetNull)
+
+  @@unique([userId, date])
+  @@index([organizationId, date])
+  @@map("attendance")
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+/// Whether an approved leave is deducted from pay. Set by the approver, not
+/// the requester — which is why it is null until somebody decides.
+enum LeaveKind {
+  PAID
+  UNPAID
+}
+
+model LeaveRequest {
+  id             String      @id @default(cuid())
+  organizationId String
+  userId         String
+  /// Inclusive range, both midnight UTC day keys. A single day is start == end.
+  startDate      DateTime
+  endDate        DateTime
+  reason         String
+  status         LeaveStatus @default(PENDING)
+  /// Null while PENDING — the kind is the approver's decision.
+  kind           LeaveKind?
+  decidedById    String?
+  decidedAt      DateTime?
+  decisionNote   String?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation("LeaveUser", fields: [userId], references: [id], onDelete: Cascade)
+  decidedBy    User?        @relation("LeaveDecider", fields: [decidedById], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, status])
+  @@index([userId, startDate])
+  @@map("leave_requests")
+}
+
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  INTERN
+}
+
+/// Everything about a person that isn't needed to render their avatar.
+///
+/// A separate table rather than more columns on User, because `/api/users` is
+/// fetched by half the components in the app — the task panel, every assignee
+/// picker, the sidebar. Salary living on User would be one careless `select`
+/// away from the whole team. Here it cannot leak by accident: reaching it
+/// takes a deliberate query, and those are all behind payroll.manage.
+model StaffProfile {
+  id             String          @id @default(cuid())
+  organizationId String
+  userId         String          @unique
+  phone          String?
+  dateOfBirth    DateTime?
+  dateOfJoining  DateTime?
+  address        String?
+  emergencyName  String?
+  emergencyPhone String?
+  employmentType EmploymentType  @default(FULL_TIME)
+  /// Monthly, in the organization's currency. payroll.manage only — never
+  /// returned by any endpoint a colleague can call.
+  monthlySalary  Decimal?        @db.Decimal(12, 2)
+  notes          String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@map("staff_profiles")
+}
+
+enum SalaryStatus {
+  UNPAID
+  PAID
+}
+
+/// One row per person per month — the salary sheet is a query over these.
+model SalaryPayment {
+  id              String       @id @default(cuid())
+  organizationId  String
+  userId          String
+  /// "2026-09". A string, not a date: a month is what is being paid for, and
+  /// storing it as a timestamp invites a timezone to move it into August.
+  month           String
+  grossAmount     Decimal      @db.Decimal(12, 2)
+  /// Advance or loan recovered out of this month's pay.
+  advanceDeducted Decimal      @default(0) @db.Decimal(12, 2)
+  netAmount       Decimal      @db.Decimal(12, 2)
+  status          SalaryStatus @default(UNPAID)
+  paidOn          DateTime?
+  note            String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, month])
+  @@index([organizationId, month])
+  @@map("salary_payments")
+}
+
+/// An advance is next month's pay, early. A loan is money lent that comes
+/// back over several months. Same shape, and the distinction is the label
+/// the agency puts on it — so one table with a kind, not two tables.
+enum AdvanceKind {
+  ADVANCE
+  LOAN
+}
+
+model StaffAdvance {
+  id             String      @id @default(cuid())
+  organizationId String
+  userId         String
+  kind           AdvanceKind @default(ADVANCE)
+  amount         Decimal     @db.Decimal(12, 2)
+  /// Running total recovered. Outstanding is amount − amountRepaid, computed
+  /// rather than stored, so the two can never disagree.
+  amountRepaid   Decimal     @default(0) @db.Decimal(12, 2)
+  givenOn        DateTime    @default(now())
+  note           String?
+  /// Set when it is settled, so a closed loan stops appearing in the running
+  /// balance without being deleted.
+  closedAt       DateTime?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, userId])
+  @@map("staff_advances")
 }

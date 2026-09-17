@@ -9,7 +9,7 @@ import {
   Calendar, CalendarClock, Receipt, Settings,
   HardDrive, TrendingDown, Scroll, Menu, X, CalendarOff,
   Sun, MessageSquare, LogOut, BarChart3,
-  PanelLeftClose, PanelLeftOpen, ShieldCheck,
+  PanelLeftClose, PanelLeftOpen, ShieldCheck, UserCog,
 } from "lucide-react";
 import { ThemeToggle, ThemeToggleIcon } from "@/components/ui/ThemeToggle";
 import { BrandLogo } from "@/components/ui/BrandLogo";
@@ -76,6 +76,10 @@ const navItems: {
       { href: "/calendar",     label: "Team Calendar", icon: Calendar,     need: "content.plan"      },
       { href: "/files",        label: "Files",        icon: HardDrive,     need: null                },
       { href: "/reports",      label: "Reports",      icon: BarChart3,     need: "reports.delivery"  },
+      // Everyone lands here to check in and ask for leave; the staff record,
+      // the salary sheet and the advances are tabs inside, each behind its
+      // own capability. `need: null` because checking in is for everybody.
+      { href: "/hr",           label: "People",       icon: UserCog,       need: null                },
     ],
   },
   {

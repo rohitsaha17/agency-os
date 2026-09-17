@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useCurrentUser } from "@/lib/useCurrentUser";
 import { can, type Capability } from "@/lib/permissions";
 import { RoleBlocks } from "@/components/dashboard/RoleBlocks";
+import { CheckInCard } from "@/components/hr/CheckInCard";
 import { formatMoney } from "@/lib/money";
 import {
   AlertCircle, Clock, CheckCircle2, Ban, FolderKanban,
@@ -689,6 +690,9 @@ export default function DashboardPage() {
           <h2 className="text-sm font-semibold text-gray-900 mb-4">Quick Actions</h2>
           <QuickActions />
         </div>
+
+        {/* First thing on the page, because it is the first thing of the day. */}
+        <CheckInCard timezone={currentUser?.organization?.timezone} />
 
         {/* v3: the blocks THIS role needs — a junior lands on their work, an
             SMM on their review queue, a manager on the money. */}

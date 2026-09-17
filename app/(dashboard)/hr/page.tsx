@@ -21,26 +21,30 @@
 import { useState, useEffect, useCallback, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import {
-  Users, CalendarCheck, Plane, Wallet, HandCoins, Search,
+  Users, CalendarCheck, CalendarRange, Plane, Wallet, HandCoins, Search,
 } from "lucide-react";
 import { useCurrentUser } from "@/lib/useCurrentUser";
 import { can, type Capability } from "@/lib/permissions";
 import { RequireCapability } from "@/components/layout/RequireCapability";
 import { TodayTab } from "@/components/hr/TodayTab";
+import { AttendanceTab } from "@/components/hr/AttendanceTab";
 import { StaffTab } from "@/components/hr/StaffTab";
 import { LeaveTab } from "@/components/hr/LeaveTab";
 import { PayrollTab } from "@/components/hr/PayrollTab";
 import { AdvancesTab } from "@/components/hr/AdvancesTab";
 
-type TabId = "today" | "staff" | "leave" | "payroll" | "advances";
+type TabId = "today" | "attendance" | "staff" | "leave" | "payroll" | "advances";
 
 const TABS: { id: TabId; label: string; icon: typeof Users; need: Capability | null }[] = [
-  { id: "today",    label: "Today",    icon: CalendarCheck, need: "hr.view" },
-  { id: "staff",    label: "Staff",    icon: Users,         need: "hr.view" },
+  { id: "today",      label: "Today",      icon: CalendarCheck, need: "hr.view" },
+  // The month-end grid. Same capability as Today: if you can see who is in
+  // now, you can see who was in on the 4th.
+  { id: "attendance", label: "Attendance", icon: CalendarRange, need: "hr.view" },
+  { id: "staff",      label: "Staff",      icon: Users,         need: "hr.view" },
   // Everyone has their own leave, so this one is never hidden.
-  { id: "leave",    label: "Leave",    icon: Plane,         need: null },
-  { id: "payroll",  label: "Payroll",  icon: Wallet,        need: "payroll.manage" },
-  { id: "advances", label: "Advances", icon: HandCoins,     need: "payroll.manage" },
+  { id: "leave",      label: "Leave",      icon: Plane,         need: null },
+  { id: "payroll",    label: "Payroll",    icon: Wallet,        need: "payroll.manage" },
+  { id: "advances",   label: "Advances",   icon: HandCoins,     need: "payroll.manage" },
 ];
 
 function HRPageBody() {
@@ -108,6 +112,7 @@ function HRPageBody() {
       </div>
 
       {tab === "today" && <TodayTab query={q} />}
+      {tab === "attendance" && <AttendanceTab canEdit={can(user, "hr.manage")} />}
       {tab === "staff" && <StaffTab query={q} canEdit={can(user, "hr.manage")} seesPay={can(user, "payroll.manage")} />}
       {tab === "leave" && <LeaveTab canDecide={can(user, "hr.manage")} />}
       {tab === "payroll" && <PayrollTab currency={user?.organization?.currency ?? "INR"} />}

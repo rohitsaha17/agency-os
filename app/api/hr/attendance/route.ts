@@ -6,12 +6,17 @@ import { handleApiError, ApiError } from "@/lib/api-errors";
 import { dayKey, dayString, canSelfCheckIn } from "@/lib/hr";
 
 /**
- * GET /api/hr/attendance?month=YYYY-MM[&userId=…]
+ * GET /api/hr/attendance?month=YYYY-MM[&userId=…|&scope=team]
  *
  * Which days somebody was in. Defaults to the caller's own record, which is
  * why there is no capability on the default path — everybody may see their
  * own attendance, and asking about ANYONE ELSE is the thing that needs
  * hr.view.
+ *
+ * `scope=team` is the month-end grid: everybody, plus the names to put down
+ * the side. The names ship with the rows rather than leaving the grid to
+ * fetch /api/hr/staff separately — that would be a second round trip for
+ * data this query already knows it needs, at ~130ms a trip in production.
  */
 export async function GET(req: NextRequest) {
   try {
@@ -19,9 +24,12 @@ export async function GET(req: NextRequest) {
     const sp = req.nextUrl.searchParams;
     const month = sp.get("month");
     const askedFor = sp.get("userId");
+    const team = sp.get("scope") === "team";
 
-    if (askedFor && askedFor !== user.id) requireCapability(user, "hr.view");
+    if (team || (askedFor && askedFor !== user.id)) requireCapability(user, "hr.view");
     const userId = askedFor ?? user.id;
+    /** Everybody, or exactly one person. */
+    const who = team ? {} : { userId };
 
     if (!month || !/^\d{4}-\d{2}$/.test(month)) {
       throw new ApiError("A month is required, as YYYY-MM", 400);
@@ -30,11 +38,11 @@ export async function GET(req: NextRequest) {
     const from = new Date(Date.UTC(y, m - 1, 1));
     const to = new Date(Date.UTC(y, m, 1));
 
-    const [days, leave] = await Promise.all([
+    const [days, leave, people] = await Promise.all([
       prisma.attendance.findMany({
         where: {
           organizationId: user.organizationId,
-          ...(askedFor === "__all__" ? {} : { userId }),
+          ...who,
           date: { gte: from, lt: to },
         },
         select: {
@@ -48,17 +56,33 @@ export async function GET(req: NextRequest) {
       prisma.leaveRequest.findMany({
         where: {
           organizationId: user.organizationId,
-          ...(askedFor === "__all__" ? {} : { userId }),
+          ...who,
           status: "APPROVED",
           startDate: { lt: to },
           endDate: { gte: from },
         },
         select: { userId: true, startDate: true, endDate: true, kind: true },
       }),
+      // Only for the grid. One person looking at their own month already
+      // knows whose it is.
+      team
+        ? prisma.user.findMany({
+            where: { organizationId: user.organizationId, isActive: true },
+            select: {
+              id: true, name: true, avatarUrl: true,
+              jobTitle: { select: { name: true } },
+            },
+            orderBy: { name: "asc" },
+          })
+        : Promise.resolve([]),
     ]);
 
     return NextResponse.json({
       month,
+      people: people.map((p) => ({
+        id: p.id, name: p.name, avatarUrl: p.avatarUrl,
+        craft: p.jobTitle?.name ?? null,
+      })),
       days: days.map((d) => ({
         ...d,
         date: dayString(d.date),

@@ -15,7 +15,8 @@ import { CalendarTasksSwitch } from "@/components/calendar/CalendarTasksSwitch";
 import { useCurrentUser } from "@/lib/useCurrentUser";
 import { can } from "@/lib/permissions";
 import { TaskPanel } from "@/components/tasks/TaskPanel";
-import { TaskListView, TaskBoardView, useBuckets, type BucketId } from "@/components/tasks/TaskViews";
+import { TaskListView, TaskBoardView, useBuckets, useProjectGroups } from "@/components/tasks/TaskViews";
+import { StatusLegend } from "@/components/tasks/StatusLegend";
 import { StatusDot, STATUS_DOT } from "@/components/tasks/TaskList";
 import { AcceptDeclineDialog } from "@/components/tasks/AcceptDeclineDialog";
 import { clickable } from "@/lib/a11y";
@@ -26,14 +27,33 @@ import { clickable } from "@/lib/a11y";
  * The tint runs down the card's left edge and the pill spells the state out,
  * so a glance answers "where is this?" without knowing what amber means.
  */
+/**
+ * The left edge and the resting tint, per status.
+ *
+ * Hover is NOT here. It used to be, while the row also carried its own
+ * generic hover:bg — two hover utilities on one element, with Tailwind
+ * picking the winner by stylesheet order rather than by which was meant. The
+ * result was a highlight you had to hunt for. One hover, defined once, on the
+ * row (ROW_HOVER below).
+ */
 const STATUS_ROW_TINT: Record<TaskStatus, string> = {
-  TODO:              "border-l-gray-300 dark:border-l-slate-600 hover:bg-gray-50 dark:hover:bg-slate-800/50",
-  IN_PROGRESS:       "border-l-blue-500 bg-blue-50/40 dark:bg-blue-500/[0.07] hover:bg-blue-50 dark:hover:bg-blue-500/[0.12]",
-  CHANGES_REQUESTED: "border-l-orange-500 bg-orange-50/50 dark:bg-orange-500/[0.08] hover:bg-orange-50 dark:hover:bg-orange-500/[0.14]",
-  IN_REVIEW:         "border-l-amber-400 bg-amber-50/50 dark:bg-amber-400/[0.08] hover:bg-amber-50 dark:hover:bg-amber-400/[0.14]",
-  DONE:              "border-l-emerald-500 hover:bg-gray-50 dark:hover:bg-slate-800/50",
-  BLOCKED:           "border-l-red-500 bg-red-50/50 dark:bg-red-500/[0.08] hover:bg-red-50 dark:hover:bg-red-500/[0.14]",
+  TODO:              "border-l-gray-300 dark:border-l-slate-600",
+  IN_PROGRESS:       "border-l-blue-500 bg-blue-50/40 dark:bg-blue-500/[0.07]",
+  CHANGES_REQUESTED: "border-l-orange-500 bg-orange-50/50 dark:bg-orange-500/[0.08]",
+  IN_REVIEW:         "border-l-amber-400 bg-amber-50/50 dark:bg-amber-400/[0.08]",
+  DONE:              "border-l-emerald-500",
+  BLOCKED:           "border-l-red-500 bg-red-50/50 dark:bg-red-500/[0.08]",
 };
+
+/**
+ * What a row does under the cursor. Strong enough to see at a glance down a
+ * list of forty — gray-50 on white was a two-percent difference nobody
+ * noticed. The ring does the work the background can't on a row that already
+ * has a status tint of its own.
+ */
+const ROW_HOVER =
+  "hover:bg-gray-100/80 dark:hover:bg-white/[0.07] " +
+  "hover:ring-1 hover:ring-inset hover:ring-gray-200 dark:hover:ring-white/[0.10]";
 
 const STATUS_PILL: Record<TaskStatus, string> = {
   TODO:              "bg-gray-50 text-gray-600 border-gray-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700",
@@ -615,7 +635,7 @@ function TasksBoardInner() {
       // text to open something the size of a card is a small, constant tax.
       <div key={`org-${t.id}`}
         {...clickable(() => openTaskOrPlan(t))}
-        className={`group flex items-center gap-2.5 pl-2.5 pr-3 py-2.5 rounded-xl border-l-[3px] transition-surface duration-150 cursor-pointer hover:bg-gray-50 dark:hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${STATUS_ROW_TINT[t.status]} ${done ? "opacity-60" : ""}`}>
+        className={`group flex items-center gap-2.5 pl-2.5 pr-3 py-2.5 rounded-xl border-l-[3px] transition-surface duration-150 cursor-pointer ${ROW_HOVER} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${STATUS_ROW_TINT[t.status]} ${done ? "opacity-60" : ""}`}>
         {/*
           The same control as the project board, deliberately. This used to be
           a tick that jumped a task straight to complete, so the same dot meant
@@ -985,8 +1005,8 @@ function TasksBoardInner() {
     try { localStorage.setItem("vsf:tasks:layout", next); } catch { /* ignore */ }
   }, []);
 
-  const [collapsedBuckets, setCollapsedBuckets] = useState<Set<BucketId>>(new Set());
-  const toggleBucket = useCallback((id: BucketId) => {
+  const [collapsedBuckets, setCollapsedBuckets] = useState<Set<string>>(new Set());
+  const toggleBucket = useCallback((id: string) => {
     setCollapsedBuckets((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id); else next.add(id);
@@ -1014,10 +1034,24 @@ function TasksBoardInner() {
     });
   }, [orgTasks, hiddenLists, query]);
 
+  const isTaskDone = useCallback((t: Task) => t.status === "DONE", []);
+
+  /** The list answers "what is late". */
   const buckets = useBuckets(
     boardTasks,
     useCallback((t: Task) => t.dueDate, []),
-    useCallback((t: Task) => t.status === "DONE", []),
+    isTaskDone,
+  );
+
+  /** The board answers "how is each project doing". */
+  const projectGroups = useProjectGroups(
+    boardTasks,
+    useCallback((t: Task) => ({
+      id: t.projectId ?? null,
+      name: t.project?.name ?? "No project",
+      client: t.client?.name ?? null,
+    }), []),
+    isTaskDone,
   );
   // What My List actually holds: personal reminders plus any task with no
   // project (project work lives in its own automatic list).
@@ -1210,6 +1244,12 @@ function TasksBoardInner() {
             </div>
           )}
 
+          {/* What the colours mean. The rows carry a tint, a coloured edge and
+              a red date, and none of it said what it stood for. */}
+          {view !== "starred" && (
+            <StatusLegend className="px-4 sm:px-6 pb-2 flex-shrink-0" />
+          )}
+
           {view === "starred" ? (
           <div className="h-full flex items-stretch gap-4 p-4 sm:p-6">
             {(
@@ -1245,7 +1285,7 @@ function TasksBoardInner() {
           ) : (
             <div className="flex-1 min-h-0">
               <TaskBoardView
-                buckets={buckets}
+                buckets={projectGroups}
                 renderRow={renderOrgTaskRow}
                 header={<MyListPanel personal={noListItems} boxed />}
                 empty={<EmptyBoard query={query} />}

@@ -10,9 +10,11 @@
  * opinion about any of it. Changing how work is arranged should not be able
  * to change what you can do to it.
  *
- * The grouping is by WHEN, not by project. "What is late and what is today"
- * is the question somebody opens this page with; which project a thing
- * belongs to is how you filter, and the rail already does that.
+ * The two views group DIFFERENTLY on purpose, because they answer different
+ * questions. The list is by WHEN — what is late, what is today — which is
+ * what you open the page to find out. The board is by PROJECT, because a
+ * column you can scan top to bottom is how you see one client's whole load at
+ * once, and that is what a board is good at.
  *
  * Buckets are computed against the viewer's own clock, deliberately. A due
  * date is a promise made in the office's day, and an editor in Kolkata
@@ -25,13 +27,16 @@ import { ChevronRight } from "lucide-react";
 export type BucketId = "overdue" | "today" | "tomorrow" | "week" | "later" | "someday" | "done";
 
 export interface Bucket<T> {
-  id: BucketId;
+  /** A BucketId for the date view, a project id for the board. */
+  id: string;
   label: string;
   tasks: T[];
   /** Finished, of the total. The reference reads "(0/15)". */
   done: number;
   total: number;
   urgent?: boolean;
+  /** The client, on a project column. */
+  subtitle?: string;
 }
 
 /** Local calendar day, as YYYY-MM-DD. Never via UTC — see the calendar's off-by-one. */
@@ -43,6 +48,41 @@ function addDays(d: Date, n: number): Date {
   const x = new Date(d);
   x.setDate(x.getDate() + n);
   return x;
+}
+
+/**
+ * Columns for the board: one per project, plus a home for loose work.
+ *
+ * Sorted by how much is open rather than alphabetically — the project with
+ * eleven things outstanding is the one worth looking at first, and the
+ * alphabet has no opinion about that.
+ */
+export function useProjectGroups<T>(
+  tasks: T[],
+  getProject: (t: T) => { id: string | null; name: string; client?: string | null },
+  isDone: (t: T) => boolean,
+): Bucket<T>[] {
+  return useMemo(() => {
+    const groups = new Map<string, Bucket<T> & { open: number }>();
+    for (const t of tasks) {
+      const p = getProject(t);
+      const id = p.id ?? "__none__";
+      let g = groups.get(id);
+      if (!g) {
+        g = { id, label: p.name, tasks: [], done: 0, total: 0, open: 0, subtitle: p.client ?? undefined };
+        groups.set(id, g);
+      }
+      g.tasks.push(t);
+      g.total++;
+      if (isDone(t)) g.done++; else g.open++;
+    }
+    return [...groups.values()].sort((a, b) => {
+      // Loose work last: it is a holding pen, not a project.
+      if (a.id === "__none__") return 1;
+      if (b.id === "__none__") return -1;
+      return b.open - a.open || a.label.localeCompare(b.label);
+    });
+  }, [tasks, getProject, isDone]);
 }
 
 export function useBuckets<T>(
@@ -98,8 +138,8 @@ export function useBuckets<T>(
 interface ViewProps<T> {
   buckets: Bucket<T>[];
   renderRow: (t: T) => React.ReactNode;
-  collapsed: Set<BucketId>;
-  onToggle: (id: BucketId) => void;
+  collapsed: Set<string>;
+  onToggle: (id: string) => void;
   /** Rendered inside the first bucket — the quick add belongs at the top. */
   header?: React.ReactNode;
   empty?: React.ReactNode;
@@ -159,13 +199,18 @@ export function TaskBoardView<T>({ buckets, renderRow, header, empty }: Omit<Vie
             key={b.id}
             className="w-[85vw] sm:w-[320px] flex-shrink-0 flex flex-col h-full bg-white dark:bg-slate-900 border border-gray-200 dark:border-white/[0.08] rounded-2xl"
           >
-            <header className="px-4 py-3 flex items-center gap-1.5 flex-shrink-0 border-b border-gray-100 dark:border-white/[0.05]">
-              <h2 className={`text-[13px] font-semibold ${
-                b.urgent ? "text-red-600 dark:text-red-400" : "text-gray-800 dark:text-slate-200"
-              }`}>
-                {b.label}
-              </h2>
-              <span className="text-[12px] text-gray-400 tabular-nums">({b.done}/{b.total})</span>
+            <header className="px-4 py-3 flex-shrink-0 border-b border-gray-100 dark:border-white/[0.05]">
+              <div className="flex items-center gap-1.5">
+                <h2 className={`text-[13px] font-semibold truncate ${
+                  b.urgent ? "text-red-600 dark:text-red-400" : "text-gray-800 dark:text-slate-200"
+                }`}>
+                  {b.label}
+                </h2>
+                <span className="text-[12px] text-gray-400 tabular-nums flex-shrink-0">({b.done}/{b.total})</span>
+              </div>
+              {b.subtitle && (
+                <p className="text-[11px] text-gray-400 truncate mt-0.5">{b.subtitle}</p>
+              )}
             </header>
             <div className="flex-1 overflow-y-auto p-2 space-y-1.5 min-h-0">
               {b.tasks.map((t) => renderRow(t))}

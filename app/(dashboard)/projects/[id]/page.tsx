@@ -20,6 +20,7 @@ import { TaskList } from "@/components/tasks/TaskList";
 import { TaskModal } from "@/components/tasks/TaskModal";
 import { PlanTab } from "@/components/projects/PlanTab";
 import { ProjectSummary, inBucket, type SummaryBucket } from "@/components/projects/ProjectSummary";
+import { StatusLegend } from "@/components/tasks/StatusLegend";
 import { QuickInvoiceDialog } from "@/components/projects/QuickInvoiceDialog";
 import { InvoiceDetailDialog } from "@/components/projects/InvoiceDetailDialog";
 import { TaskPanel } from "@/components/tasks/TaskPanel";
@@ -984,6 +985,7 @@ export default function ProjectDetailPage() {
             </button>
           </div>
         )}
+        <StatusLegend className="mb-3" />
         <div className="flex items-center justify-between mb-5 gap-3 flex-wrap">
           <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1">
             {(["list", "kanban"] as ViewMode[]).map((v) => (

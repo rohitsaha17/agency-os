@@ -322,6 +322,7 @@ model User {
   statusChanges      StatusHistory[] @relation("StatusChanges")
   notifications      Notification[]
   // ── HR ──
+  starredTasks       TaskStar[]
   attendance         Attendance[]    @relation("AttendanceUser")
   attendanceRecorded Attendance[]    @relation("AttendanceRecorder")
   leaveRequests      LeaveRequest[]  @relation("LeaveUser")
@@ -745,6 +746,7 @@ model Task {
   @@index([clientId])
   @@index([contentItemId])
   @@index([organizationId, assignmentStatus])
+  stars              TaskStar[]
   @@map("tasks")
 }
 
@@ -2009,4 +2011,28 @@ model StaffAdvance {
 
   @@index([organizationId, userId])
   @@map("staff_advances")
+}
+
+/// One person pinning one task.
+///
+/// A join table rather than a column on Task, because a task can be assigned
+/// to four people and a pin is not a property of the work — it is a note one
+/// person made to themselves about it. A `starred` boolean on Task would mean
+/// the editor starring a shoot also starred it for the photographer, which is
+/// somebody else's list rearranging itself for no reason they can see.
+///
+/// Personal reminders keep their own `starred` column: those belong to one
+/// person already, so there is nobody to confuse.
+model TaskStar {
+  taskId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, userId])
+  /// "What have I pinned" is the only question asked of this table.
+  @@index([userId])
+  @@map("task_stars")
 }

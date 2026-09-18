@@ -453,6 +453,8 @@ export interface Task {
   project?: { id: string; name: string } | null;
   /** v3: what kind of work this is */
   kind?: "PLANNING" | "CONTENT_WORK" | "POST" | "GENERAL" | "PERSONAL";
+  /** Pinned by the person asking — never anybody else's star. */
+  starred?: boolean;
   /** v3: bumped each time the approver asks for changes */
   revision?: number;
   approverId?: string | null;

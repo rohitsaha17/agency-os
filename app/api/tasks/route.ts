@@ -101,6 +101,10 @@ export async function GET(req: NextRequest) {
             where: { deletedAt: null },
             select: { id: true, status: true },
           },
+          // Only this person's star. Scoped in the query rather than fetched
+          // for everyone and filtered after, so one colleague's pins never
+          // travel to another's browser.
+          stars: { where: { userId: user.id }, select: { userId: true } },
         },
         orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
         skip: pagination.paginated ? pagination.skip : undefined,
@@ -109,13 +113,20 @@ export async function GET(req: NextRequest) {
       pagination.paginated ? prisma.task.count({ where }) : Promise.resolve(0),
     ]);
 
+    // Flatten the star into a boolean the row can read, and drop the rows
+    // themselves — a list does not need to carry the join table.
+    const withStars = tasks.map(({ stars, ...t }) => ({
+      ...t,
+      starred: stars.length > 0,
+    }));
+
     if (pagination.paginated) {
       return NextResponse.json({
-        data: tasks,
+        data: withStars,
         pagination: paginationMeta(pagination, total),
       });
     }
-    return NextResponse.json(tasks);
+    return NextResponse.json(withStars);
   } catch (error) {
     return handleApiError(error, "GET /api/tasks");
   }

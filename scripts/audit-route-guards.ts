@@ -45,6 +45,11 @@ const GUARD_PATTERNS = [
  * Anything not listed here and not guarded is reported.
  */
 const REVIEWED_OPEN: Record<string, string> = {
+  // Unstarring is scoped to `userId: user.id` in the WHERE clause, so the
+  // only row anybody can delete is their own pin. There is nothing to
+  // authorise beyond being signed in — and the POST side, which can create a
+  // row, does carry a visibility check.
+  "tasks/[id]/star/route.ts:DELETE": "deletes only your own pin, scoped in the query",
   "auth/login/route.ts:POST": "signing in is how you get a session",
   "auth/logout/route.ts:POST": "ending your own session",
   "auth/me/route.ts:GET": "reading your own identity",

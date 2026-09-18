@@ -7,7 +7,7 @@ just whether they're signed in. A mutating handler with no check is a hole:
 that is exactly how creating a channel, creating a project and editing org
 settings ended up available to everyone.
 
-Handlers: **210** · guarded: **138** · reviewed-open: **39** · unguarded writes: **0**
+Handlers: **212** · guarded: **138** · reviewed-open: **40** · unguarded writes: **0**
 
 ## Reads open to any signed-in user
 
@@ -16,6 +16,7 @@ are deliberately shared. Listed so the choice stays visible.
 
 | Route | Method |
 |---|---|
+| `availability/route.ts` | GET |
 | `calendar/route.ts` | GET |
 | `channels/route.ts` | GET |
 | `channels/[id]/members/route.ts` | GET |
@@ -55,6 +56,7 @@ are deliberately shared. Listed so the choice stays visible.
 
 | Handler | Why |
 |---|---|
+| `tasks/[id]/star/route.ts:DELETE` | deletes only your own pin, scoped in the query |
 | `auth/login/route.ts:POST` | signing in is how you get a session |
 | `auth/logout/route.ts:POST` | ending your own session |
 | `auth/me/route.ts:GET` | reading your own identity |

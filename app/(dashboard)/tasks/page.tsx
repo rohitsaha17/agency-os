@@ -551,6 +551,25 @@ function TasksBoardInner() {
     broadcastChange("all"); // the same item sits on My Calendar
   };
 
+  /**
+   * Pin a task to your own Starred list.
+   *
+   * Optimistic, because the star is the feedback — waiting a round trip to
+   * see it fill in makes the button feel broken. If the server refuses, the
+   * row goes back to how it was rather than sitting there lying.
+   */
+  const toggleTaskStar = async (t: Task) => {
+    const next = !t.starred;
+    setAllVisible((prev) => prev.map((x) => (x.id === t.id ? { ...x, starred: next } : x)));
+    try {
+      const res = await fetch(`/api/tasks/${t.id}/star`, { method: next ? "POST" : "DELETE" });
+      if (!res.ok) throw new Error();
+    } catch {
+      setAllVisible((prev) => prev.map((x) => (x.id === t.id ? { ...x, starred: !next } : x)));
+      toast.error("Couldn't change that");
+    }
+  };
+
   const toggleStar = async (p: PersonalRow) => {
     setItems((prev) => prev.map((x) => (x.id === p.id ? { ...x, starred: !p.starred } : x)));
     await fetch(`/api/personal-items/${p.id}`, {
@@ -750,6 +769,22 @@ function TasksBoardInner() {
         {/* The right edge: when it's due, and whose it is. Fixed position on
             every row so the eye can run straight down the column. */}
         <div className="flex items-center gap-2 flex-shrink-0">
+          {/* Hidden until hover unless it is already on — a column of empty
+              outlines down a list of forty is noise, but a pin you cannot
+              find is worse, so a starred one always shows. */}
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); toggleTaskStar(t); }}
+            title={t.starred ? "Remove from Starred" : "Add to Starred"}
+            aria-pressed={!!t.starred}
+            className={`p-1 rounded-md transition-surface duration-150 ${
+              t.starred
+                ? "text-amber-400"
+                : "text-gray-300 dark:text-slate-600 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-amber-400"
+            }`}
+          >
+            <Star className={`w-3.5 h-3.5 ${t.starred ? "fill-amber-400" : ""}`} />
+          </button>
           {chip && !done && (
             <span className={`inline-flex items-center text-[11px] font-medium px-2 py-0.5 rounded-md whitespace-nowrap ${
               chip.late
@@ -987,6 +1022,16 @@ function TasksBoardInner() {
     return m;
   }, [items]);
   const starredItems = useMemo(() => items.filter((p) => p.starred), [items]);
+  /**
+   * Pinned work, which is what most people mean by starred.
+   *
+   * From everything the server was willing to show, NOT from the currently
+   * filtered view. Deriving it from the filtered list meant a task you pinned
+   * disappeared from Starred the moment the "My tasks" picker excluded it —
+   * which is the opposite of what pinning is for.
+   */
+  const starredTasks = useMemo(() => allVisible.filter((t) => t.starred), [allVisible]);
+  const starredCount = starredItems.length + starredTasks.length;
 
   /*
     List or tiles. A preference about how you read, so it is remembered —
@@ -1159,7 +1204,7 @@ function TasksBoardInner() {
                 view === "starred" ? "bg-indigo-50 text-indigo-700" : "text-gray-600 hover:bg-gray-50"
               }`}>
               <Star className="w-4 h-4" /> Starred
-              {starredItems.length > 0 && <span className="ml-auto text-xs text-gray-400">{starredItems.length}</span>}
+              {starredCount > 0 && <span className="ml-auto text-xs text-gray-400">{starredCount}</span>}
             </button>
           </div>
 
@@ -1251,25 +1296,43 @@ function TasksBoardInner() {
           )}
 
           {view === "starred" ? (
-          <div className="h-full flex items-stretch gap-4 p-4 sm:p-6">
-            {(
-              <div className="w-[85vw] sm:w-[340px] flex-shrink-0 bg-white border border-gray-200 rounded-2xl flex flex-col h-full shadow-sm">
-                <div className="px-4 pt-4 pb-2 flex-shrink-0">
-                  <h2 className="text-base font-semibold text-gray-900 flex items-center gap-2">
-                    <Star className="w-4 h-4 text-amber-400 fill-amber-400" /> Starred
-                  </h2>
+          /* Full width and stacked, like the list — this used to be a single
+             340px column holding only personal reminders, which is a narrow
+             answer to "show me what I pinned". */
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            <div className="max-w-5xl mx-auto w-full p-4 sm:p-6 space-y-4">
+              {starredCount === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 text-center px-4">
+                  <Star className="w-9 h-9 text-amber-200 dark:text-amber-500/30 mb-3" />
+                  <p className="text-sm font-medium text-gray-600 dark:text-slate-300">Nothing starred yet</p>
+                  <p className="text-xs text-gray-400 mt-1 max-w-xs">
+                    Hover any task and tap the star to pin it here — handy for the
+                    two or three things you keep coming back to.
+                  </p>
                 </div>
-                <div className="flex-1 overflow-y-auto px-2 pb-2 min-h-0">
-                  {starredItems.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-14 text-center px-4">
-                      <Star className="w-9 h-9 text-amber-200 mb-2" />
-                      <p className="text-sm font-medium text-gray-600">Nothing starred</p>
-                      <p className="text-xs text-gray-400 mt-0.5">Hover a task and tap the star to pin it here.</p>
-                    </div>
-                  ) : starredItems.map(renderPersonalRow)}
-                </div>
-              </div>
-            )}
+              ) : (
+                <>
+                  {starredTasks.length > 0 && (
+                    <section>
+                      <h2 className="text-[13px] font-semibold text-gray-700 dark:text-slate-300 mb-2 px-1">
+                        Tasks <span className="text-gray-400 font-normal">({starredTasks.length})</span>
+                      </h2>
+                      <div className="space-y-px">{starredTasks.map(renderOrgTaskRow)}</div>
+                    </section>
+                  )}
+                  {starredItems.length > 0 && (
+                    <section>
+                      <h2 className="text-[13px] font-semibold text-gray-700 dark:text-slate-300 mb-2 px-1">
+                        Reminders <span className="text-gray-400 font-normal">({starredItems.length})</span>
+                      </h2>
+                      <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-white/[0.08] rounded-2xl p-2">
+                        {starredItems.map(renderPersonalRow)}
+                      </div>
+                    </section>
+                  )}
+                </>
+              )}
+            </div>
           </div>
           ) : layout === "list" ? (
             <div className="flex-1 min-h-0 overflow-y-auto">

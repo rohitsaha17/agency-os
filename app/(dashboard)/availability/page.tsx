@@ -1,417 +1,635 @@
 "use client";
 
 /**
- * Who is available, and when.
+ * Team availability — a resource planner, not a leave register.
  *
- * Two audiences on one page, because they are the same question asked from
- * different ends. A photographer comes here to say "I'm on someone else's
- * shoot on the 4th". An SMM comes here to find out who can shoot on the 4th
- * before promising a client a date.
+ * The old page was two stacked lists: your blocked days, then everybody's.
+ * That is the right data arranged around the wrong question. Nobody opens this
+ * page to read a list of absences; they open it because they are about to
+ * promise a client a date and need to know who can take the work. Answering
+ * that from two lists meant holding one of the two axes — people, or days — in
+ * your head while you scanned the other.
  *
- * Shoot crew are often freelancers: booked by other people, taking leave
- * without telling us, and physically unable to do three shoots in a day.
- * None of that was visible before, so it surfaced only when somebody said no
- * to work already promised.
+ * So: a grid. People down the side, days across the top, one cell per person
+ * per day saying whether they can work and how much they already have on.
+ * Every other surface here is a way into that same fact — the crew finder asks
+ * it about one day, the drawer asks it about one person, the phone's day view
+ * asks it about today.
+ *
+ * WHAT DID NOT CHANGE, deliberately:
+ *   · who may block whose days (shoot crew their own, admins anyone)
+ *   · that approved leave writes its own days and only a revoke removes them
+ *   · that the assignment guard, not this screen, is the enforcement
+ *   · that workload is a signal and never a cap
+ *
+ * The grid is a convenience. If it ever disagrees with the server, the server
+ * is right — which is why Assign goes through POST /api/tasks and shows the
+ * 409 rather than deciding for itself who is assignable.
  */
 
-import { useState, useEffect, useCallback, useMemo } from "react";
-import { CalendarOff, Plus, Trash2, Users, AlertCircle } from "lucide-react";
-import { Modal } from "@/components/ui/Modal";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Plus, Users, Search, CalendarDays, X, ChevronLeft, ChevronRight,
+} from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
-import { useCurrentUser } from "@/lib/useCurrentUser";
-import { can } from "@/lib/permissions";
-import { toast } from "@/lib/toast";
+import { LoadError } from "@/components/ui/LoadError";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
-import { MONTH_NAMES } from "@/components/calendar/MonthGrid";
+import { toast } from "@/lib/toast";
+import { useCurrentUser } from "@/lib/useCurrentUser";
+import { broadcastChange, useLiveRefresh } from "@/lib/live";
 import {
-  KIND_LABEL, MAX_REASON, MIN_REASON, dayString,
-  type UnavailabilityKind,
+  dayStatus, loadLevel, type DayCell, type UnavailabilityKind,
 } from "@/lib/availability";
+import { Kpi, Legend } from "@/components/availability/chrome";
+import {
+  AvailabilityGrid, type GridDay, type GridGroup,
+} from "@/components/availability/AvailabilityGrid";
+import { DayBoard, type DayRow } from "@/components/availability/DayBoard";
+import { PersonDayDrawer } from "@/components/availability/PersonDayDrawer";
+import { BlockDaysDialog } from "@/components/availability/BlockDaysDialog";
+import { FindCrewDialog } from "@/components/availability/FindCrewDialog";
 
-interface Block {
-  id: string;
-  userId: string;
-  date: string;
-  kind: UnavailabilityKind;
-  reason: string;
-  user?: { id: string; name: string; avatarUrl?: string | null; jobTitle?: { name: string } | null } | null;
-  createdBy?: { id: string; name: string } | null;
+/* ---------------------------------------------------------------- *
+ * Dates, in the viewer's own calendar.
+ *
+ * Every key here is built from LOCAL components. Going via UTC shifts an
+ * Indian team by a day either side of midnight, which on this screen means
+ * telling somebody a photographer is free on a day he is shooting.
+ * ---------------------------------------------------------------- */
+
+function keyOf(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function parseKey(k: string): Date {
+  const [y, m, d] = k.split("-").map(Number);
+  return new Date(y, (m ?? 1) - 1, d ?? 1);
+}
+function addDays(k: string, n: number): string {
+  const d = parseKey(k);
+  d.setDate(d.getDate() + n);
+  return keyOf(d);
+}
+/** Monday of the week containing `k`. Agencies shoot at weekends; the week
+ *  still starts on Monday because that is how the work is talked about. */
+function weekStart(k: string): string {
+  const d = parseKey(k);
+  const shift = (d.getDay() + 6) % 7;
+  d.setDate(d.getDate() - shift);
+  return keyOf(d);
+}
+function monthStart(k: string): string {
+  const d = parseKey(k);
+  return keyOf(new Date(d.getFullYear(), d.getMonth(), 1));
+}
+function monthEnd(k: string): string {
+  const d = parseKey(k);
+  return keyOf(new Date(d.getFullYear(), d.getMonth() + 1, 0));
+}
+const WEEKDAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MONTH = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function rangeKeys(from: string, to: string): string[] {
+  const out: string[] = [];
+  for (let k = from; k <= to; k = addDays(k, 1)) {
+    out.push(k);
+    if (out.length > 95) break;
+  }
+  return out;
 }
 
-const KIND_OPTIONS = (Object.keys(KIND_LABEL) as UnavailabilityKind[])
-  .map((k) => ({ value: k, label: KIND_LABEL[k] }));
+/* ---------------------------------------------------------------- */
 
-const KIND_TONE: Record<string, string> = {
-  SHOOT: "bg-violet-50 text-violet-700 border-violet-200",
-  LEAVE: "bg-sky-50 text-sky-700 border-sky-200",
-  SICK: "bg-rose-50 text-rose-700 border-rose-200",
-  OTHER_CLIENT: "bg-amber-50 text-amber-700 border-amber-200",
-  OTHER: "bg-gray-100 text-gray-600 border-gray-200",
-};
+type View = "DAY" | "WEEK" | "MONTH";
+type StatusFilter = "" | "available" | "busy" | "away";
+type LoadFilter = "" | "free" | "light" | "busy" | "heavy";
 
-function prettyDay(d: string) {
-  return new Date(d).toLocaleDateString("en-US", {
-    weekday: "short", day: "numeric", month: "short", timeZone: "UTC",
-  });
+interface ApiPerson {
+  id: string; name: string; avatarUrl: string | null; role: string;
+  craft: string | null; craftId: string | null; craftOrder: number;
+  blocksOwnDays: boolean;
+}
+interface ApiBlock {
+  id: string; userId: string; date: string; kind: string; reason: string;
+  leave: boolean; createdBy: { id: string; name: string } | null; createdAt: string;
+}
+interface Overview {
+  from: string; to: string; seesLoad: boolean; canBlockOthers: boolean;
+  people: ApiPerson[]; blocks: ApiBlock[]; load: Record<string, number> | null;
 }
 
 export default function AvailabilityPage() {
   const { user: me } = useCurrentUser();
-  /*
-    Only the shoot crew block their own days.
-    Photographers and videographers get booked by other people and other
-    agencies, so waiting on an approval would lose them the booking.
-    Everybody else takes time off through leave, where somebody approves it.
-    Everyone can still SEE this page — knowing the crew is out on the 4th is
-    what the rest of the team schedules around.
-  */
-  const blocksOwnDays = !!me?.jobTitle?.blocksOwnDays;
   const confirm = useConfirm();
-  const plansWork = can(me, "content.plan");
-  const managesUsers = can(me, "users.manage");
 
-  const now = new Date();
-  const [year, setYear] = useState(now.getFullYear());
-  const [month, setMonth] = useState(now.getMonth());
-  const [blocks, setBlocks] = useState<Block[]>([]);
-  const [loading, setLoading] = useState(true);
+  const today = useMemo(() => keyOf(new Date()), []);
+  const [view, setView] = useState<View>("WEEK");
+  const [anchor, setAnchor] = useState(today);
+  const [query, setQuery] = useState("");
+  const [craft, setCraft] = useState("");
+  const [status, setStatus] = useState<StatusFilter>("");
+  const [load, setLoad] = useState<LoadFilter>("");
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [selected, setSelected] = useState<{ userId: string; date: string } | null>(null);
 
-  const [adding, setAdding] = useState(false);
-  const [forUserId, setForUserId] = useState("");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
-  const [kind, setKind] = useState<UnavailabilityKind>("SHOOT");
-  const [reason, setReason] = useState("");
-  const [saving, setSaving] = useState(false);
+  const [data, setData] = useState<Overview | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [people, setPeople] = useState<{ id: string; name: string }[]>([]);
+  const [clearing, setClearing] = useState(false);
+  const [blocking, setBlocking] = useState<{ userId?: string; from?: string; to?: string } | null>(null);
+  const [finding, setFinding] = useState(false);
 
-  // A generous window either side, so a block that starts late in the month
-  // and runs into the next one is still visible from both.
-  const range = useMemo(() => {
-    const start = new Date(Date.UTC(year, month, 1));
-    const end = new Date(Date.UTC(year, month + 1, 0));
-    return { from: dayString(start), to: dayString(end) };
-  }, [year, month]);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/availability?from=${range.from}&to=${range.to}`);
-      if (res.ok) setBlocks(await res.json());
-    } finally {
-      setLoading(false);
+  // A phone gets the day view, because a seven-column grid on 375px is
+  // unreadable and stacking the desktop lists just moves the problem.
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches) {
+      setView("DAY");
     }
-  }, [range.from, range.to]);
+  }, []);
 
-  useEffect(() => { load(); }, [load]);
+  /* The window the grid shows, and therefore the window we fetch. The day
+     view still loads its whole week so the date strip is not blank. */
+  const window_ = useMemo(() => {
+    if (view === "MONTH") return { from: monthStart(anchor), to: monthEnd(anchor) };
+    const start = weekStart(anchor);
+    return { from: start, to: addDays(start, 6) };
+  }, [view, anchor]);
+
+  const load_ = useCallback(async () => {
+    setError(null);
+    try {
+      const res = await fetch(`/api/availability/overview?from=${window_.from}&to=${window_.to}`);
+      if (!res.ok) throw new Error(`The server returned ${res.status}.`);
+      setData(await res.json());
+    } catch (e) {
+      setData(null);
+      setError(e instanceof Error ? e.message : "Check your connection and try again.");
+    }
+  }, [window_.from, window_.to]);
+
+  useEffect(() => { setData(null); load_(); }, [load_]);
+  // Somebody else's block, or a task moving, changes what this screen says.
+  useLiveRefresh(["calendar", "tasks"], load_);
+
+  /* ---- the cells ------------------------------------------------- */
+
+  const days: GridDay[] = useMemo(() => {
+    return rangeKeys(window_.from, window_.to).map((k) => {
+      const d = parseKey(k);
+      return { key: k, dom: d.getDate(), dow: d.getDay(), weekday: WEEKDAY[d.getDay()] };
+    });
+  }, [window_.from, window_.to]);
+
+  const blockIndex = useMemo(() => {
+    const m = new Map<string, ApiBlock>();
+    for (const b of data?.blocks ?? []) m.set(`${b.userId}|${b.date}`, b);
+    return m;
+  }, [data]);
+
+  const cellOf = useCallback((userId: string, date: string): DayCell => {
+    const b = blockIndex.get(`${userId}|${date}`);
+    return {
+      // null, not 0 — "we don't show you workload" is not "they have nothing on".
+      load: data?.load ? (data.load[`${userId}|${date}`] ?? 0) : null,
+      block: b
+        ? { kind: b.kind as UnavailabilityKind, reason: b.reason, leave: b.leave }
+        : null,
+    };
+  }, [blockIndex, data]);
+
+  /** Status and workload filters are asked about ONE day — the focused one. */
+  const focusDate = view === "DAY" ? anchor : (selected?.date ?? anchor);
+
+  const people = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return (data?.people ?? []).filter((p) => {
+      if (q && !p.name.toLowerCase().includes(q) && !(p.craft ?? "").toLowerCase().includes(q)) return false;
+      if (craft && (p.craft ?? "Team") !== craft) return false;
+      if (status || load) {
+        const c = cellOf(p.id, focusDate);
+        if (status && dayStatus(c) !== status) return false;
+        // Somebody blocked has no workload to filter on — a block is the answer.
+        if (load && (c.block || loadLevel(c.load ?? 0) !== load)) return false;
+      }
+      return true;
+    });
+  }, [data, query, craft, status, load, cellOf, focusDate]);
+
+  const groups: GridGroup[] = useMemo(() => {
+    const byCraft = new Map<string, { label: string; order: number; rows: GridGroup["rows"] }>();
+    for (const p of people) {
+      const label = p.craft ?? "Team";
+      if (!byCraft.has(label)) byCraft.set(label, { label, order: p.craftOrder, rows: [] });
+      byCraft.get(label)!.rows.push({
+        person: { id: p.id, name: p.name, avatarUrl: p.avatarUrl, craft: p.craft },
+        cells: days.map((d) => cellOf(p.id, d.key)),
+      });
+    }
+    return [...byCraft.values()]
+      .sort((a, b) => a.order - b.order || a.label.localeCompare(b.label))
+      .map((g) => ({ id: g.label, label: g.label, rows: g.rows }));
+  }, [people, days, cellOf]);
+
+  const dayRows: DayRow[] = useMemo(
+    () => people.map((p) => ({
+      person: { id: p.id, name: p.name, avatarUrl: p.avatarUrl, craft: p.craft },
+      cell: cellOf(p.id, anchor),
+    })),
+    [people, cellOf, anchor],
+  );
+
+  /* ---- the counters ---------------------------------------------- */
+
+  const counts = useMemo(() => {
+    const all = data?.people ?? [];
+    let available = 0, busy = 0, away = 0;
+    for (const p of all) {
+      const s = dayStatus(cellOf(p.id, focusDate));
+      if (s === "available") available++;
+      else if (s === "busy") busy++;
+      else away++;
+    }
+    return { total: all.length, available, busy, away };
+  }, [data, cellOf, focusDate]);
+
+  const pct = (n: number) => (counts.total ? `${Math.round((n / counts.total) * 100)}%` : "—");
+
+  /* ---- the drawer ------------------------------------------------ */
+
+  const [schedule, setSchedule] = useState<Record<string, Record<string, string[]>>>({});
+  const [scheduleLoading, setScheduleLoading] = useState(false);
+  const inflight = useRef<Set<string>>(new Set());
 
   useEffect(() => {
-    if (!managesUsers) return;
-    fetch("/api/users").then((r) => (r.ok ? r.json() : [])).then((d) =>
-      setPeople(Array.isArray(d) ? d.map((u: { id: string; name: string }) => ({ id: u.id, name: u.name })) : []),
-    ).catch(() => {});
-  }, [managesUsers]);
+    const date = selected?.date;
+    if (!date || !data?.seesLoad || schedule[date] || inflight.current.has(date)) return;
+    inflight.current.add(date);
+    setScheduleLoading(true);
+    fetch(`/api/availability/day?date=${date}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d?.people) return;
+        const byUser: Record<string, string[]> = {};
+        for (const p of d.people) byUser[p.id] = p.on ?? [];
+        setSchedule((s) => ({ ...s, [date]: byUser }));
+      })
+      .catch(() => { /* the drawer still shows availability without it */ })
+      .finally(() => { inflight.current.delete(date); setScheduleLoading(false); });
+  }, [selected?.date, data?.seesLoad, schedule]);
 
-  const mine = blocks.filter((b) => b.userId === me?.id);
-  const theirs = blocks.filter((b) => b.userId !== me?.id);
+  const selectedPerson = data?.people.find((p) => p.id === selected?.userId) ?? null;
+  const selectedBlock = selected ? blockIndex.get(`${selected.userId}|${selected.date}`) ?? null : null;
 
-  // Grouped by person: an SMM is asking "who is out", not "what happened on
-  // the 9th", and a flat date list makes that a scanning exercise.
-  const byPerson = useMemo(() => {
-    const m = new Map<string, { name: string; craft: string | null; days: Block[] }>();
-    for (const b of theirs) {
-      const key = b.userId;
-      if (!m.has(key)) {
-        m.set(key, {
-          name: b.user?.name ?? "Someone",
-          craft: b.user?.jobTitle?.name ?? null,
-          days: [],
-        });
-      }
-      m.get(key)!.days.push(b);
-    }
-    return [...m.entries()].sort((a, b) => a[1].name.localeCompare(b[1].name));
-  }, [theirs]);
+  /**
+   * Mirrors maySetAvailability on the server. The server is the enforcement —
+   * this only decides whether to offer a button that would be refused.
+   */
+  const canBlockFor = useCallback((userId: string) => {
+    if (data?.canBlockOthers) return true;
+    return userId === me?.id && !!me?.jobTitle?.blocksOwnDays;
+  }, [data?.canBlockOthers, me]);
 
-  function openAdd() {
-    const today = dayString(new Date());
-    setForUserId(me?.id ?? "");
-    setFrom(today);
-    setTo(today);
-    setKind("SHOOT");
-    setReason("");
-    setError(null);
-    setAdding(true);
-  }
+  const canBlockAnyone = !!data && (data.canBlockOthers || !!me?.jobTitle?.blocksOwnDays);
 
-  async function save() {
-    setSaving(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/availability", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: forUserId || undefined,
-          from, to: to || from, kind, reason,
-        }),
-      });
-      const d = await res.json();
-      if (!res.ok) throw new Error(d?.error?.message ?? "Could not save that");
-      toast.success(`${d.blocked} day${d.blocked === 1 ? "" : "s"} blocked`);
-      setAdding(false);
-      load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Something went wrong");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function remove(b: Block) {
+  async function clearBlock(id: string) {
     const ok = await confirm({
       title: "Free this day up?",
-      message: `${prettyDay(b.date)} — "${b.reason}". People will be able to assign work on this day again.`,
+      message: "People will be able to assign work on this day again.",
       confirmLabel: "Free it up",
     });
     if (!ok) return;
-    const res = await fetch(`/api/availability/${b.id}`, { method: "DELETE" });
-    if (res.ok) { toast.success("Day freed up"); load(); }
-    else toast.error("Could not remove that");
+    setClearing(true);
+    try {
+      const res = await fetch(`/api/availability/${id}`, { method: "DELETE" });
+      const d = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(d?.error?.message ?? "Could not remove that");
+      toast.success("Day freed up");
+      broadcastChange("calendar");
+      load_();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not remove that");
+    } finally {
+      setClearing(false);
+    }
   }
 
-  const reasonOk = reason.trim().length >= MIN_REASON && reason.trim().length <= MAX_REASON;
+  /* ---- chrome ---------------------------------------------------- */
+
+  const crafts = useMemo(
+    () => [...new Set((data?.people ?? []).map((p) => p.craft ?? "Team"))].sort(),
+    [data],
+  );
+
+  const periodLabel = useMemo(() => {
+    if (view === "MONTH") {
+      const d = parseKey(anchor);
+      return `${MONTH[d.getMonth()]} ${d.getFullYear()}`;
+    }
+    if (view === "DAY") {
+      const d = parseKey(anchor);
+      return `${WEEKDAY[d.getDay()]} ${d.getDate()} ${MONTH[d.getMonth()]}`;
+    }
+    const a = parseKey(window_.from), b = parseKey(window_.to);
+    return a.getMonth() === b.getMonth()
+      ? `${a.getDate()}–${b.getDate()} ${MONTH[a.getMonth()]} ${a.getFullYear()}`
+      : `${a.getDate()} ${MONTH[a.getMonth()]} – ${b.getDate()} ${MONTH[b.getMonth()]}`;
+  }, [view, anchor, window_.from, window_.to]);
+
+  const step = (dir: 1 | -1) => {
+    setAnchor((a) => (view === "MONTH"
+      ? keyOf(new Date(parseKey(a).getFullYear(), parseKey(a).getMonth() + dir, 1))
+      : addDays(a, dir * (view === "DAY" ? 1 : 7))));
+  };
+
+  const focusLabel = useMemo(() => {
+    const d = parseKey(focusDate);
+    return focusDate === today ? "today" : `${WEEKDAY[d.getDay()]} ${d.getDate()} ${MONTH[d.getMonth()]}`;
+  }, [focusDate, today]);
+
+  const filtersOn = !!(query || craft || status || load);
 
   return (
-    <div className="flex flex-col min-h-0">
-      <div className="bg-white border-b border-gray-200 px-4 sm:px-6 lg:px-8 py-4 flex-shrink-0">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
+    <div className="flex flex-col h-full min-h-0">
+      {/* Header */}
+      <header className="bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-white/[0.08] px-4 sm:px-6 lg:px-8 py-3 flex-shrink-0">
+        <div className="flex items-start justify-between gap-3 flex-wrap">
           <div>
-            <h1 className="text-xl font-semibold text-gray-900">Availability</h1>
-            <p className="text-sm text-gray-500 mt-0.5">
-              {/* The subtitle now turns on what you can DO here, not what you
-                  can see — everybody sees the same diary. */}
-              {blocksOwnDays
-                ? "Block the days you're booked, and see when the rest of the crew is out."
-                : "Who can't take work, and when. Check here before promising a date."}
+            <h1 className="text-lg font-semibold text-gray-900 dark:text-slate-100">Team Availability</h1>
+            <p className="text-[12px] text-gray-500 dark:text-slate-400">
+              See who can take work before assigning it.
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden">
-              <button
-                onClick={() => { if (month === 0) { setYear((y) => y - 1); setMonth(11); } else setMonth((m) => m - 1); }}
-                className="px-3 py-2 text-sm text-gray-600 hover:bg-gray-50"
-              >‹</button>
-              <span className="px-3 py-2 text-sm font-medium text-gray-900 whitespace-nowrap">
-                {MONTH_NAMES[month]} {year}
-              </span>
-              <button
-                onClick={() => { if (month === 11) { setYear((y) => y + 1); setMonth(0); } else setMonth((m) => m + 1); }}
-                className="px-3 py-2 text-sm text-gray-600 hover:bg-gray-50"
-              >›</button>
-            </div>
-            {blocksOwnDays && (
-              <Button size="sm" onClick={openAdd} icon={<Plus className="w-3.5 h-3.5" />}>
-                Block days
+            {canBlockAnyone && (
+              <Button
+                size="sm" variant="secondary"
+                icon={<Plus className="w-3.5 h-3.5" />}
+                onClick={() => setBlocking({ userId: me?.id, from: focusDate, to: focusDate })}
+              >
+                Block day
+              </Button>
+            )}
+            {data?.seesLoad && (
+              <Button size="sm" icon={<Users className="w-3.5 h-3.5" />} onClick={() => setFinding(true)}>
+                Find available crew
               </Button>
             )}
           </div>
         </div>
-      </div>
+      </header>
 
-      <div className="flex-1 px-4 sm:px-6 lg:px-8 py-6 space-y-6 overflow-auto">
-        {/* Yours */}
-        <section className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-gray-100">
-            <h2 className="text-sm font-semibold text-gray-900">Your unavailable days</h2>
-            <p className="text-xs text-gray-400 mt-0.5">
-              {MONTH_NAMES[month]} {year} · {mine.length} day{mine.length === 1 ? "" : "s"}
-            </p>
-          </div>
-          {loading ? (
-            <div className="p-5 space-y-2">
-              {[1, 2].map((i) => <div key={i} className="h-12 bg-gray-100 rounded-lg animate-pulse" />)}
+      <div className="flex-1 flex min-h-0 overflow-hidden">
+        {/* The page itself does not scroll. The chrome keeps its height and the
+            grid takes the rest, which is what gives `sticky top-0` on the date
+            header something to stick inside — on a page that scrolls as one
+            piece, a sticky header just scrolls away with everything else. */}
+        <div className="flex-1 flex flex-col min-w-0 min-h-0">
+          <div className="px-4 sm:px-6 lg:px-8 pt-4 pb-3 space-y-3 flex-shrink-0">
+
+            {/* Counters. Compact, and each one is a filter. */}
+            <div className="flex gap-2 overflow-x-auto pb-0.5">
+              <Kpi label="Team members" value={counts.total} />
+              <Kpi
+                label={`Available · ${focusLabel}`} value={counts.available} hint={pct(counts.available)}
+                dot="bg-emerald-500" active={status === "available"}
+                onClick={() => setStatus((s) => (s === "available" ? "" : "available"))}
+              />
+              <Kpi
+                label={`Busy · ${focusLabel}`} value={counts.busy} hint={pct(counts.busy)}
+                dot="bg-amber-500" active={status === "busy"}
+                onClick={() => setStatus((s) => (s === "busy" ? "" : "busy"))}
+              />
+              <Kpi
+                label={`Unavailable · ${focusLabel}`} value={counts.away} hint={pct(counts.away)}
+                dot="bg-rose-500" active={status === "away"}
+                onClick={() => setStatus((s) => (s === "away" ? "" : "away"))}
+              />
             </div>
-          ) : mine.length === 0 ? (
-            <div className="px-5 py-10 text-center">
-              <CalendarOff className="w-8 h-8 text-gray-200 mx-auto mb-3" />
-              <p className="text-sm text-gray-500">You&rsquo;re free all month.</p>
-              <p className="text-xs text-gray-400 mt-1">
-                {blocksOwnDays
-                  ? "Block a day and nobody will be able to assign you work on it."
-                  : "For time off, ask for leave under People — once it's approved these days block themselves."}
-              </p>
-            </div>
-          ) : (
-            <ul className="divide-y divide-gray-100">
-              {mine.map((b) => (
-                <li key={b.id} className="flex items-center gap-3 px-5 py-3">
-                  <span className="text-sm font-medium text-gray-900 w-32 flex-shrink-0">
-                    {prettyDay(b.date)}
-                  </span>
-                  <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full border flex-shrink-0 ${KIND_TONE[b.kind] ?? KIND_TONE.OTHER}`}>
-                    {KIND_LABEL[b.kind] ?? b.kind}
-                  </span>
-                  <span className="text-sm text-gray-600 flex-1 min-w-0 truncate">{b.reason}</span>
-                  {b.createdBy && b.createdBy.id !== b.userId && (
-                    <span className="text-[11px] text-gray-400 flex-shrink-0">
-                      set by {b.createdBy.name}
-                    </span>
-                  )}
+
+            {/* Toolbar */}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center border border-gray-200 dark:border-white/[0.1] rounded-lg overflow-hidden bg-white dark:bg-slate-900">
+                <button
+                  type="button" onClick={() => step(-1)} aria-label="Previous"
+                  className="px-2 py-1.5 text-gray-500 hover:bg-gray-50 dark:hover:bg-white/[0.06]"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <span className="px-2.5 py-1.5 text-[12px] font-medium text-gray-900 dark:text-slate-100 whitespace-nowrap min-w-[10rem] text-center">
+                  {periodLabel}
+                </span>
+                <button
+                  type="button" onClick={() => step(1)} aria-label="Next"
+                  className="px-2 py-1.5 text-gray-500 hover:bg-gray-50 dark:hover:bg-white/[0.06]"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+
+              <Button size="sm" variant="secondary" onClick={() => setAnchor(today)} disabled={anchor === today}>
+                Today
+              </Button>
+
+              <div className="flex items-center rounded-lg border border-gray-200 dark:border-white/[0.1] overflow-hidden bg-white dark:bg-slate-900">
+                {(["DAY", "WEEK", "MONTH"] as View[]).map((v) => (
                   <button
-                    onClick={() => remove(b)}
-                    aria-label="Free this day up"
-                    className="p-2 text-gray-300 hover:text-red-500 flex-shrink-0"
+                    key={v}
+                    type="button"
+                    onClick={() => setView(v)}
+                    aria-pressed={view === v}
+                    className={`px-3 py-1.5 text-[12px] font-medium capitalize transition-colors ${
+                      view === v
+                        ? "bg-indigo-600 text-white"
+                        : "text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-white/[0.06]"
+                    }`}
                   >
-                    <Trash2 className="w-4 h-4" />
+                    {v.toLowerCase()}
                   </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-
-        {/* Everybody else — for everybody. The editor waiting on footage and
-            the SMM promising a client a date both plan around the same fact:
-            the photographer is out on the 4th. Keeping this to planners meant
-            the people doing the scheduling couldn't see it. */}
-        {(
-          <section className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
-            <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
-              <Users className="w-4 h-4 text-gray-400" />
-              <div>
-                <h2 className="text-sm font-semibold text-gray-900">The team&rsquo;s diary</h2>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  Who can&rsquo;t take work this month, and why
-                </p>
-              </div>
-            </div>
-            {loading ? (
-              <div className="p-5 space-y-2">
-                {[1, 2, 3].map((i) => <div key={i} className="h-12 bg-gray-100 rounded-lg animate-pulse" />)}
-              </div>
-            ) : byPerson.length === 0 ? (
-              <div className="px-5 py-10 text-center">
-                <p className="text-sm text-gray-500">Everyone is free this month.</p>
-                <p className="text-xs text-gray-400 mt-1">
-                  Days people block will appear here as they add them.
-                </p>
-              </div>
-            ) : (
-              <div className="divide-y divide-gray-100">
-                {byPerson.map(([userId, p]) => (
-                  <div key={userId} className="px-5 py-4">
-                    <div className="flex items-baseline gap-2 mb-2">
-                      <span className="text-sm font-semibold text-gray-900">{p.name}</span>
-                      {p.craft && <span className="text-xs text-gray-400">{p.craft}</span>}
-                      <span className="text-xs text-gray-400 ml-auto">
-                        {p.days.length} day{p.days.length === 1 ? "" : "s"} out
-                      </span>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {p.days.map((b) => (
-                        <span
-                          key={b.id}
-                          title={b.reason}
-                          className={`inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-lg border ${KIND_TONE[b.kind] ?? KIND_TONE.OTHER}`}
-                        >
-                          <span className="font-medium">{prettyDay(b.date)}</span>
-                          <span className="opacity-70 truncate max-w-[16ch]">{b.reason}</span>
-                        </span>
-                      ))}
-                    </div>
-                  </div>
                 ))}
               </div>
+
+              <div className="relative flex-1 min-w-[10rem] max-w-xs">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" aria-hidden />
+                <input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search team members…"
+                  aria-label="Search team members"
+                  className="w-full pl-8 pr-3 py-1.5 text-[12px] bg-white dark:bg-slate-900 text-gray-900 dark:text-slate-100 border border-gray-200 dark:border-white/[0.1] rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                />
+              </div>
+
+              <Select
+                value={craft} onChange={setCraft} allowEmpty placeholder="All roles" size="sm"
+                options={crafts.map((c) => ({ value: c, label: c }))}
+                className="min-w-[8.5rem]"
+              />
+              <Select
+                value={status} onChange={(v) => setStatus(v as StatusFilter)} allowEmpty placeholder="All statuses" size="sm"
+                options={[
+                  { value: "available", label: "Available" },
+                  { value: "busy", label: "Busy" },
+                  { value: "away", label: "Unavailable" },
+                ]}
+                className="min-w-[8.5rem]"
+              />
+              {data?.seesLoad && (
+                <Select
+                  value={load} onChange={(v) => setLoad(v as LoadFilter)} allowEmpty placeholder="All workloads" size="sm"
+                  options={[
+                    { value: "free", label: "Nothing on" },
+                    { value: "light", label: "1 job" },
+                    { value: "busy", label: "2 jobs" },
+                    { value: "heavy", label: "Heavily booked" },
+                  ]}
+                  className="min-w-[9rem]"
+                />
+              )}
+              {filtersOn && (
+                <button
+                  type="button"
+                  onClick={() => { setQuery(""); setCraft(""); setStatus(""); setLoad(""); }}
+                  className="inline-flex items-center gap-1 text-[12px] text-gray-500 hover:text-gray-800 dark:text-slate-400 dark:hover:text-slate-200"
+                >
+                  <X className="w-3 h-3" aria-hidden /> Clear
+                </button>
+              )}
+            </div>
+
+            {(status || load) && view !== "DAY" && (
+              <p className="text-[11px] text-gray-400">
+                Status and workload filters apply to {focusLabel}
+                {selected ? " — the day you have open" : ""}.
+              </p>
             )}
-          </section>
+
+          </div>
+
+          {/* Content */}
+          <div className="flex-1 min-h-0 flex flex-col gap-2 px-4 sm:px-6 lg:px-8 pb-4">
+            {error ? (
+              <LoadError message="Couldn't load availability" detail={error} onRetry={load_} />
+            ) : !data ? (
+              <div className="h-80 rounded-xl bg-gray-100 dark:bg-white/[0.06] animate-pulse" />
+            ) : data.people.length === 0 ? (
+              <Empty
+                title="Nobody on the team yet"
+                hint="Once people are added under People, their days appear here."
+              />
+            ) : people.length === 0 ? (
+              <Empty
+                title="Nobody matches these filters"
+                hint="Clear a filter to see the rest of the team."
+              />
+            ) : view === "DAY" ? (
+              <div className="flex-1 min-h-0 overflow-y-auto">
+                <DayBoard
+                  date={anchor}
+                  today={today}
+                  strip={rangeKeys(window_.from, window_.to).map((k) => {
+                    const d = parseKey(k);
+                    return { key: k, dom: d.getDate(), weekday: WEEKDAY[d.getDay()] };
+                  })}
+                  rows={dayRows}
+                  selectedUserId={selected?.userId ?? null}
+                  onPickDate={(d) => { setAnchor(d); setSelected((s) => (s ? { ...s, date: d } : null)); }}
+                  onStepDay={(n) => setAnchor((a) => addDays(a, n))}
+                  onSelect={(userId) => setSelected({ userId, date: anchor })}
+                />
+              </div>
+            ) : (
+              <AvailabilityGrid
+                className="flex-1 min-h-0"
+                days={days}
+                groups={groups}
+                today={today}
+                dense={view === "MONTH"}
+                selected={selected}
+                onSelect={(userId, date) => setSelected({ userId, date })}
+                collapsed={collapsed}
+                onToggleGroup={(id) => setCollapsed((s) => {
+                  const next = new Set(s);
+                  if (next.has(id)) next.delete(id); else next.add(id);
+                  return next;
+                })}
+              />
+            )}
+
+            {data && data.people.length > 0 && (
+              <div className="flex items-center justify-between gap-4 flex-wrap flex-shrink-0">
+                <Legend seesLoad={data.seesLoad} />
+                {view !== "DAY" && (
+                  <p className="hidden lg:flex items-center gap-1 text-[11px] text-gray-400">
+                    <CalendarDays className="w-3 h-3" aria-hidden />
+                    Arrow keys move around the grid
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Details, beside the grid on a wide screen and over it on a phone. */}
+        {selected && selectedPerson && (
+          <div className="fixed inset-0 z-40 bg-white dark:bg-slate-950 lg:static lg:inset-auto lg:z-auto lg:bg-transparent lg:w-[340px] lg:flex-shrink-0">
+            <PersonDayDrawer
+              person={{
+                id: selectedPerson.id, name: selectedPerson.name,
+                avatarUrl: selectedPerson.avatarUrl, craft: selectedPerson.craft,
+              }}
+              date={selected.date}
+              cell={cellOf(selected.userId, selected.date)}
+              block={selectedBlock}
+              seesLoad={!!data?.seesLoad}
+              schedule={schedule[selected.date]?.[selected.userId] ?? null}
+              scheduleLoading={scheduleLoading && !schedule[selected.date]}
+              canBlock={canBlockFor(selected.userId)}
+              clearing={clearing}
+              onClose={() => setSelected(null)}
+              onStepDay={(n) => setSelected((s) => (s ? { ...s, date: addDays(s.date, n) } : s))}
+              onBlockThisDay={() => setBlocking({ userId: selected.userId, from: selected.date, to: selected.date })}
+              onClear={clearBlock}
+            />
+          </div>
         )}
       </div>
 
-      <Modal
-        open={adding}
-        onClose={() => setAdding(false)}
-        title="Block days"
-        width="max-w-md"
-        footer={
-          <div className="flex items-center justify-end gap-2">
-            <Button variant="secondary" onClick={() => setAdding(false)} disabled={saving}>Cancel</Button>
-            <Button onClick={save} loading={saving} disabled={!from || !reasonOk}>Block them</Button>
-          </div>
+      <BlockDaysDialog
+        open={!!blocking}
+        onClose={() => setBlocking(null)}
+        meId={me?.id ?? ""}
+        people={
+          data?.canBlockOthers
+            ? (data?.people ?? []).map((p) => ({ id: p.id, name: p.name }))
+            : me ? [{ id: me.id, name: me.name }] : []
         }
-      >
-        <div className="space-y-4">
-          {managesUsers && people.length > 0 && (
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">Who</label>
-              <Select
-                value={forUserId}
-                onChange={setForUserId}
-                className="w-full"
-                options={people.map((p) => ({
-                  value: p.id,
-                  label: p.id === me?.id ? `${p.name} (you)` : p.name,
-                }))}
-              />
-              <p className="text-[11px] text-gray-400 mt-1">
-                Marking someone else out is for when they can&rsquo;t do it themselves.
-              </p>
-            </div>
-          )}
+        initial={blocking}
+        onSaved={() => {
+          toast.success("Days blocked");
+          broadcastChange("calendar");
+          load_();
+        }}
+      />
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">From</label>
-              <input
-                type="date" value={from}
-                onChange={(e) => { setFrom(e.target.value); if (!to || to < e.target.value) setTo(e.target.value); }}
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">To</label>
-              <input
-                type="date" value={to} min={from}
-                onChange={(e) => setTo(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
-              />
-            </div>
-          </div>
+      <FindCrewDialog
+        open={finding}
+        onClose={() => setFinding(false)}
+        defaultDate={focusDate}
+        crafts={crafts}
+        onAssigned={() => {
+          toast.success("Task assigned");
+          broadcastChange("tasks");
+          load_();
+        }}
+      />
+    </div>
+  );
+}
 
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1.5">What is it</label>
-            <Select value={kind} onChange={(v) => setKind(v as UnavailabilityKind)} options={KIND_OPTIONS} className="w-full" />
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1.5">Reason</label>
-            <input
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              maxLength={MAX_REASON}
-              placeholder="Shooting for another client · family wedding · out of town"
-              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
-            />
-            <p className="text-[11px] text-gray-400 mt-1">
-              Whoever plans your work sees this, so a few words is enough.
-            </p>
-          </div>
-
-          <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2.5">
-            <AlertCircle className="w-3.5 h-3.5 text-amber-600 flex-shrink-0 mt-0.5" />
-            <p className="text-xs text-amber-800">
-              Nobody will be able to assign work due on these days. Work already
-              assigned stays where it is — move it yourself if it needs moving.
-            </p>
-          </div>
-
-          {error && (
-            <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>
-          )}
-        </div>
-      </Modal>
+function Empty({ title, hint }: { title: string; hint: string }) {
+  return (
+    <div className="rounded-xl border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-slate-900 py-12 text-center">
+      <p className="text-sm font-medium text-gray-700 dark:text-slate-200">{title}</p>
+      <p className="text-[12px] text-gray-400 mt-1">{hint}</p>
     </div>
   );
 }

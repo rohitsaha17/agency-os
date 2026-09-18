@@ -150,3 +150,83 @@ export const LOAD_LABEL: Record<LoadLevel, string> = {
   busy: "2 booked",
   heavy: "Heavily booked",
 };
+
+/* ------------------------------------------------------------------ *
+ * The planner's view of a day.
+ *
+ * Everything below turns the two facts we store — is there a block, and how
+ * much work is due — into the one thing a grid cell has to say. It is pure so
+ * the rules can be checked without a browser, and so the grid, the day list
+ * and the mobile view cannot drift apart by each deciding for themselves what
+ * "busy" means.
+ *
+ * The distinction the UI must never lose: AVAILABILITY is a hard fact the
+ * person asserted, LOAD is a number the planner weighs. A cell that renders
+ * "2 jobs" the same way it renders "On leave" has thrown away the difference
+ * that makes this feature worth having.
+ * ------------------------------------------------------------------ */
+
+/** Short enough for a grid cell. KIND_LABEL is the sentence form. */
+export const KIND_SHORT: Record<UnavailabilityKind, string> = {
+  SHOOT: "On shoot",
+  LEAVE: "Leave",
+  SICK: "Sick",
+  OTHER_CLIENT: "Other client",
+  OTHER: "Unavailable",
+};
+
+export interface CellBlock {
+  kind: UnavailabilityKind;
+  reason: string;
+  /** Came from an approved leave request, so it is not the person's to clear. */
+  leave: boolean;
+}
+
+export interface DayCell {
+  /** null when this viewer may not see workload — not the same as zero. */
+  load: number | null;
+  block: CellBlock | null;
+}
+
+/** The three words the summary strip counts in. */
+export type DayStatus = "available" | "busy" | "away";
+
+export function dayStatus(cell: DayCell): DayStatus {
+  if (cell.block) return "away";
+  // Unknown load is not evidence of being busy. Someone who cannot see
+  // workload should be told "available", not guessed at.
+  if (cell.load !== null && cell.load >= 2) return "busy";
+  return "available";
+}
+
+/**
+ * What the cell reads.
+ *
+ * Two lines, always, so the column has one rhythm: what they are (a status),
+ * then the detail under it. Never colour alone — every state is legible in
+ * greyscale, which is also how it reads to somebody colour-blind.
+ */
+export function cellLabel(cell: DayCell): { head: string; sub: string } {
+  if (cell.block) {
+    return { head: KIND_SHORT[cell.block.kind] ?? "Unavailable", sub: cell.block.reason };
+  }
+  if (cell.load === null) return { head: "Available", sub: "" };
+  if (cell.load === 0) return { head: "Available", sub: "0 jobs" };
+  if (cell.load === 1) return { head: "Available", sub: "1 job" };
+  if (cell.load === 2) return { head: "2 jobs", sub: "Busy" };
+  return { head: "Heavily booked", sub: `${cell.load} jobs` };
+}
+
+/** Spoken to a screen reader, and used as the cell's title. */
+export function cellDescription(name: string, dateLabel: string, cell: DayCell): string {
+  const { head, sub } = cellLabel(cell);
+  const why = cell.block
+    ? `${cell.block.leave ? "approved leave" : head.toLowerCase()} — ${cell.block.reason}`
+    : sub || head.toLowerCase();
+  return `${name}, ${dateLabel}: ${cell.block ? "unavailable" : "available"}, ${why}`;
+}
+
+/** Key into the load map the overview endpoint returns. */
+export function loadKey(userId: string, date: string | Date): string {
+  return `${userId}|${dayString(date)}`;
+}

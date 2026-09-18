@@ -7,7 +7,8 @@
  */
 import {
   dayKey, dayString, expandRange, validateReason, blockedOn, blockedMessage,
-  loadLevel, MAX_REASON,
+  loadLevel, MAX_REASON, dayStatus, cellLabel, cellDescription, loadKey,
+  KIND_SHORT, type DayCell,
 } from "../lib/availability";
 
 let fails = 0;
@@ -74,6 +75,47 @@ check("nothing on", loadLevel(0), "free");
 check("one", loadLevel(1), "light");
 check("two", loadLevel(2), "busy");
 check("three is heavy but still allowed", loadLevel(3), "heavy");
+
+console.log("\n— the grid cell: what a planner is told —");
+const cell = (load: number | null, block: DayCell["block"] = null): DayCell => ({ load, block });
+const away = (kind: keyof typeof KIND_SHORT, leave = false): DayCell =>
+  cell(0, { kind, reason: "Nova shoot", leave });
+
+check("nothing on is available", dayStatus(cell(0)), "available");
+check("one job is still available", dayStatus(cell(1)), "available");
+check("two is busy", dayStatus(cell(2)), "busy");
+check("five is busy, not refused", dayStatus(cell(5)), "busy");
+check("a block beats any workload", dayStatus(away("SICK")), "away");
+check("a block beats a full diary too",
+  dayStatus({ load: 9, block: { kind: "LEAVE", reason: "x", leave: true } }), "away");
+
+console.log("\n— not knowing the workload is not the same as an empty one —");
+check("hidden load reads available", dayStatus(cell(null)), "available");
+check("hidden load says nothing about jobs", cellLabel(cell(null)), { head: "Available", sub: "" });
+check("zero load says so out loud", cellLabel(cell(0)), { head: "Available", sub: "0 jobs" });
+check("one job is singular", cellLabel(cell(1)).sub, "1 job");
+check("two jobs leads with the number", cellLabel(cell(2)).head, "2 jobs");
+check("heavy names itself", cellLabel(cell(4)), { head: "Heavily booked", sub: "4 jobs" });
+check("a block shows its kind, not its load", cellLabel(away("OTHER_CLIENT")).head, "Other client");
+check("a block shows its reason", cellLabel(away("OTHER_CLIENT")).sub, "Nova shoot");
+
+console.log("\n— every state is legible without colour —");
+for (const k of Object.keys(KIND_SHORT) as (keyof typeof KIND_SHORT)[]) {
+  check(k + " has a word", KIND_SHORT[k].length > 0, true);
+}
+check("the label never comes back blank", cellLabel(cell(0)).head.length > 0, true);
+
+console.log("\n— what a screen reader hears —");
+const spoken = cellDescription("Vikram", "Thu 4", away("LEAVE", true));
+check("names the person", spoken.includes("Vikram"), true);
+check("says unavailable in words", spoken.includes("unavailable"), true);
+check("calls approved leave what it is", spoken.includes("approved leave"), true);
+check("an open day says available", cellDescription("Ana", "Fri 5", cell(1)).includes("available"), true);
+
+console.log("\n— the load map key —");
+check("keyed by person and day", loadKey("vik", "2026-09-04"), "vik|2026-09-04");
+check("a timestamp lands on the same key", loadKey("vik", "2026-09-04T19:30:00Z"), "vik|2026-09-04");
+
 
 console.log(fails === 0 ? "\nAll checks passed." : `\n${fails} FAILED`);
 process.exit(fails === 0 ? 0 : 1);

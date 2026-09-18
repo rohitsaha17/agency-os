@@ -52,6 +52,11 @@ export async function GET(req: NextRequest) {
       },
       select: {
         id: true, userId: true, date: true, kind: true, reason: true, createdAt: true,
+        // Whether this day came from approved leave. The page has to say
+        // "Approved leave" rather than showing it as a block the person chose,
+        // because the two are cleared in completely different ways and only
+        // one of them is theirs to undo.
+        leaveRequestId: true,
         user: { select: { id: true, name: true, avatarUrl: true, jobTitle: { select: { name: true } } } },
         createdBy: { select: { id: true, name: true } },
       },

@@ -922,6 +922,11 @@ model Unavailability {
   /// timestamp — see lib/availability.ts.
   date           DateTime
   kind           UnavailabilityKind @default(OTHER)
+  /// Set when this day came from an approved leave request rather than
+  /// somebody blocking their own diary. It is what lets an approval be undone
+  /// cleanly: revoking leave removes exactly the days that leave created, and
+  /// never a day the photographer blocked for a shoot of their own.
+  leaveRequestId String?
   /// Required. "Unavailable" with no reason gives the SMM nothing to plan
   /// around, and this list exists to make delegation easier.
   reason         String
@@ -934,8 +939,11 @@ model Unavailability {
   user         User         @relation("UserUnavailability", fields: [userId], references: [id], onDelete: Cascade)
   createdBy    User?        @relation("UnavailabilityRecorded", fields: [createdById], references: [id], onDelete: SetNull)
 
+  leaveRequest LeaveRequest? @relation(fields: [leaveRequestId], references: [id], onDelete: Cascade)
+
   @@unique([userId, date])
   @@index([organizationId, date])
+  @@index([leaveRequestId])
   @@map("unavailability")
 }
 
@@ -1882,6 +1890,9 @@ model LeaveRequest {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   user         User         @relation("LeaveUser", fields: [userId], references: [id], onDelete: Cascade)
   decidedBy    User?        @relation("LeaveDecider", fields: [decidedById], references: [id], onDelete: SetNull)
+  /// The days this leave blocks out, once approved. Empty while pending —
+  /// asking for a day off is not the same as having it.
+  blocks       Unavailability[]
 
   @@index([organizationId, status])
   @@index([userId, startDate])

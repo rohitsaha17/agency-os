@@ -19,6 +19,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { LoadError } from "@/components/ui/LoadError";
 import { useToast } from "@/components/ui/Toast";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { Avatar } from "@/components/hr/TodayTab";
 import { MIN_LEAVE_REASON, MAX_LEAVE_REASON } from "@/lib/hr";
 
@@ -42,6 +43,7 @@ const TONE: Record<Req["status"], string> = {
 
 export function LeaveTab({ canDecide }: { canDecide: boolean }) {
   const toast = useToast();
+  const confirm = useConfirm();
   const [rows, setRows] = useState<Req[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [asking, setAsking] = useState(false);
@@ -62,6 +64,15 @@ export function LeaveTab({ canDecide }: { canDecide: boolean }) {
   useEffect(() => { load(); }, [load]);
 
   const cancel = async (r: Req) => {
+    if (r.status === "APPROVED") {
+      const ok = await confirm({
+        title: "Revoke this leave?",
+        message: `${r.user.name} will be bookable again on those days, and the block on their diary is removed.`,
+        confirmLabel: "Revoke",
+        variant: "danger",
+      });
+      if (!ok) return;
+    }
     try {
       const res = await fetch(`/api/hr/leave/${r.id}`, {
         method: "PATCH",
@@ -69,9 +80,9 @@ export function LeaveTab({ canDecide }: { canDecide: boolean }) {
         body: JSON.stringify({ action: "CANCEL" }),
       });
       if (!res.ok) throw new Error();
-      toast.success("Withdrawn");
+      toast.success(r.status === "APPROVED" ? "Revoked" : "Withdrawn");
       load();
-    } catch { toast.error("Couldn't withdraw that"); }
+    } catch { toast.error("Couldn't do that"); }
   };
 
   if (error) return <LoadError message="Couldn't load leave" detail={error} onRetry={load} />;
@@ -109,7 +120,13 @@ export function LeaveTab({ canDecide }: { canDecide: boolean }) {
           )}
           {rest.length > 0 && (
             <Section title="Decided">
-              {rest.map((r) => <Row key={r.id} r={r} canDecide={false} />)}
+              {rest.map((r) => (
+                <Row key={r.id} r={r} canDecide={false}
+                  // Plans change. Revoking is what removes the days it blocked
+                  // out — without it the diary keeps somebody off work for a
+                  // trip that isn't happening.
+                  onCancel={canDecide && r.status === "APPROVED" ? () => cancel(r) : undefined} />
+              ))}
             </Section>
           )}
         </>
@@ -156,10 +173,10 @@ function Row({ r, canDecide, onDecide, onCancel }: {
       {canDecide && onDecide && (
         <Button size="sm" variant="secondary" onClick={onDecide}>Decide</Button>
       )}
-      {!canDecide && onCancel && r.status === "PENDING" && (
+      {onCancel && (r.status === "PENDING" || r.status === "APPROVED") && (
         <button type="button" onClick={onCancel}
-          className="text-[12px] font-medium text-gray-500 hover:text-gray-800 dark:text-slate-400 dark:hover:text-slate-200 px-1">
-          Withdraw
+          className="text-[12px] font-medium text-gray-500 hover:text-gray-800 dark:text-slate-400 dark:hover:text-slate-200 px-1 flex-shrink-0">
+          {r.status === "APPROVED" ? "Revoke" : "Withdraw"}
         </button>
       )}
     </div>

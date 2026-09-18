@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 import { ensureFestivalPack, scanUpcomingEvents } from "@/lib/reminders";
+import { can } from "@/lib/permissions";
 
 /**
  * GET /api/master-calendar?year&month&clientId&projectId&creativeTypeId&
@@ -11,6 +12,16 @@ import { ensureFestivalPack, scanUpcomingEvents } from "@/lib/reminders";
  * The org-wide content view. Access filtering IS here (docs/V2_CONTEXT.md §4):
  * ADMIN/MANAGER/OWNER see everything; MEMBERs see only content items with a
  * linked task assigned to them (plus org-wide events). No financial fields.
+ *
+ * `away` is who cannot be booked on each day, and it ships only to people
+ * with content.plan — which is exactly the planners, the ones deciding who
+ * shoots what. A junior looking at the calendar has no business reading the
+ * whole team's diary.
+ *
+ * It reads `unavailability` rather than `leave_requests`, which means it
+ * covers both halves of "can't work that day" in one query: approved leave
+ * (written there on approval) and a photographer who has blocked the day for
+ * a shoot of their own. The planner's question is the same either way.
  */
 export async function GET(req: NextRequest) {
   try {
@@ -32,8 +43,9 @@ export async function GET(req: NextRequest) {
     const adHocOnly = sp.get("adHocOnly") === "1";
 
     const isMember = user.role === "MEMBER";
+    const plans = can(user, "content.plan");
 
-    const [items, events] = await Promise.all([
+    const [items, events, away] = await Promise.all([
       prisma.contentItem.findMany({
         where: {
           organizationId: user.organizationId,
@@ -92,6 +104,19 @@ export async function GET(req: NextRequest) {
           orderBy: { date: "asc" },
         });
       })(),
+      plans
+        ? prisma.unavailability.findMany({
+            where: {
+              organizationId: user.organizationId,
+              date: { gte: from, lt: to },
+            },
+            select: {
+              userId: true, date: true, kind: true, reason: true,
+              user: { select: { id: true, name: true } },
+            },
+            orderBy: { date: "asc" },
+          })
+        : Promise.resolve([]),
     ]);
 
     // Fire due reminders opportunistically (idempotent) — Phase 8 moves this
@@ -104,6 +129,13 @@ export async function GET(req: NextRequest) {
         ...e,
         date: e.date.toISOString(),
         endDate: e.endDate?.toISOString() ?? null,
+      })),
+      away: away.map((a) => ({
+        userId: a.userId,
+        name: a.user?.name ?? "Someone",
+        date: a.date.toISOString().slice(0, 10),
+        kind: a.kind,
+        reason: a.reason,
       })),
     });
   } catch (error) {

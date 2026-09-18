@@ -4,7 +4,8 @@ import { requireAuth } from "@/lib/auth";
 import { requireCapability } from "@/lib/api-permissions";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 import { notify } from "@/lib/notify";
-import { dayString, leaveDays, canDecide, canCancel } from "@/lib/hr";
+import { dayString, leaveDays, canDecide, canCancel, leaveBlockRows } from "@/lib/hr";
+import { can } from "@/lib/permissions";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -17,9 +18,20 @@ type Params = { params: Promise<{ id: string }> };
  *                      unpaid — because an approved leave with no kind is a
  *                      decision that hasn't actually been made, and it is
  *                      the payroll sheet that later has to answer for it.
- *   CANCEL             the person who asked, while it is still pending.
- *                      After a decision it is a record of what was agreed,
- *                      not a draft.
+ *   CANCEL             the person who asked, while it is still pending — or
+ *                      an approver, who may also revoke one already approved
+ *                      because plans change.
+ *
+ * Approval is also the moment leave becomes REAL: it writes the days into
+ * `unavailability`, the table the assignment guard and the assignee picker
+ * already read. That is why nothing new had to be taught to either of them.
+ * A pending request blocks nothing — asking for a day off is not the same as
+ * having it, and steering work away from somebody over a day that might not
+ * be granted would be wrong.
+ *
+ * Both halves happen in one transaction. A leave marked approved whose days
+ * are not blocked is worse than either outcome alone: it reads as handled
+ * while the person stays bookable.
  */
 export async function PATCH(req: NextRequest, { params }: Params) {
   try {
@@ -38,18 +50,26 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     if (!row) throw new ApiError("Not found", 404);
 
     if (action === "CANCEL") {
-      if (!canCancel(row.status, row.userId === user.id)) {
+      const mayDecide = can(user, "hr.manage");
+      if (!canCancel(row.status, row.userId === user.id, mayDecide)) {
         throw new ApiError(
-          row.userId !== user.id
-            ? "Only the person who asked can withdraw it."
-            : "That has already been decided — ask an admin to change it.",
+          row.status === "APPROVED"
+            ? "That leave is approved — an admin can revoke it."
+            : row.userId !== user.id
+              ? "Only the person who asked can withdraw it."
+              : "That has already been decided.",
           403,
         );
       }
-      const updated = await prisma.leaveRequest.update({
-        where: { id },
-        data: { status: "CANCELLED" },
-        select: { id: true, status: true },
+      // Revoking an approved leave has to take its blocked days with it, or
+      // the diary keeps them off work for a trip that isn't happening.
+      const updated = await prisma.$transaction(async (tx) => {
+        await tx.unavailability.deleteMany({ where: { leaveRequestId: id } });
+        return tx.leaveRequest.update({
+          where: { id },
+          data: { status: "CANCELLED" },
+          select: { id: true, status: true },
+        });
       });
       return NextResponse.json(updated);
     }
@@ -70,19 +90,40 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
     const note = typeof body.note === "string" ? body.note.trim().slice(0, 500) : null;
 
-    const updated = await prisma.leaveRequest.update({
-      where: { id },
-      data: {
-        status: action === "APPROVE" ? "APPROVED" : "REJECTED",
-        kind: action === "APPROVE" ? (kind as "PAID" | "UNPAID") : null,
-        decidedById: user.id,
-        decidedAt: new Date(),
-        decisionNote: note,
-      },
-      select: {
-        id: true, status: true, kind: true, startDate: true, endDate: true,
-        decisionNote: true,
-      },
+    const updated = await prisma.$transaction(async (tx) => {
+      const saved = await tx.leaveRequest.update({
+        where: { id },
+        data: {
+          status: action === "APPROVE" ? "APPROVED" : "REJECTED",
+          kind: action === "APPROVE" ? (kind as "PAID" | "UNPAID") : null,
+          decidedById: user.id,
+          decidedAt: new Date(),
+          decisionNote: note,
+        },
+        select: {
+          id: true, status: true, kind: true, startDate: true, endDate: true,
+          decisionNote: true,
+        },
+      });
+
+      if (action === "APPROVE") {
+        // skipDuplicates, because a photographer may already have blocked one
+        // of these days for a shoot of their own. That row stays as it is —
+        // the day is blocked either way, and replacing a specific reason with
+        // a vaguer one would gain nothing.
+        await tx.unavailability.createMany({
+          data: leaveBlockRows({
+            organizationId: user.organizationId,
+            userId: row.userId,
+            leaveRequestId: id,
+            start: saved.startDate,
+            end: saved.endDate,
+            createdById: user.id,
+          }),
+          skipDuplicates: true,
+        });
+      }
+      return saved;
     });
 
     const days = leaveDays(row.startDate, row.endDate);

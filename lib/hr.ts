@@ -89,11 +89,24 @@ export function canDecide(status: LeaveStatus): boolean {
 }
 
 /**
- * You may withdraw your own request while nobody has acted on it. After a
- * decision it is a record of what was agreed, not a draft.
+ * Who may withdraw a request, and when.
+ *
+ * Yours, while nobody has acted on it — after a decision it is a record of
+ * what was agreed, not a draft.
+ *
+ * An APPROVED one can still be revoked, but only by somebody who could have
+ * approved it. Plans change, and without this the days it blocked out would
+ * outlive the trip: the photographer's diary would show them off on the 20th
+ * forever because the wedding moved.
  */
-export function canCancel(status: LeaveStatus, isOwner: boolean): boolean {
-  return isOwner && status === "PENDING";
+export function canCancel(
+  status: LeaveStatus,
+  isOwner: boolean,
+  canDecideLeave = false,
+): boolean {
+  if (status === "PENDING") return isOwner || canDecideLeave;
+  if (status === "APPROVED") return canDecideLeave;
+  return false;
 }
 
 /** "2026-09" — the shape SalaryPayment.month is stored in. */
@@ -128,4 +141,46 @@ export function payslip(gross: number, requestedDeduction: number, outstandingTo
 
 function round2(n: number): number {
   return Math.round((Number.isFinite(n) ? n : 0) * 100) / 100;
+}
+
+/**
+ * What an approved leave writes into the availability table.
+ *
+ * Approval is the moment leave becomes real. Before it, a request is a
+ * question and the person is still available — nobody should be steered away
+ * from assigning them work over a day off that might not be granted.
+ *
+ * The reason deliberately does NOT carry over. "Sister's wedding in Jaipur"
+ * was written for the one person deciding it; the sentence an SMM sees when
+ * an assignment is refused only needs to say why they can't have them. The
+ * private reason stays on the leave request, where the approver reads it.
+ */
+export const LEAVE_BLOCK_REASON = "On approved leave";
+
+/**
+ * The days an approved leave covers, as rows ready for `unavailability`.
+ *
+ * `skipDuplicates` does the work on the overlap case: a photographer who
+ * already blocked the 20th for a shoot keeps that row, and the 20th stays
+ * blocked either way — which is the only thing the assignment guard cares
+ * about. Trying to "win" that conflict would replace a specific reason with
+ * a vaguer one for no gain.
+ */
+export function leaveBlockRows(args: {
+  organizationId: string;
+  userId: string;
+  leaveRequestId: string;
+  start: string | Date;
+  end: string | Date;
+  createdById?: string | null;
+}) {
+  return expandRange(args.start, args.end).map((date) => ({
+    organizationId: args.organizationId,
+    userId: args.userId,
+    date,
+    kind: "LEAVE" as const,
+    reason: LEAVE_BLOCK_REASON,
+    leaveRequestId: args.leaveRequestId,
+    createdById: args.createdById ?? null,
+  }));
 }

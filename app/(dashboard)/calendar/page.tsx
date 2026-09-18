@@ -6,6 +6,7 @@ import Link from "next/link";
 import {
   ChevronLeft, ChevronRight, Calendar as CalIcon,
   FolderKanban, CheckSquare, Filter, X, Users, Plus, Zap, PartyPopper, Search,
+  Plane,
 } from "lucide-react";
 import type { CalendarEvent, ContentStatus, Task } from "@/types";
 import { useCurrentUser } from "@/lib/useCurrentUser";
@@ -112,6 +113,15 @@ interface OrgEvent {
 
 interface FilterOption { id: string; name: string }
 
+interface AwayDay {
+  userId: string;
+  name: string;
+  /** YYYY-MM-DD */
+  date: string;
+  kind: "SHOOT" | "LEAVE" | "SICK" | "OTHER_CLIENT" | "OTHER";
+  reason: string | null;
+}
+
 // ── Component ────────────────────────────────────────────────
 
 function CalendarPageBody() {
@@ -124,6 +134,14 @@ function CalendarPageBody() {
   const [items, setItems] = useState<MasterItem[]>([]);
   const [orgEvents, setOrgEvents] = useState<OrgEvent[]>([]);
   const [events, setEvents] = useState<CalendarEvent[]>([]); // legacy layers
+  /**
+   * Who cannot be booked, by day. Approved leave and a photographer's own
+   * blocked days are the same fact to whoever is planning, so the API returns
+   * them together. Only sent to planners — a junior has no business reading
+   * the whole team's diary — so an empty array here is a permission, not a
+   * quiet day.
+   */
+  const [away, setAway] = useState<AwayDay[]>([]);
   const [loading, setLoading] = useState(true);
   /** Set when the load itself failed — an empty month and a failed one are
       not the same thing and must not look the same. */
@@ -209,6 +227,7 @@ function CalendarPageBody() {
       }
       const data = await res.json();
       setItems(data.items ?? []);
+      setAway(data.away ?? []);
       setOrgEvents(data.events ?? []);
       setLoadError(null);
     } catch (e) {
@@ -395,6 +414,34 @@ function CalendarPageBody() {
     const end = e.endDate ? new Date(e.endDate) : start;
     return day >= new Date(start.getFullYear(), start.getMonth(), start.getDate()) && day <= end;
   }), [orgEvents]);
+
+  /**
+   * Away on this day, indexed once rather than filtered per cell — a month
+   * grid renders 42 cells and this used to be a linear scan in each.
+   */
+  const awayByDay = useMemo(() => {
+    const m = new Map<string, AwayDay[]>();
+    for (const a of away) {
+      const list = m.get(a.date);
+      if (list) list.push(a); else m.set(a.date, [a]);
+    }
+    return m;
+  }, [away]);
+
+  /**
+   * The grid's cells are LOCAL midnights, and `away` dates are plain calendar
+   * days. Matching them with dayString() went through UTC, which in IST turns
+   * local midnight on the 15th into the 14th — so leave on the 14th rendered
+   * under the 15th, one day late, for every Indian viewer. Read the local
+   * components instead and compare calendar day to calendar day.
+   */
+  const awayOn = useCallback(
+    (day: Date) => {
+      const key = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
+      return awayByDay.get(key) ?? [];
+    },
+    [awayByDay],
+  );
 
   const legacyOn = useCallback((day: Date): DayEvent[] => {
     return events.filter((e) => {
@@ -716,8 +763,28 @@ function CalendarPageBody() {
               // Chips lost the avatar and the two dots, so a third fits in
               // the same cell height.
               const maxShow = view === "week" ? 7 : 3;
+              const awayToday = awayOn(day);
               return (
                 <>
+                  {/* Above the work, because who is here decides who can take
+                      it. One line whatever the number — this is a nudge to
+                      check before promising a date, not a roster. */}
+                  {awayToday.length > 0 && (
+                    <div
+                      className="flex items-center gap-1 mb-0.5 text-[10px] leading-tight text-amber-700 dark:text-amber-400"
+                      title={awayToday
+                        .map((a) => `${a.name} — ${a.kind === "LEAVE" ? "on leave" : (a.reason ?? "unavailable")}`)
+                        .join(" · ")}
+                    >
+                      <Plane className="w-2.5 h-2.5 flex-shrink-0" />
+                      <span className="truncate">
+                        {awayToday.length === 1
+                          ? `${awayToday[0].name.split(" ")[0]} away`
+                          : `${awayToday.length} away`}
+                      </span>
+                    </div>
+                  )}
+
                   {/* Project bars (legacy layer) */}
                   {projectEvents.slice(0, 1).map((e) => (
                     <div key={`p-${e.id}`} className="flex items-center gap-1 mb-0.5" title={`${e.title} (${e.clientName})`}>

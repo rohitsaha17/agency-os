@@ -120,7 +120,15 @@ export async function POST(req: NextRequest) {
             reason: reasonCheck.reason,
             createdById: user.id,
           },
-          update: { kind, reason: reasonCheck.reason, createdById: user.id },
+          update: {
+            kind, reason: reasonCheck.reason, createdById: user.id,
+            // Whoever writes a day explicitly now owns it, so it stops
+            // belonging to the leave that may have created it. Without this,
+            // a photographer who re-purposed a leave day as a shoot lost that
+            // block when the leave was later revoked — and became quietly
+            // bookable on a day he had a wedding.
+            leaveRequestId: null,
+          },
         }),
       ),
     );

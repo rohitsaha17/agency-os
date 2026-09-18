@@ -8,7 +8,7 @@
 import {
   dayKey, dayString, leaveDays, expandRange, validateLeaveReason,
   validateLeaveRange, canSelfCheckIn, canDecide, canCancel,
-  monthKey, isMonthKey, outstanding, payslip,
+  monthKey, isMonthKey, outstanding, payslip, leaveBlockRows, LEAVE_BLOCK_REASON,
 } from "../lib/hr";
 import { can } from "../lib/permissions";
 
@@ -57,7 +57,31 @@ check("approved cannot be decided again", canDecide("APPROVED"), false);
 check("rejected cannot be decided again", canDecide("REJECTED"), false);
 check("own pending request can be withdrawn", canCancel("PENDING", true), true);
 check("somebody else's cannot", canCancel("PENDING", false), false);
-check("a decided request is a record, not a draft", canCancel("APPROVED", true), false);
+check("an approver may withdraw somebody else's pending one", canCancel("PENDING", false, true), true);
+check("the person who asked cannot un-approve their own", canCancel("APPROVED", true), false);
+check("an approver CAN revoke an approved one — plans change", canCancel("APPROVED", false, true), true);
+check("a rejected one stays rejected", canCancel("REJECTED", true, true), false);
+check("a cancelled one is not re-cancellable", canCancel("CANCELLED", true, true), false);
+
+console.log("");
+console.log("— approved leave becomes days blocked on the diary —");
+const blocks = leaveBlockRows({
+  organizationId: "org1", userId: "u1", leaveRequestId: "lr1",
+  start: "2026-09-20", end: "2026-09-22", createdById: "admin1",
+});
+check("one row per day, inclusive", blocks.length, 3);
+check("the days are the range", blocks.map((b) => dayString(b.date)),
+  ["2026-09-20", "2026-09-21", "2026-09-22"]);
+check("every row is kind LEAVE", blocks.every((b) => b.kind === "LEAVE"), true);
+check("every row points back at the request", blocks.every((b) => b.leaveRequestId === "lr1"), true);
+check("the PRIVATE reason never reaches the block — it was for the approver",
+  blocks.every((b) => b.reason === LEAVE_BLOCK_REASON), true);
+check("a single day is a single block", leaveBlockRows({
+  organizationId: "o", userId: "u", leaveRequestId: "l",
+  start: "2026-09-20", end: "2026-09-20" }).length, 1);
+check("a backwards range blocks nothing rather than throwing", leaveBlockRows({
+  organizationId: "o", userId: "u", leaveRequestId: "l",
+  start: "2026-09-22", end: "2026-09-20" }).length, 0);
 
 console.log("\n— months —");
 check("a month key passes through", monthKey("2026-09"), "2026-09");

@@ -22,6 +22,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { CheckCircle2, Clock, Plane } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { broadcastChange, useLiveRefresh } from "@/lib/live";
 
 interface Me {
   state: "IN" | "ON_LEAVE" | "UNKNOWN";
@@ -57,6 +58,9 @@ export function CheckInCard({ timezone }: { timezone?: string }) {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+  // Checked in at the gate, or in another tab, or yesterday's answer left
+  // over on a laptop that was never closed. Any of those and this is stale.
+  useLiveRefresh(["attendance"], load);
 
   const checkIn = async () => {
     setBusy(true);
@@ -73,6 +77,7 @@ export function CheckInCard({ timezone }: { timezone?: string }) {
       }
       const d = await res.json();
       setMe({ state: "IN", checkedInAt: d.checkedInAt });
+      broadcastChange("attendance");
       load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");

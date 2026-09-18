@@ -14,7 +14,7 @@ import { useEffect, useRef } from "react";
 
 const CHANNEL = "vsf-live";
 
-export type LiveTopic = "tasks" | "calendar" | "all";
+export type LiveTopic = "tasks" | "calendar" | "attendance" | "all";
 
 /** Call after any mutation that other views should see. */
 export function broadcastChange(topic: LiveTopic = "all") {

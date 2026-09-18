@@ -23,6 +23,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Sun } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { broadcastChange } from "@/lib/live";
 
 export function CheckInGate({ name }: { name: string }) {
   const router = useRouter();
@@ -48,9 +49,20 @@ export function CheckInGate({ name }: { name: string }) {
         throw new Error(d?.error?.message ?? "Couldn't record that");
       }
       setDone(true);
-      // The gate is decided on the server, so the page has to be re-rendered
-      // to learn it is gone. refresh() keeps them on the URL they asked for
-      // instead of bouncing them to the dashboard.
+      /*
+        Two things have to hear about this, and refresh() only reaches one.
+
+        The gate is decided on the server, so the page is re-rendered to learn
+        it has gone — refresh() keeps them on the URL they asked for rather
+        than bouncing them to the dashboard.
+
+        But the dashboard's check-in card is a CLIENT component that mounted
+        under the gate and asked /api/hr/today before any of this happened.
+        A server refresh does not re-run its effect, so it sat there still
+        saying "Start your day" to somebody who had just checked in. The
+        broadcast is what tells it.
+      */
+      broadcastChange("attendance");
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");

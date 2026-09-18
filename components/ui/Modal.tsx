@@ -99,15 +99,30 @@ export function Modal({
             so it carries the home-indicator inset itself; otherwise the
             footer does and doubling it would leave a gap. */}
         <div className={`overflow-y-auto flex-1 ${
-          compact ? "px-5 py-4" : "px-4 sm:px-6 py-4 sm:py-5"
-        } ${footer ? "" : "safe-bottom"}`}>
+          compact
+            ? `px-5 pt-4 ${footer ? "pb-4" : "pb-[calc(1rem+var(--safe-bottom))]"}`
+            : `px-4 sm:px-6 pt-4 sm:pt-5 ${footer ? "pb-4 sm:pb-5" : "pb-[calc(1.25rem+var(--safe-bottom))]"}`
+        }`}>
           {children}
         </div>
 
-        {/* Actions stay put while the body scrolls. */}
+        {/*
+          Actions stay put while the body scrolls.
+
+          The bottom padding is written out rather than composed from `py-3`
+          plus the `.safe-bottom` helper. That helper sets `padding-bottom`
+          outright, and it is a plain class tying with Tailwind's on
+          specificity — so it won by stylesheet order and replaced the
+          padding with `env(safe-area-inset-bottom)`, which is 0px on a
+          desktop. Every dialog with a footer had its buttons sitting flush on
+          the bottom border, and the inset it was supposed to add did nothing
+          on the phones it was for either.
+        */}
         {footer && (
-          <div className={`flex-shrink-0 border-t border-gray-200 dark:border-white/[0.08] safe-bottom ${
-            compact ? "px-5 py-3" : "px-4 sm:px-6 py-3 sm:py-4"
+          <div className={`flex-shrink-0 border-t border-gray-200 dark:border-white/[0.08] ${
+            compact
+              ? "px-5 pt-3 pb-[calc(0.75rem+var(--safe-bottom))]"
+              : "px-4 sm:px-6 pt-3 sm:pt-4 pb-[calc(0.75rem+var(--safe-bottom))] sm:pb-[calc(1rem+var(--safe-bottom))]"
           }`}>
             {footer}
           </div>

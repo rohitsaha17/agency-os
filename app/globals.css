@@ -720,6 +720,11 @@ input[type="time"]::-webkit-calendar-picker-indicator:hover {
 }
 
 .safe-top    { padding-top: var(--safe-top); }
+/* Sets padding-bottom OUTRIGHT — it does not add to one that is already
+   there. Alongside a Tailwind `py-*` it ties on specificity, wins on
+   stylesheet order, and replaces that padding with an inset that is 0px on
+   every desktop. If an element needs its own padding AND the inset, write
+   `pb-[calc(<the padding>+var(--safe-bottom))]` instead. */
 .safe-bottom { padding-bottom: var(--safe-bottom); }
 .safe-x      { padding-left: var(--safe-left); padding-right: var(--safe-right); }
 

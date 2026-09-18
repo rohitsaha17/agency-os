@@ -37,7 +37,28 @@ export async function GET(req: NextRequest) {
     const day = dayKey(sp.get("date") ?? attendanceDay(new Date(), tz));
     const seesTeam = can(user, "hr.view");
 
-    const [people, present, onLeave] = await Promise.all([
+    /*
+      Three more facts the board needs, fetched in the SAME request.
+
+      Each of these is a question somebody was previously answering by opening
+      another tab: what is waiting for me to decide, who is off later this
+      week, and how much is already on the person I am about to ask. A tab per
+      question is a round trip per question, and at ~130ms each that is what
+      an operational dashboard cannot afford.
+
+      Their gates are the ones that already existed elsewhere, not new ones:
+      pending leave is the approver's inbox (hr.manage), and workload is a
+      planner's view of colleagues (content.plan) — the same rule
+      /api/availability/day has always applied to it.
+    */
+    const decides = can(user, "hr.manage");
+    const seesLoad = can(user, "content.plan");
+    const weekEnd = new Date(day);
+    weekEnd.setUTCDate(weekEnd.getUTCDate() + 7);
+    const dayEnd = new Date(day);
+    dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
+
+    const [people, present, onLeave, pending, upcoming, dueToday] = await Promise.all([
       prisma.user.findMany({
         where: {
           organizationId: user.organizationId,
@@ -68,7 +89,57 @@ export async function GET(req: NextRequest) {
         },
         select: { userId: true, kind: true },
       }),
+      // Waiting on a decision. Count and names, so the card can say who
+      // rather than only how many.
+      decides
+        ? prisma.leaveRequest.findMany({
+            where: { organizationId: user.organizationId, status: "PENDING" },
+            select: {
+              id: true, startDate: true, endDate: true,
+              user: { select: { id: true, name: true, avatarUrl: true } },
+            },
+            orderBy: { createdAt: "asc" },
+            take: 10,
+          })
+        : Promise.resolve([]),
+      // Off later this week. Starts after today, so somebody already away
+      // does not appear twice — they are on the board as ON_LEAVE already.
+      seesTeam
+        ? prisma.leaveRequest.findMany({
+            where: {
+              organizationId: user.organizationId,
+              status: "APPROVED",
+              startDate: { gt: day, lte: weekEnd },
+            },
+            select: {
+              id: true, startDate: true, endDate: true, kind: true,
+              user: { select: { id: true, name: true, avatarUrl: true } },
+            },
+            orderBy: { startDate: "asc" },
+            take: 10,
+          })
+        : Promise.resolve([]),
+      // Open work due today, per person. DONE is not load — counting
+      // finished work would make a productive morning look overloaded.
+      seesLoad
+        ? prisma.taskAssignee.findMany({
+            where: {
+              task: {
+                organizationId: user.organizationId,
+                deletedAt: null,
+                status: { not: "DONE" },
+                dueDate: { gte: day, lt: dayEnd },
+              },
+            },
+            select: { userId: true },
+          })
+        : Promise.resolve([]),
     ]);
+
+    const loadByUser = new Map<string, number>();
+    for (const row of dueToday) {
+      loadByUser.set(row.userId, (loadByUser.get(row.userId) ?? 0) + 1);
+    }
 
     const inByUser = new Map(present.map((p) => [p.userId, p]));
     const leaveByUser = new Map(onLeave.map((l) => [l.userId, l]));
@@ -88,6 +159,8 @@ export async function GET(req: NextRequest) {
         recordedByAdmin: checkedIn?.source === "ADMIN",
         note: checkedIn?.note ?? null,
         leaveKind: leave?.kind ?? null,
+        /** Null, not 0, when this viewer may not see colleagues' workload. */
+        openToday: seesLoad ? loadByUser.get(p.id) ?? 0 : null,
       };
     });
 
@@ -104,6 +177,22 @@ export async function GET(req: NextRequest) {
       /** The gate on the dashboard turns on exactly when this is true. */
       mustCheckIn: !exempt && me?.state === "UNKNOWN",
       people: rows,
+      /** Tells the client to leave the workload column out entirely. */
+      seesLoad,
+      /** The approver's inbox, empty for everybody else. */
+      pending: pending.map((r) => ({
+        id: r.id,
+        start: dayString(r.startDate),
+        end: dayString(r.endDate),
+        user: r.user,
+      })),
+      upcoming: upcoming.map((r) => ({
+        id: r.id,
+        start: dayString(r.startDate),
+        end: dayString(r.endDate),
+        kind: r.kind,
+        user: r.user,
+      })),
       summary: {
         in: rows.filter((r) => r.state === "IN").length,
         onLeave: rows.filter((r) => r.state === "ON_LEAVE").length,

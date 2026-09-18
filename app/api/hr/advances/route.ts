@@ -22,12 +22,13 @@ import { outstanding } from "@/lib/hr";
 
 const SELECT = {
   id: true, userId: true, kind: true, amount: true, amountRepaid: true,
-  givenOn: true, note: true, closedAt: true,
+  givenOn: true, note: true, closedAt: true, recoveryAmount: true,
   user: { select: { id: true, name: true, avatarUrl: true } },
 } as const;
 
 function serialize(a: {
   amount: unknown; amountRepaid: unknown; givenOn: Date; closedAt: Date | null;
+  recoveryAmount?: unknown;
   [k: string]: unknown;
 }) {
   const amount = Number(a.amount);
@@ -37,9 +38,25 @@ function serialize(a: {
     amount,
     amountRepaid: repaid,
     outstanding: outstanding(amount, repaid),
+    // Null means nobody agreed a monthly figure — which is a real
+    // arrangement, not missing data. Coercing it to 0 would put "₹0 a month"
+    // on screen and imply the balance never clears.
+    recoveryAmount: a.recoveryAmount == null ? null : Number(a.recoveryAmount),
     givenOn: a.givenOn.toISOString(),
     closedAt: a.closedAt?.toISOString() ?? null,
   };
+}
+
+/** Optional, positive, and never more than the advance itself. */
+function readRecovery(raw: unknown, ofAmount: number): number | null {
+  if (raw === undefined || raw === null || raw === "") return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) {
+    throw new ApiError("A monthly recovery has to be more than zero — leave it blank if there isn't one", 400);
+  }
+  // Recovering more per month than was lent is a typo, and it would print an
+  // estimate of "1 month" over a figure nobody can pay.
+  return Math.min(n, ofAmount);
 }
 
 export async function GET(req: NextRequest) {
@@ -101,6 +118,7 @@ export async function POST(req: NextRequest) {
         kind: kind as "ADVANCE" | "LOAN",
         amount,
         givenOn: body.givenOn ? new Date(body.givenOn) : new Date(),
+        recoveryAmount: readRecovery(body.recoveryAmount, amount),
         note: typeof body.note === "string" ? body.note.trim().slice(0, 300) : null,
       },
       select: SELECT,
@@ -124,9 +142,7 @@ export async function PATCH(req: NextRequest) {
 
     const body = await req.json().catch(() => ({}));
     const id = String(body.id ?? "");
-    const repay = Number(body.repay);
     if (!id) throw new ApiError("Which advance?", 400);
-    if (!Number.isFinite(repay) || repay <= 0) throw new ApiError("Enter an amount greater than zero", 400);
 
     const row = await prisma.staffAdvance.findFirst({
       where: { id, organizationId: user.organizationId },
@@ -135,6 +151,23 @@ export async function PATCH(req: NextRequest) {
     if (!row) throw new ApiError("Not found", 404);
 
     const amount = Number(row.amount);
+
+    /*
+      Changing the monthly figure is not a repayment, so it is its own branch.
+      Folding the two together would mean correcting a plan you mistyped moved
+      money, which is the kind of convenience that costs somebody their salary.
+    */
+    if (body.repay === undefined && "recoveryAmount" in body) {
+      const updatedPlan = await prisma.staffAdvance.update({
+        where: { id },
+        data: { recoveryAmount: readRecovery(body.recoveryAmount, amount) },
+        select: SELECT,
+      });
+      return NextResponse.json(serialize(updatedPlan));
+    }
+
+    const repay = Number(body.repay);
+    if (!Number.isFinite(repay) || repay <= 0) throw new ApiError("Enter an amount greater than zero", 400);
     const due = outstanding(amount, Number(row.amountRepaid));
     if (due <= 0) throw new ApiError("That one is already settled.", 409);
 

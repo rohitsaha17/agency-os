@@ -1,25 +1,44 @@
 "use client";
 
 /**
- * The staff record — everything about a person on one row, which is the
- * thing that was actually asked for.
+ * Staff — who works here, and what we hold on them.
  *
- * The salary column simply is not rendered without payroll.manage, and more
- * to the point the API never sends it: `seesPay` here decides layout, not
- * access. A manager inspecting the network tab finds no salary to read.
+ * The salary column is not rendered without payroll.manage, and more to the
+ * point the API never sends it: `seesPay` here decides layout, not access. A
+ * manager inspecting the network tab finds no salary to read.
+ *
+ * Clicking a row opens the record beside the table rather than replacing it,
+ * which is what makes checking four people's joining dates one motion instead
+ * of four page loads. The drawer links out to that person's attendance, leave
+ * and pay rather than re-implementing three screens inside itself — those
+ * pages already exist, already handle their own permissions, and a second
+ * half-version of each is a second thing to keep true.
+ *
+ * Where something has not been filled in, the cell reads "—". The module used
+ * to print "not set" in a dozen places, which turned an empty column into a
+ * wall of the same three words.
  */
 
-import { useCallback, useEffect, useState } from "react";
-import { Pencil } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Plus, UserPlus, Pencil, ExternalLink } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
+import { Select } from "@/components/ui/Select";
 import { LoadError } from "@/components/ui/LoadError";
 import { useToast } from "@/components/ui/Toast";
-import { Avatar, Skeleton } from "@/components/hr/TodayTab";
+import { Drawer, DrawerLine, DrawerSection } from "@/components/people/Drawer";
+import {
+  PersonAvatar, PersonCell, StatusBadge, SummaryCard, SummaryStrip,
+  Table, Th, Td, Row, RowMenu, EmptyState, TableSkeleton, CardsSkeleton,
+  MobileCard, ClearFilters,
+} from "@/components/people/kit";
+import {
+  EMPLOYMENT_LABEL, longDate, matchesQuery, money, humanise,
+} from "@/lib/people";
 
 interface Staff {
   id: string; name: string; email: string; avatarUrl: string | null;
-  role: string; isActive: boolean; craft: string | null;
+  role: string; isActive: boolean; craft: string | null; jobTitleId: string | null;
   phone: string | null; dateOfBirth: string | null; dateOfJoining: string | null;
   address: string | null; emergencyName: string | null; emergencyPhone: string | null;
   employmentType: string; notes: string | null;
@@ -28,124 +47,356 @@ interface Staff {
 }
 
 const EMPLOYMENT = ["FULL_TIME", "PART_TIME", "CONTRACT", "INTERN"] as const;
-const label = (t: string) => t.replace("_", " ").toLowerCase().replace(/^\w/, (c) => c.toUpperCase());
-const day = (iso: string | null) =>
-  iso ? new Date(iso).toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }) : "—";
 const forInput = (iso: string | null) => (iso ? iso.slice(0, 10) : "");
 
-export function StaffTab({ query, canEdit, seesPay }: {
-  query: string; canEdit: boolean; seesPay: boolean;
+export function StaffTab({
+  query, canEdit, seesPay, canInvite, currency, onNavigate,
+}: {
+  query: string;
+  canEdit: boolean;
+  seesPay: boolean;
+  canInvite: boolean;
+  currency: string;
+  onNavigate: (tab: "attendance" | "leave" | "payroll" | "advances", userId?: string) => void;
 }) {
   const toast = useToast();
   const [staff, setStaff] = useState<Staff[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [open, setOpen] = useState<string | null>(null);
   const [editing, setEditing] = useState<Staff | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [craft, setCraft] = useState("");
+  const [type, setType] = useState("");
+  const [status, setStatus] = useState("");
 
   const load = useCallback(async () => {
     setError(null);
     try {
-      const res = await fetch("/api/hr/staff");
-      if (!res.ok) throw new Error(res.status === 403 ? "You don't have access to staff records." : `The server returned ${res.status}.`);
+      // Inactive people are asked for so the Status filter has something to
+      // filter — the list still shows only the active ones by default.
+      const res = await fetch("/api/hr/staff?includeInactive=1");
+      if (!res.ok) {
+        throw new Error(res.status === 403
+          ? "Staff records aren't part of your access."
+          : "Something went wrong loading the staff list.");
+      }
       const d = await res.json();
       setStaff(d.staff ?? []);
     } catch (e) {
+      setStaff(null);
       setError(e instanceof Error ? e.message : "Check your connection and try again.");
     }
   }, []);
 
   useEffect(() => { load(); }, [load]);
 
-  if (error) return <LoadError message="Couldn't load the staff list" detail={error} onRetry={load} />;
-  if (!staff) return <Skeleton />;
+  const crafts = useMemo(
+    () => [...new Set((staff ?? []).map((s) => s.craft).filter(Boolean) as string[])].sort(),
+    [staff],
+  );
 
-  const q = query.trim().toLowerCase();
-  const rows = staff.filter((s) =>
-    !q || s.name.toLowerCase().includes(q) || s.email.toLowerCase().includes(q) ||
-    (s.craft ?? "").toLowerCase().includes(q) || (s.phone ?? "").includes(q));
+  const rows = useMemo(() => (staff ?? []).filter((s) => {
+    if (!matchesQuery(s, query)) return false;
+    if (craft && s.craft !== craft) return false;
+    if (type && s.employmentType !== type) return false;
+    if (status === "inactive" ? s.isActive : status === "active" ? !s.isActive : false) return false;
+    // Default view is the people who actually work here.
+    if (!status && !s.isActive) return false;
+    return true;
+  }), [staff, query, craft, type, status]);
+
+  const filtersOn = !!(craft || type || status);
+  const opened = (staff ?? []).find((s) => s.id === open) ?? null;
+  const active = (staff ?? []).filter((s) => s.isActive);
 
   return (
-    <>
-      <div className="overflow-x-auto -mx-4 sm:mx-0">
-        <table className="w-full min-w-[820px] text-[13px]">
-          <thead>
-            <tr className="text-left text-[11px] uppercase tracking-wide text-gray-500 dark:text-slate-400 border-b border-gray-200 dark:border-white/[0.08]">
-              <th className="py-2 px-3 font-medium">Name</th>
-              <th className="py-2 px-3 font-medium">Role</th>
-              <th className="py-2 px-3 font-medium">Contact</th>
-              <th className="py-2 px-3 font-medium">Joined</th>
-              <th className="py-2 px-3 font-medium">Birthday</th>
-              <th className="py-2 px-3 font-medium">Type</th>
-              {seesPay && <th className="py-2 px-3 font-medium text-right">Salary</th>}
-              {seesPay && <th className="py-2 px-3 font-medium text-right">Owes</th>}
-              {canEdit && <th className="py-2 px-3" />}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((s) => (
-              <tr key={s.id} className="border-b border-gray-100 dark:border-white/[0.05]">
-                <td className="py-2.5 px-3">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <Avatar name={s.name} url={s.avatarUrl} />
-                    <div className="min-w-0">
-                      <p className="font-medium text-gray-900 dark:text-slate-100 truncate">{s.name}</p>
-                      <p className="text-[11px] text-gray-500 dark:text-slate-400 truncate">{s.email}</p>
-                    </div>
-                  </div>
-                </td>
-                <td className="py-2.5 px-3 text-gray-600 dark:text-slate-300">{s.craft ?? s.role}</td>
-                <td className="py-2.5 px-3 text-gray-600 dark:text-slate-300">{s.phone ?? "—"}</td>
-                <td className="py-2.5 px-3 text-gray-600 dark:text-slate-300 whitespace-nowrap">{day(s.dateOfJoining)}</td>
-                <td className="py-2.5 px-3 text-gray-600 dark:text-slate-300 whitespace-nowrap">{day(s.dateOfBirth)}</td>
-                <td className="py-2.5 px-3 text-gray-600 dark:text-slate-300 whitespace-nowrap">{label(s.employmentType)}</td>
-                {seesPay && (
-                  <td className="py-2.5 px-3 text-right tabular-nums text-gray-900 dark:text-slate-100">
-                    {s.monthlySalary != null
-                      ? s.monthlySalary.toLocaleString("en-IN")
-                      : <span className="text-gray-400">not set</span>}
-                  </td>
-                )}
-                {seesPay && (
-                  <td className="py-2.5 px-3 text-right tabular-nums">
-                    {s.advanceOutstanding
-                      ? <span className="text-amber-600 dark:text-amber-400">{s.advanceOutstanding.toLocaleString("en-IN")}</span>
-                      : <span className="text-gray-400">—</span>}
-                  </td>
-                )}
-                {canEdit && (
-                  <td className="py-2.5 px-3 text-right">
-                    <button type="button" onClick={() => setEditing(s)}
-                      className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-surface duration-150"
-                      aria-label={`Edit ${s.name}`}>
-                      <Pencil className="w-3.5 h-3.5" />
-                    </button>
-                  </td>
-                )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <Select
+          value={craft} onChange={setCraft} allowEmpty placeholder="All roles" size="sm"
+          options={crafts.map((c) => ({ value: c, label: c }))} className="min-w-[8.5rem]"
+        />
+        <Select
+          value={type} onChange={setType} allowEmpty placeholder="All employment types" size="sm"
+          options={EMPLOYMENT.map((t) => ({ value: t, label: EMPLOYMENT_LABEL[t] }))}
+          className="min-w-[10rem]"
+        />
+        <Select
+          value={status} onChange={setStatus} allowEmpty placeholder="Active only" size="sm"
+          options={[{ value: "active", label: "Active only" }, { value: "inactive", label: "Inactive only" }]}
+          className="min-w-[8.5rem]"
+        />
+        {filtersOn && <ClearFilters onClear={() => { setCraft(""); setType(""); setStatus(""); }} />}
+        {canInvite && (
+          <Button size="sm" className="ml-auto" icon={<Plus className="w-3.5 h-3.5" />} onClick={() => setAdding(true)}>
+            Add person
+          </Button>
+        )}
       </div>
 
-      {rows.length === 0 && (
-        <p className="text-sm text-gray-500 dark:text-slate-400 py-8 text-center">
-          {q ? "Nobody by that name." : "Nobody on the team yet."}
-        </p>
+      {error ? (
+        <LoadError message="Couldn't load the staff list" detail={error} onRetry={load} />
+      ) : !staff ? (
+        <div className="space-y-3"><CardsSkeleton count={3} /><TableSkeleton rows={6} /></div>
+      ) : (
+        <>
+          <SummaryStrip>
+            <SummaryCard label="On the team" value={active.length} />
+            <SummaryCard
+              label="Joining date missing"
+              value={active.filter((s) => !s.dateOfJoining).length}
+              tone={active.some((s) => !s.dateOfJoining) ? "amber" : undefined}
+              title="Records with no joining date recorded yet"
+            />
+            {seesPay && (
+              <SummaryCard
+                label="Salary not set"
+                value={active.filter((s) => s.monthlySalary == null).length}
+                tone={active.some((s) => s.monthlySalary == null) ? "amber" : undefined}
+                title="Payroll cannot produce a figure for these people"
+              />
+            )}
+            {seesPay && (
+              <SummaryCard
+                label="Owed on advances"
+                value={money(active.reduce((t, s) => t + (s.advanceOutstanding ?? 0), 0), currency)}
+              />
+            )}
+          </SummaryStrip>
+
+          {rows.length === 0 ? (
+            <EmptyState
+              title={query || filtersOn ? "Nobody matches that" : "Nobody on the team yet"}
+              hint={
+                query || filtersOn
+                  ? "Clear the search or the filters to see everyone."
+                  : "Add the people who work here and their records appear across the module."
+              }
+              action={canInvite && !query && !filtersOn ? (
+                <Button size="sm" icon={<UserPlus className="w-3.5 h-3.5" />} onClick={() => setAdding(true)}>
+                  Add person
+                </Button>
+              ) : undefined}
+            />
+          ) : (
+            <>
+              <div className="hidden sm:block">
+                <Table minWidth={seesPay ? 980 : 820}>
+                  <thead>
+                    <tr>
+                      <Th>Employee</Th>
+                      <Th>Role</Th>
+                      <Th>Employment</Th>
+                      <Th>Phone</Th>
+                      <Th>Joined</Th>
+                      {seesPay && <Th align="right">Salary</Th>}
+                      {seesPay && <Th align="right">Owes</Th>}
+                      <Th>Status</Th>
+                      <Th />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((s) => (
+                      <Row
+                        key={s.id}
+                        onOpen={() => setOpen(s.id)}
+                        selected={open === s.id}
+                        label={`Open ${s.name}'s record`}
+                      >
+                        <Td><PersonCell name={s.name} url={s.avatarUrl} secondary={s.email} /></Td>
+                        <Td className="text-gray-600 dark:text-slate-300">{s.craft ?? humanise(s.role)}</Td>
+                        <Td nowrap className="text-gray-600 dark:text-slate-300">
+                          {EMPLOYMENT_LABEL[s.employmentType] ?? "—"}
+                        </Td>
+                        <Td className="text-gray-600 dark:text-slate-300">{s.phone ?? "—"}</Td>
+                        <Td nowrap className="text-gray-600 dark:text-slate-300">{longDate(s.dateOfJoining)}</Td>
+                        {seesPay && (
+                          <Td align="right" className="text-gray-900 dark:text-slate-100">
+                            {s.monthlySalary != null
+                              ? money(s.monthlySalary, currency)
+                              : <span className="text-gray-400">—</span>}
+                          </Td>
+                        )}
+                        {seesPay && (
+                          <Td align="right">
+                            {s.advanceOutstanding
+                              ? <span className="text-amber-600 dark:text-amber-400">{money(s.advanceOutstanding, currency)}</span>
+                              : <span className="text-gray-400">—</span>}
+                          </Td>
+                        )}
+                        <Td>
+                          <StatusBadge tone={s.isActive ? "green" : "grey"}>
+                            {s.isActive ? "Active" : "Inactive"}
+                          </StatusBadge>
+                        </Td>
+                        <Td align="right" className="w-10">
+                          <div onClick={(e) => e.stopPropagation()}>
+                            <RowMenu
+                              label={`Actions for ${s.name}`}
+                              items={[
+                                { label: "View record", onSelect: () => setOpen(s.id) },
+                                { label: "Edit details", onSelect: () => setEditing(s), disabled: !canEdit },
+                                { label: "View attendance", onSelect: () => onNavigate("attendance", s.id) },
+                                { label: "View leave", onSelect: () => onNavigate("leave", s.id) },
+                                { label: "View payroll", onSelect: () => onNavigate("payroll", s.id), disabled: !seesPay },
+                                { label: "View advances", onSelect: () => onNavigate("advances", s.id), disabled: !seesPay },
+                              ]}
+                            />
+                          </div>
+                        </Td>
+                      </Row>
+                    ))}
+                  </tbody>
+                </Table>
+              </div>
+
+              <div className="sm:hidden space-y-1.5">
+                {rows.map((s) => (
+                  <MobileCard key={s.id} onOpen={() => setOpen(s.id)} label={`Open ${s.name}'s record`}>
+                    <div className="flex items-center gap-2.5">
+                      <PersonAvatar name={s.name} url={s.avatarUrl} />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[13px] font-medium text-gray-900 dark:text-slate-100 truncate">{s.name}</p>
+                        <p className="text-[11px] text-gray-500 dark:text-slate-400 truncate">
+                          {s.craft ?? humanise(s.role)} · {EMPLOYMENT_LABEL[s.employmentType] ?? "—"}
+                        </p>
+                      </div>
+                      <StatusBadge tone={s.isActive ? "green" : "grey"}>
+                        {s.isActive ? "Active" : "Inactive"}
+                      </StatusBadge>
+                    </div>
+                  </MobileCard>
+                ))}
+              </div>
+            </>
+          )}
+        </>
+      )}
+
+      {opened && (
+        <Drawer
+          open
+          onClose={() => setOpen(null)}
+          title={opened.name}
+          subtitle={`${opened.craft ?? humanise(opened.role)} · ${EMPLOYMENT_LABEL[opened.employmentType] ?? "—"}`}
+          label={`${opened.name}'s record`}
+          headerAside={<PersonAvatar name={opened.name} url={opened.avatarUrl} size="lg" />}
+          footer={
+            canEdit ? (
+              <Button
+                size="sm" variant="secondary" className="w-full"
+                icon={<Pencil className="w-3.5 h-3.5" />}
+                onClick={() => setEditing(opened)}
+              >
+                Edit details
+              </Button>
+            ) : undefined
+          }
+        >
+          <DrawerSection title="Employment">
+            <div className="rounded-xl border border-gray-200 dark:border-white/[0.08] px-3 py-1">
+              <DrawerLine label="Role" value={opened.craft ?? humanise(opened.role)} />
+              <DrawerLine label="Access level" value={humanise(opened.role)} />
+              <DrawerLine label="Employment" value={EMPLOYMENT_LABEL[opened.employmentType] ?? "—"} />
+              <DrawerLine label="Joined" value={longDate(opened.dateOfJoining)} />
+              <DrawerLine
+                label="Status"
+                value={<StatusBadge tone={opened.isActive ? "green" : "grey"}>{opened.isActive ? "Active" : "Inactive"}</StatusBadge>}
+              />
+            </div>
+          </DrawerSection>
+
+          <DrawerSection title="Contact">
+            <div className="rounded-xl border border-gray-200 dark:border-white/[0.08] px-3 py-1">
+              <DrawerLine label="Email" value={opened.email} />
+              <DrawerLine label="Phone" value={opened.phone ?? "—"} />
+              <DrawerLine label="Date of birth" value={longDate(opened.dateOfBirth)} />
+              <DrawerLine label="Address" value={opened.address ?? "—"} />
+              <DrawerLine
+                label="Emergency"
+                value={opened.emergencyName
+                  ? `${opened.emergencyName}${opened.emergencyPhone ? ` · ${opened.emergencyPhone}` : ""}`
+                  : "—"}
+              />
+            </div>
+          </DrawerSection>
+
+          {seesPay && (
+            <DrawerSection title="Money">
+              <div className="rounded-xl border border-gray-200 dark:border-white/[0.08] px-3 py-1">
+                <DrawerLine
+                  label="Monthly salary"
+                  value={opened.monthlySalary != null
+                    ? money(opened.monthlySalary, currency)
+                    : <span className="text-amber-600 dark:text-amber-400">Not configured</span>}
+                  tone="strong"
+                />
+                <DrawerLine
+                  label="Owed on advances"
+                  value={opened.advanceOutstanding ? money(opened.advanceOutstanding, currency) : "—"}
+                />
+              </div>
+            </DrawerSection>
+          )}
+
+          {opened.notes && (
+            <DrawerSection title="Notes">
+              <p className="text-[12px] text-gray-700 dark:text-slate-300 whitespace-pre-wrap">{opened.notes}</p>
+            </DrawerSection>
+          )}
+
+          {/* Links rather than copies. Each destination is the real screen,
+              with its own permissions and its own month navigation. */}
+          <DrawerSection title="Elsewhere in People">
+            <div className="grid grid-cols-2 gap-1.5">
+              <Jump label="Attendance" onClick={() => { setOpen(null); onNavigate("attendance", opened.id); }} />
+              <Jump label="Leave" onClick={() => { setOpen(null); onNavigate("leave", opened.id); }} />
+              {seesPay && <Jump label="Payroll" onClick={() => { setOpen(null); onNavigate("payroll", opened.id); }} />}
+              {seesPay && <Jump label="Advances" onClick={() => { setOpen(null); onNavigate("advances", opened.id); }} />}
+            </div>
+          </DrawerSection>
+        </Drawer>
       )}
 
       {editing && (
         <EditStaff
           staff={editing}
           seesPay={seesPay}
+          currency={currency}
           onClose={() => setEditing(null)}
           onSaved={() => { setEditing(null); toast.success("Saved"); load(); }}
         />
       )}
-    </>
+
+      {adding && (
+        <AddPerson
+          onClose={() => setAdding(false)}
+          onSaved={() => { setAdding(false); toast.success("Added"); load(); }}
+        />
+      )}
+    </div>
   );
 }
 
-function EditStaff({ staff, seesPay, onClose, onSaved }: {
-  staff: Staff; seesPay: boolean; onClose: () => void; onSaved: () => void;
+function Jump({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex items-center justify-between gap-1 px-2.5 py-2 rounded-lg border border-gray-200 dark:border-white/[0.08] text-[12px] text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-white/[0.04]"
+    >
+      {label}
+      <ExternalLink className="w-3 h-3 text-gray-400" aria-hidden />
+    </button>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+
+function EditStaff({
+  staff, seesPay, currency, onClose, onSaved,
+}: {
+  staff: Staff; seesPay: boolean; currency: string; onClose: () => void; onSaved: () => void;
 }) {
   const [form, setForm] = useState({
     phone: staff.phone ?? "",
@@ -189,43 +440,164 @@ function EditStaff({ staff, seesPay, onClose, onSaved }: {
   };
 
   return (
-    <Modal open onClose={onClose} title={staff.name} width="max-w-lg"
+    <Modal
+      open onClose={onClose} title={`Edit ${staff.name}`} width="max-w-lg"
       footer={
         <div className="flex items-center justify-end gap-2">
-          <button type="button" onClick={onClose} disabled={busy}
-            className="text-[13px] font-medium text-gray-500 hover:text-gray-800 dark:text-slate-400 dark:hover:text-slate-200 disabled:opacity-50 px-1">
-            Cancel
-          </button>
-          <Button size="sm" onClick={save} loading={busy}>Save</Button>
+          <Button variant="secondary" size="sm" onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button size="sm" onClick={save} loading={busy}>Save changes</Button>
         </div>
-      }>
+      }
+    >
       <div className="grid grid-cols-2 gap-3">
         <Field label="Phone"><input className={input} value={form.phone} onChange={(e) => set("phone", e.target.value)} /></Field>
         <Field label="Employment">
           <select className={input} value={form.employmentType} onChange={(e) => set("employmentType", e.target.value)}>
-            {EMPLOYMENT.map((t) => <option key={t} value={t}>{label(t)}</option>)}
+            {EMPLOYMENT.map((t) => <option key={t} value={t}>{EMPLOYMENT_LABEL[t]}</option>)}
           </select>
         </Field>
-        <Field label="Date of joining"><input type="date" className={input} value={form.dateOfJoining} onChange={(e) => set("dateOfJoining", e.target.value)} /></Field>
-        <Field label="Date of birth"><input type="date" className={input} value={form.dateOfBirth} onChange={(e) => set("dateOfBirth", e.target.value)} /></Field>
+        <Field label="Date of joining">
+          <input type="date" className={input} value={form.dateOfJoining} onChange={(e) => set("dateOfJoining", e.target.value)} />
+        </Field>
+        <Field label="Date of birth">
+          <input type="date" className={input} value={form.dateOfBirth} onChange={(e) => set("dateOfBirth", e.target.value)} />
+        </Field>
         {seesPay && (
-          <Field label="Monthly salary">
+          <Field label={`Monthly salary (${currency})`}>
             <input type="number" min="0" step="1" className={input}
               value={form.monthlySalary} onChange={(e) => set("monthlySalary", e.target.value)} />
           </Field>
         )}
-        <Field label="Emergency contact"><input className={input} value={form.emergencyName} onChange={(e) => set("emergencyName", e.target.value)} /></Field>
-        <Field label="Emergency phone"><input className={input} value={form.emergencyPhone} onChange={(e) => set("emergencyPhone", e.target.value)} /></Field>
+        <Field label="Emergency contact">
+          <input className={input} value={form.emergencyName} onChange={(e) => set("emergencyName", e.target.value)} />
+        </Field>
+        <Field label="Emergency phone">
+          <input className={input} value={form.emergencyPhone} onChange={(e) => set("emergencyPhone", e.target.value)} />
+        </Field>
         <div className="col-span-2">
           <Field label="Address"><input className={input} value={form.address} onChange={(e) => set("address", e.target.value)} /></Field>
         </div>
         <div className="col-span-2">
-          <Field label="Notes"><textarea rows={2} className={`${input} resize-none`} value={form.notes} onChange={(e) => set("notes", e.target.value)} /></Field>
+          <Field label="Notes">
+            <textarea rows={2} className={`${input} resize-none`} value={form.notes} onChange={(e) => set("notes", e.target.value)} />
+          </Field>
         </div>
       </div>
       {error && (
-        <p className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/10 rounded-lg px-3 py-2 mt-3">{error}</p>
+        <p role="alert" className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/10 rounded-lg px-3 py-2 mt-3">
+          {error}
+        </p>
       )}
+    </Modal>
+  );
+}
+
+/**
+ * Adding somebody.
+ *
+ * This creates a USER, through the same endpoint Settings uses, so the role
+ * rules — an admin is the only one who can make another admin — are the ones
+ * that already exist. The rest of the record is filled in afterwards on the
+ * row, because asking for an address before somebody has an account is a form
+ * people abandon.
+ */
+function AddPerson({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState("TEAM");
+  const [designationId, setDesignationId] = useState("");
+  const [jobs, setJobs] = useState<{ id: string; name: string }[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/designations?activeOnly=1")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        const rows = Array.isArray(d) ? d : (d?.designations ?? []);
+        if (Array.isArray(rows)) setJobs(rows.map((j: { id: string; name: string }) => ({ id: j.id, name: j.name })));
+      })
+      .catch(() => { /* the job title can be set later on the row */ });
+  }, []);
+
+  const emailOk = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim());
+  const ready = name.trim().length > 1 && emailOk;
+
+  const save = async () => {
+    setBusy(true); setError(null);
+    try {
+      const res = await fetch("/api/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim(), email: email.trim(), role,
+          ...(designationId ? { designationId } : {}),
+        }),
+      });
+      const d = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(d?.error?.message ?? "Couldn't add them");
+      onSaved();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Something went wrong");
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <Modal
+      open onClose={onClose} title="Add a person" width="max-w-md"
+      footer={
+        <div className="flex items-center justify-end gap-2">
+          <Button variant="secondary" size="sm" onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button size="sm" onClick={save} loading={busy} disabled={!ready}
+            icon={<UserPlus className="w-3.5 h-3.5" />}>
+            Add person
+          </Button>
+        </div>
+      }
+    >
+      <div className="space-y-3">
+        <p className="text-[12px] text-gray-500 dark:text-slate-400">
+          Their phone, joining date and salary are filled in on the record afterwards.
+        </p>
+        <Field label="Full name">
+          <input autoFocus className={input} value={name} onChange={(e) => setName(e.target.value)} />
+        </Field>
+        <Field label="Email">
+          <input
+            type="email" className={input} value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            aria-invalid={email.length > 0 && !emailOk}
+          />
+          {email.length > 0 && !emailOk && (
+            <span className="block text-[11px] text-red-600 dark:text-red-400 mt-1">
+              That doesn&rsquo;t look like an email address.
+            </span>
+          )}
+        </Field>
+        <Field label="Job title">
+          <Select
+            value={designationId} onChange={setDesignationId} allowEmpty
+            placeholder="Set later" options={jobs.map((j) => ({ value: j.id, label: j.name }))}
+            className="w-full"
+          />
+        </Field>
+        <Field label="Access level">
+          <Select
+            value={role} onChange={setRole} className="w-full"
+            options={[
+              { value: "TEAM", label: "Team — their own work" },
+              { value: "SMM", label: "SMM — plans and briefs" },
+              { value: "MANAGER", label: "Manager — the whole board" },
+              { value: "ADMIN", label: "Admin — everything" },
+            ]}
+          />
+        </Field>
+        {error && (
+          <p role="alert" className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/10 rounded-lg px-3 py-2">
+            {error}
+          </p>
+        )}
+      </div>
     </Modal>
   );
 }

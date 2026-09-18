@@ -1999,6 +1999,17 @@ model StaffAdvance {
   /// rather than stored, so the two can never disagree.
   amountRepaid   Decimal     @default(0) @db.Decimal(12, 2)
   givenOn        DateTime    @default(now())
+  /// How much comes back out of each month's pay, when that was agreed.
+  ///
+  /// Nullable, and no default. "Recovered when payroll next runs" is a real
+  /// arrangement and the commonest one for a small advance; inventing a
+  /// schedule for those rows would put a repayment plan on screen that
+  /// nobody agreed to. Where it is null the UI says so rather than guessing.
+  ///
+  /// Advisory, not machinery: payroll still asks what to deduct each month
+  /// and caps it at what is owed. This is the number to offer, not a
+  /// standing instruction that moves money on its own.
+  recoveryAmount Decimal?    @db.Decimal(12, 2)
   note           String?
   /// Set when it is settled, so a closed loan stops appearing in the running
   /// balance without being deleted.

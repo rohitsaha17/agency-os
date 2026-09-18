@@ -13,6 +13,11 @@ import {
 } from "../lib/hr";
 import { can } from "../lib/permissions";
 import { maySetAvailability, mayReadAvailability } from "../lib/api-permissions";
+import {
+  money, amount, longDate, shortDate, dateRange, monthName, shiftMonth,
+  monthDays, attendanceState, leaveOn, attendanceRate, recoveryMonths,
+  advanceState, matchesQuery, ATTENDANCE_LABEL,
+} from "../lib/people";
 
 let fails = 0;
 const check = (n: string, got: unknown, want: unknown) => {
@@ -180,6 +185,84 @@ for (const role of ["OWNER", "ADMIN", "MANAGER", "SMM", "TEAM"]) {
   check(`${role} sees somebody else's blocked days`,
     mayReadAvailability({ id: "u1", role }, "u2"), true);
 }
+
+console.log("");
+console.log("— how the People module says money —");
+check("Indian grouping, in lakhs", money(680000, "INR"), "₹6,80,000");
+check("and again at a smaller figure", money(80000, "INR"), "₹80,000");
+check("other currencies keep their own grouping", money(680000, "USD"), "$680,000");
+check("nothing entered is a dash, never a zero", money(null), "—");
+check("zero entered IS zero", money(0, "INR"), "₹0");
+check("a bad number is a dash rather than NaN", money(Number.NaN), "—");
+check("amounts without the symbol still group", amount(680000, "INR"), "6,80,000");
+
+console.log("");
+console.log("— dates read as people write them —");
+check("long form", longDate("2026-09-18"), "18 Sep 2026");
+check("short form drops the year", shortDate("2026-09-18"), "18 Sep");
+check("a missing date is a dash", longDate(null), "—");
+check("a day key is read as UTC, not local",
+  longDate("2026-09-01T00:00:00Z"), "1 Sep 2026");
+check("one day is not a range", dateRange("2026-09-20", "2026-09-20", new Date("2026-06-01")), "20 Sep");
+check("a range in this year leaves the year out",
+  dateRange("2026-09-20", "2026-09-22", new Date("2026-06-01")), "20 Sep → 22 Sep");
+check("a range in another year keeps it",
+  dateRange("2025-12-30", "2026-01-02", new Date("2026-06-01")), "30 Dec 2025 → 2 Jan 2026");
+check("a month key becomes a month", monthName("2026-09"), "September 2026");
+check("stepping back over a year boundary", shiftMonth("2026-01", -1), "2025-12");
+check("stepping forward over one", shiftMonth("2026-12", 1), "2027-01");
+check("September has thirty days", monthDays("2026-09").length, 30);
+check("February 2028 has twenty-nine", monthDays("2028-02").length, 29);
+check("a junk month yields nothing rather than throwing", monthDays("nope"), []);
+
+console.log("");
+console.log("— an attendance cell —");
+const IN = { date: "2026-09-10", checkedInAt: "2026-09-10T03:30:00Z" };
+const OFF = { start: "2026-09-12", end: "2026-09-14" };
+check("checked in is present", attendanceState(IN, undefined, "2026-09-10", "2026-09-18"), "PRESENT");
+check("approved leave is leave", attendanceState(undefined, OFF, "2026-09-13", "2026-09-18"), "LEAVE");
+check("a past blank is no record", attendanceState(undefined, undefined, "2026-09-09", "2026-09-18"), "NO_RECORD");
+check("a future blank is NOT an absence", attendanceState(undefined, undefined, "2026-09-30", "2026-09-18"), "FUTURE");
+check("today's blank is still only no record", attendanceState(undefined, undefined, "2026-09-18", "2026-09-18"), "NO_RECORD");
+check("a check-in beats leave on the same day", attendanceState(IN, OFF, "2026-09-13", "2026-09-18"), "PRESENT");
+check("leave spans are inclusive at the start", leaveOn([OFF], "2026-09-12")?.start, "2026-09-12");
+check("and inclusive at the end", leaveOn([OFF], "2026-09-14")?.end, "2026-09-14");
+check("and do not leak past it", leaveOn([OFF], "2026-09-15"), undefined);
+check("every state has a word", Object.values(ATTENDANCE_LABEL).every((v) => v.length > 0), true);
+
+console.log("");
+console.log("— the rate divides by days that happened, minus granted leave —");
+check("eighteen of twenty", attendanceRate({ present: 18, leave: 0, noRecord: 2 }), 90);
+check("leave is not held against them",
+  attendanceRate({ present: 10, leave: 10, noRecord: 0 }), 100);
+check("a month nobody has worked yet is a dash, not a zero",
+  attendanceRate({ present: 0, leave: 0, noRecord: 0 }), null);
+check("all leave and nothing else is still not a zero",
+  attendanceRate({ present: 0, leave: 5, noRecord: 0 }), null);
+check("nobody in at all IS a zero", attendanceRate({ present: 0, leave: 0, noRecord: 5 }), 0);
+
+console.log("");
+console.log("— what an advance says about itself —");
+check("four months at five thousand", recoveryMonths(20000, 5000), 4);
+check("a remainder rounds up, it does not vanish", recoveryMonths(21000, 5000), 5);
+check("no plan means no estimate", recoveryMonths(20000, null), null);
+check("a zero plan means no estimate", recoveryMonths(20000, 0), null);
+check("a negative plan means no estimate", recoveryMonths(20000, -100), null);
+check("nothing outstanding means no estimate", recoveryMonths(0, 5000), null);
+check("settled says settled", advanceState("2026-09-01T00:00:00Z"), "SETTLED");
+check("open says active", advanceState(null), "ACTIVE");
+
+console.log("");
+console.log("— search looks where somebody would expect —");
+const person = { name: "Priya Nair", craft: "Photographer", email: "priya@vibrnd.in", phone: "+919876543210" };
+check("by name", matchesQuery(person, "priya"), true);
+check("case does not matter", matchesQuery(person, "NAIR"), true);
+check("by role", matchesQuery(person, "photo"), true);
+check("by email", matchesQuery(person, "vibrnd.in"), true);
+check("by phone", matchesQuery(person, "98765"), true);
+check("an empty box matches everyone", matchesQuery(person, "   "), true);
+check("and a miss is a miss", matchesQuery(person, "zzz"), false);
+
 
 console.log(fails === 0 ? "\nAll HR checks passed." : `\n${fails} FAILED`);
 process.exit(fails === 0 ? 0 : 1);

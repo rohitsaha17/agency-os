@@ -13,12 +13,20 @@ function formatDate(d: string | null) {
 }
 
 interface ProjectCardProps {
-  project: Project & { progress: number };
+  project: Project & {
+    progress: number;
+    tasksDone?: number;
+    tasksTotal?: number;
+    members?: { id: string; name: string; avatarUrl: string | null }[];
+  };
 }
 
 export function ProjectCard({ project }: ProjectCardProps) {
   const clientName = project.client?.name ?? "Unknown Client";
   const taskCount = project._count?.tasks ?? 0;
+  const done = project.tasksDone ?? 0;
+  const total = project.tasksTotal ?? taskCount;
+  const members = project.members ?? [];
   const progressColor =
     project.progress >= 75 ? "bg-emerald-500" :
     project.progress >= 40 ? "bg-indigo-500" :
@@ -63,23 +71,42 @@ export function ProjectCard({ project }: ProjectCardProps) {
           <p className="text-xs text-gray-500 line-clamp-2 mb-3">{project.description}</p>
         )}
 
-        {/* Progress bar */}
+        {/* Progress. "29/48" and the bar — a percentage on its own cannot
+            tell forty-eight tasks from four. */}
         <div className="mb-3">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-xs text-gray-500">Progress</span>
-            <span className="text-xs font-medium text-gray-700">{project.progress}%</span>
+          <div className="flex items-center justify-end mb-1">
+            <span className="text-xs tabular-nums text-gray-500">
+              {total > 0 ? `${done}/${total}` : "No tasks yet"}
+            </span>
           </div>
           <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
             <div
-              className={`h-full rounded-full transition-colors ${progressColor}`}
+              className={`h-full rounded-full transition-[width] duration-300 ${progressColor}`}
               style={{ width: `${project.progress}%` }}
             />
           </div>
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between">
-          <StatusBadge status={project.status} />
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <StatusBadge status={project.status} />
+            {members.length > 0 && (
+              <div className="flex items-center -space-x-1.5" title={members.map((m) => m.name).join(", ")}>
+                {members.slice(0, 3).map((m) => (
+                  <span key={m.id}
+                    className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 text-[9px] font-semibold flex items-center justify-center ring-2 ring-white">
+                    {initials(m.name)}
+                  </span>
+                ))}
+                {members.length > 3 && (
+                  <span className="w-5 h-5 rounded-full bg-gray-100 text-gray-500 text-[9px] font-semibold flex items-center justify-center ring-2 ring-white">
+                    +{members.length - 3}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
           <div className="flex items-center gap-3 text-xs text-gray-400">
             {taskCount > 0 && (
               <span className="flex items-center gap-1">

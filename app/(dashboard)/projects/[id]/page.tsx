@@ -19,6 +19,7 @@ import { TaskBoard } from "@/components/tasks/TaskBoard";
 import { TaskList } from "@/components/tasks/TaskList";
 import { TaskModal } from "@/components/tasks/TaskModal";
 import { PlanTab } from "@/components/projects/PlanTab";
+import { ProjectSummary } from "@/components/projects/ProjectSummary";
 import { QuickInvoiceDialog } from "@/components/projects/QuickInvoiceDialog";
 import { InvoiceDetailDialog } from "@/components/projects/InvoiceDetailDialog";
 import { TaskPanel } from "@/components/tasks/TaskPanel";
@@ -888,6 +889,14 @@ export default function ProjectDetailPage() {
           </div>
         )}
       </div>
+
+      {/* How it is going — above the tabs, so it is true on whichever one you
+          land on. Nothing was moved to make room for it. */}
+      <ProjectSummary
+        tasks={tasks}
+        loading={tasksLoading}
+        onOpenTasks={() => setPageTab("tasks")}
+      />
 
       {/* Page tabs */}
       <div className="bg-white border-b border-gray-200 px-4 sm:px-6 lg:px-8">

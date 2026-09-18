@@ -51,6 +51,13 @@ export async function GET(req: NextRequest) {
         include: {
           client: { select: { id: true, name: true, logoUrl: true } },
           _count: { select: { tasks: true } },
+          // Who is on it, for the avatar stack on the card. Name and photo
+          // only — a 24px circle can't show anything else, and a card is not
+          // a place to learn somebody's email.
+          members: {
+            select: { user: { select: { id: true, name: true, avatarUrl: true } } },
+            take: 6,
+          },
         },
         orderBy: { createdAt: "desc" },
         skip: pagination.paginated ? pagination.skip : undefined,
@@ -89,6 +96,11 @@ export async function GET(req: NextRequest) {
         ...p,
         budget: showFinancials ? p.budget : null,
         progress: t > 0 ? Math.round((d / t) * 100) : 0,
+        // The card shows "29/48" as well as the bar. A percentage alone
+        // can't tell forty-eight tasks from four.
+        tasksDone: d,
+        tasksTotal: t,
+        members: p.members.map((m) => m.user).filter(Boolean),
       };
     });
 

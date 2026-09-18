@@ -9,6 +9,7 @@ import {
   dayKey, dayString, leaveDays, expandRange, validateLeaveReason,
   validateLeaveRange, canSelfCheckIn, canDecide, canCancel,
   monthKey, isMonthKey, outstanding, payslip, leaveBlockRows, LEAVE_BLOCK_REASON,
+  attendanceDay, DAY_STARTS_AT_HOUR,
 } from "../lib/hr";
 import { can } from "../lib/permissions";
 
@@ -44,12 +45,40 @@ check("a real reason passes", validateLeaveReason("Sister's wedding in Jaipur"),
 check("500 chars is fine", validateLeaveReason("x".repeat(500)), null);
 check("501 is not", !!validateLeaveReason("x".repeat(501)), true);
 
+console.log("");
+console.log("— the working day runs 6am to 6am, in the ORG's timezone —");
+const IST = "Asia/Kolkata";
+// The instants below are UTC; IST is UTC+5:30.
+check("mid-morning IST is that day",        attendanceDay(new Date("2026-09-18T05:00:00Z"), IST), "2026-09-18");
+check("late evening IST is still that day", attendanceDay(new Date("2026-09-18T17:00:00Z"), IST), "2026-09-18");
+check("after midnight is STILL the day before — one shift, one row",
+  attendanceDay(new Date("2026-09-18T20:00:00Z"), IST), "2026-09-18");
+check("05:59 IST still belongs to yesterday",
+  attendanceDay(new Date("2026-09-19T00:29:00Z"), IST), "2026-09-18");
+check("06:00 IST starts the new day",
+  attendanceDay(new Date("2026-09-19T00:30:00Z"), IST), "2026-09-19");
+check("the boundary is 6, not midnight", DAY_STARTS_AT_HOUR, 6);
+// Vercel runs UTC. Reading the server's own date would be wrong for an
+// Indian team every evening after half past five.
+check("18:30 IST is already tomorrow in UTC, but today for the team",
+  attendanceDay(new Date("2026-09-18T13:30:00Z"), IST), "2026-09-18");
+check("a UTC org at 3am is still on the previous day",
+  attendanceDay(new Date("2026-09-18T03:00:00Z"), "UTC"), "2026-09-17");
+check("a UTC org at 7am has rolled over",
+  attendanceDay(new Date("2026-09-18T07:00:00Z"), "UTC"), "2026-09-18");
+
 console.log("\n— check-in is for today, once —");
-const NOW = new Date("2026-09-16T09:30:00Z");
-check("today is allowed", canSelfCheckIn("2026-09-16", NOW), null);
-check("tomorrow is refused", !!canSelfCheckIn("2026-09-17", NOW), true);
-check("yesterday is refused — an admin adds it instead", !!canSelfCheckIn("2026-09-15", NOW), true);
-check("late tonight still counts as today", canSelfCheckIn("2026-09-16T23:00:00Z", NOW), null);
+const NOW = new Date("2026-09-16T09:30:00Z"); // 15:00 IST
+check("today is allowed", canSelfCheckIn("2026-09-16", NOW, IST), null);
+check("tomorrow is refused", !!canSelfCheckIn("2026-09-17", NOW, IST), true);
+check("yesterday is refused — an admin adds it instead", !!canSelfCheckIn("2026-09-15", NOW, IST), true);
+// 01:30 IST on the 17th: the 16th is still the open day, so checking in for
+// the 16th is allowed and the 17th is not yet a thing.
+const AFTER_MIDNIGHT = new Date("2026-09-16T20:00:00Z");
+check("at 1:30am you may still check in for the day you're working",
+  canSelfCheckIn("2026-09-16", AFTER_MIDNIGHT, IST), null);
+check("at 1:30am the next date is not open yet",
+  !!canSelfCheckIn("2026-09-17", AFTER_MIDNIGHT, IST), true);
 
 console.log("\n— decisions —");
 check("pending can be decided", canDecide("PENDING"), true);
@@ -119,6 +148,11 @@ check("TEAM checks themselves in", can(U("TEAM"), "attendance.mark"), true);
 check("TEAM does not see the team board", can(U("TEAM"), "hr.view"), false);
 check("TEAM does not see salary", can(U("TEAM"), "payroll.manage"), false);
 check("everybody can check in", ["OWNER", "ADMIN", "MANAGER", "SMM", "TEAM"].every((r) => can(U(r), "attendance.mark")), true);
+check("OWNER is excused from checking in", can(U("OWNER"), "attendance.exempt"), true);
+check("ADMIN is excused", can(U("ADMIN"), "attendance.exempt"), true);
+check("MANAGER is staff and checks in", can(U("MANAGER"), "attendance.exempt"), false);
+check("SMM checks in", can(U("SMM"), "attendance.exempt"), false);
+check("TEAM checks in", can(U("TEAM"), "attendance.exempt"), false);
 check("a half-loaded user gets nothing", can(null, "payroll.manage"), false);
 check("an unknown role gets nothing", can({ id: "x", role: "INTERN" }, "payroll.manage"), false);
 

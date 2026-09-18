@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { handleApiError } from "@/lib/api-errors";
 import { can } from "@/lib/permissions";
-import { dayKey, dayString } from "@/lib/hr";
+import { dayKey, dayString, attendanceDay } from "@/lib/hr";
 
 /**
  * GET /api/hr/today — who is in, who is out, and who hasn't said.
@@ -31,7 +31,10 @@ export async function GET(req: NextRequest) {
   try {
     const user = await requireAuth(req);
     const sp = req.nextUrl.searchParams;
-    const day = dayKey(sp.get("date") ?? new Date());
+    // "Today" is the org's 6am-to-6am working day, so somebody still working
+    // at 1am is looked up against the day they checked in on.
+    const tz = user.organization?.timezone ?? "UTC";
+    const day = dayKey(sp.get("date") ?? attendanceDay(new Date(), tz));
     const seesTeam = can(user, "hr.view");
 
     const [people, present, onLeave] = await Promise.all([
@@ -89,11 +92,17 @@ export async function GET(req: NextRequest) {
     });
 
     const me = rows.find((r) => r.id === user.id) ?? null;
+    // Whether THIS person is expected to check in at all. An owner or admin
+    // reviews attendance rather than recording it.
+    const exempt = can(user, "attendance.exempt");
 
     return NextResponse.json({
       date: dayString(day),
       seesTeam,
       me: me && { state: me.state, checkedInAt: me.checkedInAt },
+      exempt,
+      /** The gate on the dashboard turns on exactly when this is true. */
+      mustCheckIn: !exempt && me?.state === "UNKNOWN",
       people: rows,
       summary: {
         in: rows.filter((r) => r.state === "IN").length,

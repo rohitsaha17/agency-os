@@ -1,7 +1,13 @@
 "use client";
 
 /**
- * "I'm in." — the whole attendance feature, from the person's side.
+ * Where the day stands, once it has started.
+ *
+ * The check-in itself happens at the gate (CheckInGate), which covers the app
+ * until it is done — so by the time anybody sees this card they are usually
+ * already in and it is a statement rather than a button. The button survives
+ * for the edge where the gate has been passed some other way; it costs a
+ * branch and saves a dead end.
  *
  * Deliberately one button and no clock. The agency doesn't pay by the hour,
  * so there is nothing to time: this records that today happened, which is
@@ -33,6 +39,8 @@ export function CheckInCard({ timezone }: { timezone?: string }) {
   const [me, setMe] = useState<Me | null>(null);
   const [summary, setSummary] = useState<{ in: number; onLeave: number } | null>(null);
   const [seesTeam, setSeesTeam] = useState(false);
+  /** Owners and admins review attendance rather than record it. */
+  const [exempt, setExempt] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -43,6 +51,7 @@ export function CheckInCard({ timezone }: { timezone?: string }) {
       const d = await res.json();
       setMe(d.me ?? null);
       setSeesTeam(!!d.seesTeam);
+      setExempt(!!d.exempt);
       setSummary(d.summary ?? null);
     } catch { /* the button still works; it just won't know the count */ }
   }, []);
@@ -75,6 +84,11 @@ export function CheckInCard({ timezone }: { timezone?: string }) {
   // Nothing loaded yet — no skeleton, because an empty card that becomes a
   // button is less jarring than a shimmer that becomes a button.
   if (!me) return null;
+
+  // An admin has nothing to do here. Showing them a card about their own
+  // presence, on a page they opened to look at everyone else's, is clutter
+  // pretending to be a feature.
+  if (exempt) return null;
 
   if (me.state === "ON_LEAVE") {
     return (

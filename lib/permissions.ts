@@ -39,6 +39,17 @@ export type Capability =
   // ── HR ──
   /** Check yourself in, and ask for leave. Everybody. */
   | "attendance.mark"
+  /**
+   * Excused from checking in at all.
+   *
+   * The people who review attendance don't record it — an owner or admin
+   * opening the app at 7am to look at the board shouldn't be stopped by a
+   * button about their own presence. Everyone else, managers included, is
+   * staff and checks in.
+   *
+   * Widening or narrowing this is one line per role below.
+   */
+  | "attendance.exempt"
   /** See who is in today and who is on leave — the people who hand out work. */
   | "hr.view"
   /** Staff records, and deciding leave. */
@@ -80,6 +91,7 @@ const MATRIX: Record<Exclude<Role, "MEMBER">, Record<Capability, boolean>> = {
     "billing.flag": true, "financials.view": true, "expenses.create": true,
     "invoices.manage": true, "reports.all": true, "reports.delivery": true,
     "attendance.mark": true, "hr.view": true, "hr.manage": true, "payroll.manage": true,
+    "attendance.exempt": true,
   },
   ADMIN: {
     "users.manage": true, "settings.manage": true, "clients.manage": true, "projects.manage": true,
@@ -88,6 +100,7 @@ const MATRIX: Record<Exclude<Role, "MEMBER">, Record<Capability, boolean>> = {
     "billing.flag": true, "financials.view": true, "expenses.create": true,
     "invoices.manage": true, "reports.all": true, "reports.delivery": true,
     "attendance.mark": true, "hr.view": true, "hr.manage": true, "payroll.manage": true,
+    "attendance.exempt": true,
   },
   MANAGER: {
     "users.manage": false, // read-only on Settings ▸ Users
@@ -102,6 +115,7 @@ const MATRIX: Record<Exclude<Role, "MEMBER">, Record<Capability, boolean>> = {
     "reports.all": false, // no org P&L / revenue / margin
     "reports.delivery": true,
     "attendance.mark": true, "hr.view": true, "hr.manage": true, "payroll.manage": false,
+    "attendance.exempt": false,
   },
   SMM: {
     "users.manage": false, "settings.manage": false, "clients.manage": false, "projects.manage": false,
@@ -113,6 +127,7 @@ const MATRIX: Record<Exclude<Role, "MEMBER">, Record<Capability, boolean>> = {
     "expenses.create": true, "invoices.manage": false,
     "reports.all": false, "reports.delivery": true, // own projects only
     "attendance.mark": true, "hr.view": true, "hr.manage": false, "payroll.manage": false,
+    "attendance.exempt": false,
   },
   TEAM: {
     "users.manage": false, "settings.manage": false, "clients.manage": false, "projects.manage": false,
@@ -126,6 +141,7 @@ const MATRIX: Record<Exclude<Role, "MEMBER">, Record<Capability, boolean>> = {
     "invoices.manage": false,
     "reports.all": false, "reports.delivery": false, // own tasks only
     "attendance.mark": true, "hr.view": false, "hr.manage": false, "payroll.manage": false,
+    "attendance.exempt": false,
   },
 };
 

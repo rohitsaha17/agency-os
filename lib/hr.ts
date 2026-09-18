@@ -8,6 +8,32 @@
  * than a duration.
  */
 
+/**
+ * When a new working day begins, for attendance.
+ *
+ * Not midnight. An editor still exporting at 1am has not started a new day —
+ * asking them to check in again an hour into it would record two days for one
+ * shift and make the month's totals a lie. The day runs 6am to 6am, so
+ * everything before dawn belongs to the day that has not finished yet.
+ */
+export const DAY_STARTS_AT_HOUR = 6;
+
+/**
+ * Which working day an instant belongs to, in the organization's timezone.
+ *
+ * Both halves matter. The server runs in UTC on Vercel, so reading the
+ * server's own date would put an Indian team on the wrong day every evening
+ * after half past five. And the 6am shift is what stops a late night becoming
+ * a second day.
+ */
+export function attendanceDay(now: Date = new Date(), timezone = "UTC"): string {
+  const shifted = new Date(now.getTime() - DAY_STARTS_AT_HOUR * 3_600_000);
+  // en-CA formats as YYYY-MM-DD, which is the shape the rest of this uses.
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(shifted);
+}
+
 export const MIN_LEAVE_REASON = 4;
 export const MAX_LEAVE_REASON = 500;
 /** How far back somebody may check themselves in. */
@@ -68,14 +94,21 @@ export function validateLeaveRange(start: string, end: string): string | null {
 /**
  * Can this person check in for this date?
  *
- * Only today, and only once. Backdating your own attendance is how a
- * presence record stops meaning anything; an admin can still record someone
- * who genuinely forgot, and that row is marked ADMIN so it reads as what it
- * is.
+ * Only the current working day, and only once. Backdating your own attendance
+ * is how a presence record stops meaning anything; an admin can still record
+ * someone who genuinely forgot, and that row is marked ADMIN so it reads as
+ * what it is.
+ *
+ * "Current" is the 6am-to-6am day in the org's timezone, not the server's
+ * midnight — see attendanceDay.
  */
-export function canSelfCheckIn(date: string | Date, now: Date = new Date()): string | null {
+export function canSelfCheckIn(
+  date: string | Date,
+  now: Date = new Date(),
+  timezone = "UTC",
+): string | null {
   const day = dayString(date);
-  const today = dayString(now);
+  const today = attendanceDay(now, timezone);
   if (day > today) return "You can't check in for a day that hasn't happened yet.";
   if (day < today) return "That day has passed — ask an admin to add it.";
   return null;

@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { requireCapability } from "@/lib/api-permissions";
 import { handleApiError, ApiError } from "@/lib/api-errors";
-import { dayKey, dayString, canSelfCheckIn } from "@/lib/hr";
+import { dayKey, dayString, canSelfCheckIn, attendanceDay } from "@/lib/hr";
 
 /**
  * GET /api/hr/attendance?month=YYYY-MM[&userId=…|&scope=team]
@@ -122,9 +122,14 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const note = typeof body.note === "string" ? body.note.trim().slice(0, 200) : null;
     const forUser: string = body.userId || user.id;
-    const forDate = body.date ? dayKey(body.date) : dayKey(new Date());
+    // The working day in the ORG's timezone, 6am to 6am — not the server's
+    // midnight, which on Vercel is UTC and would roll an Indian team over to
+    // tomorrow at half past five in the evening.
+    const tz = user.organization?.timezone ?? "UTC";
+    const today = attendanceDay(new Date(), tz);
+    const forDate = body.date ? dayKey(body.date) : dayKey(today);
 
-    const onBehalf = forUser !== user.id || dayString(forDate) !== dayString(new Date());
+    const onBehalf = forUser !== user.id || dayString(forDate) !== today;
     if (onBehalf) {
       requireCapability(user, "hr.manage");
       // Whoever it is for has to be in this org — an id from elsewhere must
@@ -135,7 +140,7 @@ export async function POST(req: NextRequest) {
       });
       if (!member) throw new ApiError("That person isn't on this team", 404);
     } else {
-      const refusal = canSelfCheckIn(forDate);
+      const refusal = canSelfCheckIn(forDate, new Date(), tz);
       if (refusal) throw new ApiError(refusal, 400);
     }
 

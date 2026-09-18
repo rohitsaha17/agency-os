@@ -41,6 +41,13 @@ export async function getCurrentUser(_req?: Request) {
       // Presence only — the hash is turned into a boolean below and never
       // leaves this function.
       passwordHash: true,
+      // Same reasoning as the organization below: a join inside a round trip
+      // the request was already paying for. `blocksOwnDays` decides whether
+      // this person may block their own diary, and it is asked on the
+      // availability page and in the API that backs it.
+      jobTitle: {
+        select: { id: true, name: true, slug: true, blocksOwnDays: true, canBeAssignedWork: true },
+      },
       organization: {
         select: {
           id: true, name: true, slug: true, logoUrl: true,

@@ -12,6 +12,7 @@ import {
   attendanceDay, DAY_STARTS_AT_HOUR,
 } from "../lib/hr";
 import { can } from "../lib/permissions";
+import { maySetAvailability, mayReadAvailability } from "../lib/api-permissions";
 
 let fails = 0;
 const check = (n: string, got: unknown, want: unknown) => {
@@ -155,6 +156,30 @@ check("SMM checks in", can(U("SMM"), "attendance.exempt"), false);
 check("TEAM checks in", can(U("TEAM"), "attendance.exempt"), false);
 check("a half-loaded user gets nothing", can(null, "payroll.manage"), false);
 check("an unknown role gets nothing", can({ id: "x", role: "INTERN" }, "payroll.manage"), false);
+
+console.log("");
+console.log("— only the shoot crew block their own days —");
+const crew = (role: string) => ({ id: "u1", role, jobTitle: { blocksOwnDays: true } });
+const desk = (role: string) => ({ id: "u1", role, jobTitle: { blocksOwnDays: false } });
+const noTitle = (role: string) => ({ id: "u1", role, jobTitle: null });
+
+check("a photographer blocks their own day", maySetAvailability(crew("TEAM"), "u1"), true);
+check("an editor cannot", maySetAvailability(desk("TEAM"), "u1"), false);
+check("somebody with no job title cannot", maySetAvailability(noTitle("SMM"), "u1"), false);
+check("an SMM is not crew by virtue of being senior", maySetAvailability(desk("SMM"), "u1"), false);
+check("a photographer still cannot block SOMEBODY ELSE", maySetAvailability(crew("TEAM"), "u2"), false);
+// The branch that left an owner able to block everyone's diary but their own.
+check("an ADMIN may block their own", maySetAvailability(noTitle("ADMIN"), "u1"), true);
+check("an ADMIN may block somebody else's", maySetAvailability(noTitle("ADMIN"), "u2"), true);
+check("an OWNER may block their own", maySetAvailability(noTitle("OWNER"), "u1"), true);
+check("a MANAGER may not block somebody else's", maySetAvailability(desk("MANAGER"), "u2"), false);
+
+console.log("");
+console.log("— but everybody can SEE the diary —");
+for (const role of ["OWNER", "ADMIN", "MANAGER", "SMM", "TEAM"]) {
+  check(`${role} sees somebody else's blocked days`,
+    mayReadAvailability({ id: "u1", role }, "u2"), true);
+}
 
 console.log(fails === 0 ? "\nAll HR checks passed." : `\n${fails} FAILED`);
 process.exit(fails === 0 ? 0 : 1);

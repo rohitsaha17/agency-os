@@ -15,6 +15,17 @@ export type AuthUser = {
    *  MUST filter by this id. */
   organizationId: string;
   createdAt?: Date;
+  /**
+   * The v3 job title row, joined in the same round trip as the user.
+   * `blocksOwnDays` is what lets a photographer manage their own diary.
+   */
+  jobTitle?: {
+    id: string;
+    name: string;
+    slug: string;
+    blocksOwnDays: boolean;
+    canBeAssignedWork: boolean;
+  } | null;
   /** Whether a password is set — never the hash itself. */
   hasPassword?: boolean;
   /**

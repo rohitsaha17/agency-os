@@ -11,6 +11,14 @@ export interface CurrentUser {
   avatarUrl: string | null;
   designation?: string | null;
   hasPassword?: boolean;
+  /** The v3 job title. `blocksOwnDays` is the shoot crew's own-diary flag. */
+  jobTitle?: {
+    id: string;
+    name: string;
+    slug: string;
+    blocksOwnDays: boolean;
+    canBeAssignedWork: boolean;
+  } | null;
   organization?: {
     id: string;
     name: string;

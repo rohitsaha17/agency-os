@@ -82,6 +82,9 @@ export interface DesignationRole {
   slug: string;
   isActive: boolean;
   canBeAssignedWork: boolean;
+  /** Photographers and videographers manage their own diary; everyone else
+   *  takes time off through leave. */
+  blocksOwnDays: boolean;
   sortOrder: number;
   _count?: { users: number };
 }

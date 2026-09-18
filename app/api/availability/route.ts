@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
-import { mayReadAvailability, maySetAvailability } from "@/lib/api-permissions";
+import { maySetAvailability } from "@/lib/api-permissions";
 import { apiError, handleApiError, ApiError } from "@/lib/api-errors";
 import { checkRateLimit, WRITE_RATE_LIMITS } from "@/lib/rate-limit";
-import { can } from "@/lib/permissions";
 import { dayKey, expandRange, validateReason } from "@/lib/availability";
 
 const KINDS = new Set(["SHOOT", "LEAVE", "SICK", "OTHER_CLIENT", "OTHER"]);
@@ -14,10 +13,16 @@ const KINDS = new Set(["SHOOT", "LEAVE", "SICK", "OTHER_CLIENT", "OTHER"]);
  *
  * Days people cannot be given work, for the window asked for.
  *
- * Omit `userId` and you get the whole team's, which is the view an SMM needs
- * when deciding who shoots on Tuesday. Anyone without content.plan gets only
- * their own, whatever they ask for — narrowed silently rather than refused,
- * because a junior opening their own calendar has done nothing wrong.
+ * Omit `userId` and you get the whole team's — for everybody, not only
+ * planners. A blocked day is what the rest of the team schedules around: the
+ * editor waiting on footage and the SMM promising a client a date both need
+ * to know the photographer is out on the 4th. Keeping that behind
+ * content.plan meant the people doing the scheduling were the ones who
+ * couldn't see it.
+ *
+ * Nothing private travels with it. The reason on a block was written for this
+ * audience; a day that came from approved leave says "On approved leave" and
+ * the real reason stays on the request, where only the approver reads it.
  */
 export async function GET(req: NextRequest) {
   try {
@@ -25,13 +30,9 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
 
     const requested = searchParams.get("userId") ?? "";
-    const seesTeam = can(user, "content.plan");
-    // No userId means "everyone" for a planner and "me" for everybody else.
-    const scopeToUser = requested || (seesTeam ? "" : user.id);
-
-    if (scopeToUser && !mayReadAvailability(user, scopeToUser)) {
-      throw new ApiError("You can only see your own availability", 403);
-    }
+    // No userId means everyone, for everyone. The org filter below is what
+    // keeps this inside the tenant.
+    const scopeToUser = requested;
 
     const from = searchParams.get("from");
     const to = searchParams.get("to");
@@ -85,7 +86,9 @@ export async function POST(req: NextRequest) {
 
     if (!maySetAvailability(user, targetUserId)) {
       throw new ApiError(
-        "Only the person themselves, or an admin, can mark someone unavailable",
+        targetUserId === user.id
+          ? "Blocking your own days is for the shoot crew. For time off, ask for leave under People — an admin approves it and it blocks the days for you."
+          : "Only an admin can mark somebody else unavailable.",
         403,
       );
     }

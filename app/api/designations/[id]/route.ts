@@ -23,7 +23,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const { id } = await params;
     await findOwned(id, user.organizationId);
 
-    const { name, isActive, canBeAssignedWork } = await req.json();
+    const { name, isActive, canBeAssignedWork, blocksOwnDays } = await req.json();
 
     const updated = await prisma.designationRole.update({
       where: { id },
@@ -31,6 +31,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         ...(name !== undefined ? { name: String(name).trim() } : {}),
         ...(isActive !== undefined ? { isActive: !!isActive } : {}),
         ...(canBeAssignedWork !== undefined ? { canBeAssignedWork: !!canBeAssignedWork } : {}),
+        ...(blocksOwnDays !== undefined ? { blocksOwnDays: !!blocksOwnDays } : {}),
       },
     });
     return NextResponse.json(updated);

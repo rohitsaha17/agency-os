@@ -58,6 +58,15 @@ function prettyDay(d: string) {
 
 export default function AvailabilityPage() {
   const { user: me } = useCurrentUser();
+  /*
+    Only the shoot crew block their own days.
+    Photographers and videographers get booked by other people and other
+    agencies, so waiting on an approval would lose them the booking.
+    Everybody else takes time off through leave, where somebody approves it.
+    Everyone can still SEE this page — knowing the crew is out on the 4th is
+    what the rest of the team schedules around.
+  */
+  const blocksOwnDays = !!me?.jobTitle?.blocksOwnDays;
   const confirm = useConfirm();
   const plansWork = can(me, "content.plan");
   const managesUsers = can(me, "users.manage");
@@ -182,9 +191,11 @@ export default function AvailabilityPage() {
           <div>
             <h1 className="text-xl font-semibold text-gray-900">Availability</h1>
             <p className="text-sm text-gray-500 mt-0.5">
-              {plansWork
-                ? "Days nobody can be given work. Check here before promising a shoot date."
-                : "Days you can't take work. Nobody will be able to assign you anything on these."}
+              {/* The subtitle now turns on what you can DO here, not what you
+                  can see — everybody sees the same diary. */}
+              {blocksOwnDays
+                ? "Block the days you're booked, and see when the rest of the crew is out."
+                : "Who can't take work, and when. Check here before promising a date."}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -201,9 +212,11 @@ export default function AvailabilityPage() {
                 className="px-3 py-2 text-sm text-gray-600 hover:bg-gray-50"
               >›</button>
             </div>
-            <Button size="sm" onClick={openAdd} icon={<Plus className="w-3.5 h-3.5" />}>
-              Block days
-            </Button>
+            {blocksOwnDays && (
+              <Button size="sm" onClick={openAdd} icon={<Plus className="w-3.5 h-3.5" />}>
+                Block days
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -226,7 +239,9 @@ export default function AvailabilityPage() {
               <CalendarOff className="w-8 h-8 text-gray-200 mx-auto mb-3" />
               <p className="text-sm text-gray-500">You&rsquo;re free all month.</p>
               <p className="text-xs text-gray-400 mt-1">
-                Block a day and nobody will be able to assign you work on it.
+                {blocksOwnDays
+                  ? "Block a day and nobody will be able to assign you work on it."
+                  : "For time off, ask for leave under People — once it's approved these days block themselves."}
               </p>
             </div>
           ) : (
@@ -258,8 +273,11 @@ export default function AvailabilityPage() {
           )}
         </section>
 
-        {/* Everybody else — planners only */}
-        {plansWork && (
+        {/* Everybody else — for everybody. The editor waiting on footage and
+            the SMM promising a client a date both plan around the same fact:
+            the photographer is out on the 4th. Keeping this to planners meant
+            the people doing the scheduling couldn't see it. */}
+        {(
           <section className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
             <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
               <Users className="w-4 h-4 text-gray-400" />

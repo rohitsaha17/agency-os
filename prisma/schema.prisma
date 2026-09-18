@@ -450,6 +450,16 @@ model DesignationRole {
   isActive          Boolean  @default(true)
   /// Can work be assigned to people with this job? (An SME or POC usually can't.)
   canBeAssignedWork Boolean  @default(true)
+  /// Does this job manage its own diary?
+  ///
+  /// Photographers and videographers get booked on shoots — often by other
+  /// people, sometimes by other agencies — so they block their own days and
+  /// nobody has to approve it. An editor's days off go through leave instead.
+  ///
+  /// A flag per job title rather than a hardcoded "photographer", because job
+  /// titles are rows an agency creates: one calls them DOP, another Camera,
+  /// another Shoot Crew.
+  blocksOwnDays     Boolean  @default(false)
   sortOrder         Int      @default(0)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt

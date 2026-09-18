@@ -49,6 +49,11 @@ export default async function DashboardLayout({
       select: {
         id: true, name: true, email: true, role: true, designation: true,
         avatarUrl: true, organizationId: true,
+        // Seeded to the client too — the availability page asks whether this
+        // person blocks their own days on first render, before any fetch.
+        jobTitle: {
+          select: { id: true, name: true, slug: true, blocksOwnDays: true, canBeAssignedWork: true },
+        },
         isActive: true,
         passwordHash: true,
         organization: {

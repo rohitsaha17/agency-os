@@ -109,18 +109,52 @@ export function mayExportTasksFor(
  * Letting an SMM block a photographer's calendar would let the person doing
  * the delegating rewrite the constraint they are meant to be working around.
  */
+/**
+ * Who can SEE somebody's blocked days.
+ *
+ * Everybody, within the organization. A blocked day is a fact the whole team
+ * plans around: the editor waiting on footage and the SMM promising a client
+ * a date both need to know the photographer is out on the 4th, and making
+ * that a privilege of planners meant the people actually scheduling around it
+ * were the ones who couldn't see it.
+ *
+ * What is visible is the day and the reason the person wrote FOR that
+ * audience — not anything private. A leave block says "On approved leave"
+ * and the real reason stays on the request.
+ */
 export function mayReadAvailability(
-  user: { id: string; role?: string | null },
-  targetUserId: string,
+  _user: { id: string; role?: string | null },
+  _targetUserId: string,
 ): boolean {
-  if (targetUserId === user.id) return true;
-  return can(user, "content.plan");
+  return true;
 }
 
+/**
+ * Who can BLOCK days, and whose.
+ *
+ * Your own, only if your job manages its own diary — photographers and
+ * videographers, who get booked on shoots by other people and by other
+ * agencies, so waiting for an approval would lose them the booking.
+ *
+ * Everyone else takes time off through leave, where somebody approves it.
+ * Without this the two routes competed: an editor could block a day named
+ * "LEAVE" instantly, and the route that needed approval was the slow one
+ * nobody had to use.
+ *
+ * Somebody else's, only with users.manage — an admin filling in for a
+ * freelancer who texted rather than opened the app.
+ */
 export function maySetAvailability(
-  user: { id: string; role?: string | null },
+  user: {
+    id: string;
+    role?: string | null;
+    jobTitle?: { blocksOwnDays?: boolean } | null;
+  },
   targetUserId: string,
 ): boolean {
-  if (targetUserId === user.id) return true;
-  return can(user, "users.manage");
+  // Admins first, and that includes their own days. Checking the job-title
+  // flag ahead of this left an owner able to block everybody's diary except
+  // their own, which is nonsense nobody would think to report.
+  if (can(user, "users.manage")) return true;
+  return targetUserId === user.id && !!user.jobTitle?.blocksOwnDays;
 }

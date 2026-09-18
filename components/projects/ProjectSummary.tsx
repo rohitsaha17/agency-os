@@ -20,6 +20,41 @@ import { useMemo } from "react";
 import { AlertTriangle, CalendarClock, ListTodo } from "lucide-react";
 import type { Task } from "@/types";
 
+export type SummaryBucket = "overdue" | "week" | "open";
+
+/**
+ * Every task, subtasks included.
+ *
+ * GET /api/projects/[id]/tasks returns a TREE — roots carrying their children
+ * — so counting the array it hands back counts only the top level. A project
+ * whose work is mostly subtasks would have reported a fraction of itself, and
+ * the tile would have been confidently wrong rather than obviously broken.
+ */
+export function flattenTasks(list: Task[]): Task[] {
+  return list.flatMap((t) => [
+    t,
+    ...flattenTasks(((t as Task & { children?: Task[] }).children ?? []) as Task[]),
+  ]);
+}
+
+/**
+ * Does this task belong in that tile?
+ *
+ * Exported because the project page filters its task list with the very same
+ * function the tile counted with. If the count and the filter were written
+ * twice they would disagree eventually, and a tile that says 1 and opens a
+ * list of 2 is worse than no tile.
+ */
+export function inBucket(t: Task, bucket: SummaryBucket, now: Date = new Date()): boolean {
+  if (t.status === "DONE") return false;
+  if (bucket === "open") return true;
+  if (!t.dueDate) return false;
+  const day = localDay(new Date(t.dueDate));
+  const today = localDay(now);
+  if (bucket === "overdue") return day < today;
+  return day >= today && day <= localDay(new Date(now.getTime() + 7 * 86_400_000));
+}
+
 /** Local calendar day. Via UTC this lands a day out for an Indian team. */
 function localDay(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -28,14 +63,15 @@ function localDay(d: Date): string {
 interface Props {
   tasks: Task[];
   loading?: boolean;
-  /** Jumps to the Tasks tab — the tiles are a way in, not just a readout. */
-  onOpenTasks?: () => void;
+  /** Which tile is currently filtering the list, if any. */
+  active?: SummaryBucket | null;
+  /** Pressing a tile filters the task list to it; pressing it again clears. */
+  onSelect?: (bucket: SummaryBucket | null) => void;
 }
 
-export function ProjectSummary({ tasks, loading, onOpenTasks }: Props) {
+export function ProjectSummary({ tasks, loading, active, onSelect }: Props) {
   const stats = useMemo(() => {
-    const today = localDay(new Date());
-    const weekEnd = localDay(new Date(Date.now() + 7 * 86_400_000));
+    const all = flattenTasks(tasks);
 
     let done = 0, overdue = 0, dueThisWeek = 0, open = 0;
     // Per section, where a section is the project's own grouping: the
@@ -43,15 +79,12 @@ export function ProjectSummary({ tasks, loading, onOpenTasks }: Props) {
     // rest. It mirrors how the work was actually commissioned.
     const bySection = new Map<string, { done: number; total: number }>();
 
-    for (const t of tasks) {
+    for (const t of all) {
       const finished = t.status === "DONE";
       if (finished) done++; else open++;
 
-      if (!finished && t.dueDate) {
-        const day = localDay(new Date(t.dueDate));
-        if (day < today) overdue++;
-        else if (day <= weekEnd) dueThisWeek++;
-      }
+      if (inBucket(t, "overdue")) overdue++;
+      else if (inBucket(t, "week")) dueThisWeek++;
 
       const section = sectionOf(t);
       const row = bySection.get(section) ?? { done: 0, total: 0 };
@@ -62,7 +95,7 @@ export function ProjectSummary({ tasks, loading, onOpenTasks }: Props) {
 
     return {
       done, overdue, dueThisWeek, open,
-      total: tasks.length,
+      total: all.length,
       sections: [...bySection.entries()]
         .map(([name, v]) => ({ name, ...v }))
         .sort((a, b) => b.total - a.total)
@@ -84,13 +117,16 @@ export function ProjectSummary({ tasks, loading, onOpenTasks }: Props) {
 
   const pct = Math.round((stats.done / stats.total) * 100);
 
-  const tiles = [
+  const tiles: { key: SummaryBucket; label: string; value: number; icon: typeof AlertTriangle; tone: string; ring: string }[] = [
     { key: "overdue", label: "Overdue", value: stats.overdue, icon: AlertTriangle,
-      tone: stats.overdue > 0 ? "text-red-600 dark:text-red-400" : "text-gray-400" },
+      tone: stats.overdue > 0 ? "text-red-600 dark:text-red-400" : "text-gray-400",
+      ring: "border-red-400 dark:border-red-500 ring-1 ring-red-400/30" },
     { key: "week", label: "Due this week", value: stats.dueThisWeek, icon: CalendarClock,
-      tone: stats.dueThisWeek > 0 ? "text-amber-600 dark:text-amber-400" : "text-gray-400" },
+      tone: stats.dueThisWeek > 0 ? "text-amber-600 dark:text-amber-400" : "text-gray-400",
+      ring: "border-amber-400 dark:border-amber-500 ring-1 ring-amber-400/30" },
     { key: "open", label: "Open", value: stats.open, icon: ListTodo,
-      tone: stats.open > 0 ? "text-indigo-600 dark:text-indigo-300" : "text-gray-400" },
+      tone: stats.open > 0 ? "text-indigo-600 dark:text-indigo-300" : "text-gray-400",
+      ring: "border-indigo-400 dark:border-indigo-500 ring-1 ring-indigo-400/30" },
   ];
 
   return (
@@ -112,12 +148,28 @@ export function ProjectSummary({ tasks, loading, onOpenTasks }: Props) {
           <div className="grid grid-cols-3 gap-2 mt-3">
             {tiles.map((t) => {
               const Icon = t.icon;
+              const on = active === t.key;
+              // A tile with nothing in it filters to an empty list, which
+              // reads as a broken page rather than good news.
+              const usable = t.value > 0 && !!onSelect;
               return (
                 <button
                   key={t.key}
                   type="button"
-                  onClick={onOpenTasks}
-                  className="text-left px-3 py-2.5 rounded-xl border border-gray-200 dark:border-white/[0.08] hover:border-gray-300 dark:hover:border-white/[0.16] transition-surface duration-150"
+                  onClick={() => usable && onSelect?.(on ? null : t.key)}
+                  disabled={!usable}
+                  aria-pressed={on}
+                  title={
+                    !usable ? `No ${t.label.toLowerCase()} tasks`
+                      : on ? "Showing these — press again for all tasks"
+                        : `Show only ${t.label.toLowerCase()}`
+                  }
+                  className={`text-left px-3 py-2.5 rounded-xl border transition-surface duration-150 ${
+                    on
+                      ? t.ring
+                      : "border-gray-200 dark:border-white/[0.08] " +
+                        (usable ? "hover:border-gray-300 dark:hover:border-white/[0.16] cursor-pointer" : "cursor-default opacity-70")
+                  }`}
                 >
                   <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">
                     <Icon className="w-3 h-3" /> {t.label}

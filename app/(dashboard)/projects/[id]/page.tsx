@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -19,7 +19,7 @@ import { TaskBoard } from "@/components/tasks/TaskBoard";
 import { TaskList } from "@/components/tasks/TaskList";
 import { TaskModal } from "@/components/tasks/TaskModal";
 import { PlanTab } from "@/components/projects/PlanTab";
-import { ProjectSummary } from "@/components/projects/ProjectSummary";
+import { ProjectSummary, inBucket, type SummaryBucket } from "@/components/projects/ProjectSummary";
 import { QuickInvoiceDialog } from "@/components/projects/QuickInvoiceDialog";
 import { InvoiceDetailDialog } from "@/components/projects/InvoiceDetailDialog";
 import { TaskPanel } from "@/components/tasks/TaskPanel";
@@ -39,6 +39,12 @@ import { useToast } from "@/components/ui/Toast";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { Select } from "@/components/ui/Select";
 import { todayKey } from "@/lib/date-key";
+
+const FILTER_LABEL: Record<SummaryBucket, string> = {
+  overdue: "overdue tasks",
+  week: "tasks due this week",
+  open: "open tasks",
+};
 
 type PageTab = "plan" | "tasks" | "files" | "expenses" | "contracts" | "chat" | "invoices" | "tax";
 type ViewMode = "kanban" | "list";
@@ -180,6 +186,27 @@ export default function ProjectDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<ViewMode>("list");
   const [pageTab, setPageTab] = useState<PageTab>("plan");
+  /**
+   * Which summary tile is narrowing the task list, if any.
+   *
+   * Pressing Overdue should show the overdue work, not just move you to a tab
+   * you may already be on — that was the whole complaint.
+   */
+  const [taskFilter, setTaskFilter] = useState<SummaryBucket | null>(null);
+
+  /**
+   * What the Tasks tab shows. Filtered with inBucket — the exact function the
+   * tile counted with — so "Overdue 3" always opens three tasks.
+   */
+  const shownTasks = useMemo(() => {
+    if (!taskFilter) return tasks;
+    // Flattened, because a matching SUBTASK has to be findable too — and then
+    // shown without its own children, so nothing appears twice in a list that
+    // promised exactly the tile's number.
+    return flattenTasks(tasks)
+      .filter((t) => inBucket(t, taskFilter))
+      .map((t) => ({ ...t, children: [] }));
+  }, [tasks, taskFilter]);
 
   // v3: the planning task's notification deep-links to ?tab=plan, so honour
   // whichever tab the link names.
@@ -895,7 +922,12 @@ export default function ProjectDetailPage() {
       <ProjectSummary
         tasks={tasks}
         loading={tasksLoading}
-        onOpenTasks={() => setPageTab("tasks")}
+        active={taskFilter}
+        onSelect={(bucket) => {
+          setTaskFilter(bucket);
+          // Filtering a list nobody is looking at helps no one.
+          if (bucket) setPageTab("tasks");
+        }}
       />
 
       {/* Page tabs */}
@@ -936,6 +968,22 @@ export default function ProjectDetailPage() {
         {pageTab === "plan" && <PlanTab projectId={id} />}
 
         {pageTab === "tasks" && (<>
+        {taskFilter && (
+          <div className="flex items-center gap-2 mb-4 px-3 py-2 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20">
+            <span className="text-[13px] text-indigo-800 dark:text-indigo-200">
+              {/* Against the flattened total, not the top level — otherwise a
+                  project with subtasks reads "2 of 2" while holding four. */}
+              Showing {FILTER_LABEL[taskFilter]} — {shownTasks.length} of {allFlat.length}
+            </span>
+            <button
+              type="button"
+              onClick={() => setTaskFilter(null)}
+              className="ml-auto text-[12px] font-medium text-indigo-700 dark:text-indigo-300 hover:underline"
+            >
+              Show all
+            </button>
+          </div>
+        )}
         <div className="flex items-center justify-between mb-5 gap-3 flex-wrap">
           <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1">
             {(["list", "kanban"] as ViewMode[]).map((v) => (
@@ -972,7 +1020,7 @@ export default function ProjectDetailPage() {
           </div>
         ) : view === "kanban" ? (
           <TaskBoard
-            tasks={tasks}
+            tasks={shownTasks}
             onOpen={openProjectTask}
             onStatusChange={handleStatusChange}
             onAddTask={canPlanProject ? (status) => setTaskModal({ open: true, defaultStatus: status }) : undefined}
@@ -981,7 +1029,7 @@ export default function ProjectDetailPage() {
           />
         ) : (
           <TaskList
-            tasks={tasks}
+            tasks={shownTasks}
             onOpen={openProjectTask}
             onStatusChange={handleStatusChange}
             onAddTask={canPlanProject ? () => setTaskModal({ open: true }) : undefined}

@@ -172,7 +172,8 @@ function ReadOnlyField({ label, value }: { label: string; value: string }) {
 
 export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDeleted }: TaskPanelProps) {
   const { user: me } = useCurrentUser();
-  const [tab, setTab] = useState<Tab>("details");
+  // Details is the left column now, so the tabs start on the conversation.
+  const [tab, setTab] = useState<Tab>("comments");
   const [users, setUsers] = useState<User[]>([]);
   /*
     The board's list withholds the four long free-text fields — they were the
@@ -475,7 +476,6 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
   };
 
   const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
-    { id: "details",  label: "Details",    icon: <Settings2 className="w-3.5 h-3.5" /> },
     { id: "files",    label: "Files",      icon: <Paperclip className="w-3.5 h-3.5" /> },
     { id: "comments", label: "Discussion", icon: <MessageSquare className="w-3.5 h-3.5" /> },
     { id: "history",  label: "History",    icon: <Activity className="w-3.5 h-3.5" /> },
@@ -483,8 +483,19 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
 
   return (
     <>
-      <div className="fixed inset-0 z-40 bg-black/20" onClick={onClose} />
-      <div className="fixed top-0 right-0 bottom-0 z-50 w-full sm:w-[520px] max-w-full bg-white shadow-2xl flex flex-col">
+      <div className="fixed inset-0 z-40 bg-black/40" onClick={onClose} />
+      {/*
+        A centred dialog, not a 520px drawer.
+
+        The brief, the files and the conversation used to be three tabs inside
+        a column narrower than a phone, so reading what was asked for while
+        answering it meant switching back and forth and losing your place.
+        Side by side, the task is on the left and the talking about it is on
+        the right, and neither hides the other.
+
+        Still one column on a phone, where two would be a worse lie than one.
+      */}
+      <div className="fixed inset-0 z-50 sm:inset-4 lg:inset-y-8 lg:left-[max(1rem,calc((100vw-1120px)/2))] lg:right-[max(1rem,calc((100vw-1120px)/2))] bg-white dark:bg-slate-900 sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden">
 
         {/* Header */}
         <div className="px-5 py-4 border-b border-gray-200 flex-shrink-0">
@@ -658,34 +669,23 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
           </div>
         )}
 
-        {/* Tabs */}
-        <div className="flex border-b border-gray-200 flex-shrink-0 px-1 overflow-x-auto">
-          {TABS.map((t) => (
-            <button key={t.id} onClick={() => setTab(t.id)}
-              className={`flex items-center gap-1.5 px-3 py-3 text-xs font-medium transition-colors border-b-2 -mb-px whitespace-nowrap ${
-                tab === t.id ? "border-indigo-600 text-indigo-700" : "border-transparent text-gray-500 hover:text-gray-700"
-              }`}>
-              {t.icon} {t.label}
-            </button>
-          ))}
-        </div>
+      {/* Two columns: the task, and the talking about it. */}
+      <div className="flex-1 flex flex-col lg:flex-row min-h-0">
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-5 min-h-0">
-
-          {/* Above everything: until the assignment is answered, nothing else
-              on this task is really theirs to get on with. Outside the tabs
-              so it can't be missed by being on the wrong one. */}
+        {/* ── The task ── */}
+        <div className="flex-1 min-w-0 overflow-y-auto p-5 lg:border-r border-gray-200 dark:border-white/[0.08]">
+          {/* Until the assignment is answered, nothing else here is really
+              theirs to get on with — so it sits above the task, not inside a
+              tab that can be on the wrong one. */}
           <AcceptanceBanner
             taskId={task.id}
             assignees={task.assignees ?? []}
             currentUserId={me?.id}
             canReassign={can(me, "tasks.assign")}
-            onReassign={() => setTab("details")}
+            onReassign={() => setTab("comments")}
             onChanged={(assignees) => onUpdated({ ...task, assignees })}
           />
 
-          {tab === "details" && (
             <div className="space-y-4">
               {/* v2: brief block (topic / content / reference / extra note) */}
               {(full.topic || full.content || full.referenceUrl || full.extraNote) && (
@@ -842,7 +842,27 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
                 </div>
               )}
             </div>
-          )}
+        </div>
+
+        {/* ── Files, discussion, history ── */}
+        <div className="w-full lg:w-[400px] flex-shrink-0 flex flex-col min-h-0 border-t lg:border-t-0 border-gray-200 dark:border-white/[0.08] bg-gray-50/60 dark:bg-slate-950/30">
+        {/* Tabs */}
+        <div className="flex border-b border-gray-200 flex-shrink-0 px-1 overflow-x-auto">
+          {TABS.map((t) => (
+            <button key={t.id} onClick={() => setTab(t.id)}
+              className={`flex items-center gap-1.5 px-3 py-3 text-xs font-medium transition-colors border-b-2 -mb-px whitespace-nowrap ${
+                tab === t.id ? "border-indigo-600 text-indigo-700" : "border-transparent text-gray-500 hover:text-gray-700"
+              }`}>
+              {t.icon} {t.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-5 min-h-0">
+
+
+          
 
           {tab === "files" && <TaskFiles taskId={task.id} projectId={projectId} />}
 
@@ -942,6 +962,9 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
           )}
         </div>
       </div>
+        </div>
+      </div>
+
 
       {/* Handing work in: proof, then the reviewer's queue. */}
       {showSubmit && (

@@ -7,6 +7,7 @@ import {
   Plus, Star, CheckCircle2, Circle, ChevronDown, ChevronRight, ChevronUp,
   MoreVertical, ListTodo, Clock, ShieldCheck, X, FolderKanban, Repeat,
   Link2 as LinkIcon, Paperclip, FileText, AlertCircle,
+  Search, List as ListIcon, LayoutGrid,
 } from "lucide-react";
 import { TaskModal } from "@/components/tasks/TaskModal";
 import { DeliveryDialog } from "@/components/tasks/DeliveryDialog";
@@ -14,6 +15,7 @@ import { CalendarTasksSwitch } from "@/components/calendar/CalendarTasksSwitch";
 import { useCurrentUser } from "@/lib/useCurrentUser";
 import { can } from "@/lib/permissions";
 import { TaskPanel } from "@/components/tasks/TaskPanel";
+import { TaskListView, TaskBoardView, useBuckets, type BucketId } from "@/components/tasks/TaskViews";
 import { StatusDot, STATUS_DOT } from "@/components/tasks/TaskList";
 import { AcceptDeclineDialog } from "@/components/tasks/AcceptDeclineDialog";
 import { clickable } from "@/lib/a11y";
@@ -613,7 +615,7 @@ function TasksBoardInner() {
       // text to open something the size of a card is a small, constant tax.
       <div key={`org-${t.id}`}
         {...clickable(() => openTaskOrPlan(t))}
-        className={`group flex items-start gap-2.5 pl-2.5 pr-3 py-2 rounded-xl border-l-[3px] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${STATUS_ROW_TINT[t.status]} ${done ? "opacity-60" : ""}`}>
+        className={`group flex items-center gap-2.5 pl-2.5 pr-3 py-2.5 rounded-xl border-l-[3px] transition-surface duration-150 cursor-pointer hover:bg-gray-50 dark:hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${STATUS_ROW_TINT[t.status]} ${done ? "opacity-60" : ""}`}>
         {/*
           The same control as the project board, deliberately. This used to be
           a tick that jumped a task straight to complete, so the same dot meant
@@ -624,7 +626,7 @@ function TasksBoardInner() {
           Personal items keep the tick — see renderPersonalRow. Ticking your own
           reminder off IS the whole interaction there, and that one is right.
         */}
-        <div className="mt-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+        <div className="flex-shrink-0" onClick={(e) => e.stopPropagation()}>
           <StatusDot
             status={t.status}
             canPick={canPickStatus}
@@ -641,10 +643,18 @@ function TasksBoardInner() {
             find the plan anyway.
           */}
           <button onClick={() => openTaskOrPlan(t)}
-            className={`block w-full text-left text-sm leading-snug ${done ? "line-through text-gray-400" : "text-gray-800 hover:text-indigo-700"}`}>
+            className={`block w-full text-left text-sm leading-snug truncate ${done ? "line-through text-gray-400" : "text-gray-800 dark:text-slate-200 hover:text-indigo-700 dark:hover:text-indigo-300"}`}>
             {t.title}
           </button>
-          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+          {/*
+            Secondary. The reference row carries a title and little else,
+            because a list of forty is read by scanning titles — every chip
+            is width the title doesn't get. What stays is what changes what
+            you do next: an unanswered assignment, a second round, and how
+            far a plan has got. Status, project and client moved to the
+            tooltip and the panel.
+          */}
+          <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
             {/* Waiting on an answer. Without this the feature only works for
                 people who open every task — the list is where most of them
                 actually look, and an unanswered assignment looks exactly like
@@ -704,15 +714,6 @@ function TasksBoardInner() {
                 Round {t.revision}
               </span>
             )}
-            {/* The status, in words. The dot alone asks people to memorise a
-                colour key; this doesn't. */}
-            <span className={`inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 rounded-full border ${STATUS_PILL[t.status]}`}>
-              {STATUS_DOT[t.status]?.label ?? t.status}
-            </span>
-            <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 bg-indigo-50 text-indigo-600 rounded-full">
-              <FolderKanban className="w-2.5 h-2.5" />
-              {(t as Task & { project?: { name?: string } }).project?.name ?? t.client?.name ?? "Assigned to you"}
-            </span>
             {/* A planning task measures itself: how much of the cycle is planned. */}
             {t.kind === "PLANNING" && typeof t.progress === "number" && (
               <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full border ${
@@ -723,18 +724,85 @@ function TasksBoardInner() {
                 {t.progress}% planned
               </span>
             )}
-            {chip && !done && (
-              <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border ${
-                chip.late ? "bg-red-50 border-red-200 text-red-600" : "bg-gray-50 border-gray-200 text-gray-600"
-              }`}>
-                <Clock className="w-2.5 h-2.5" /> {chip.label}
-              </span>
-            )}
           </div>
+        </div>
+
+        {/* The right edge: when it's due, and whose it is. Fixed position on
+            every row so the eye can run straight down the column. */}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {chip && !done && (
+            <span className={`inline-flex items-center text-[11px] font-medium px-2 py-0.5 rounded-md whitespace-nowrap ${
+              chip.late
+                ? "bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400"
+                : "bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-slate-400"
+            }`}>
+              {chip.label}
+            </span>
+          )}
+          <AssigneeStack task={t} />
         </div>
       </div>
     );
   };
+
+  /** Up to two faces, then a count. Any more is a smear at this size. */
+  const AssigneeStack = ({ task }: { task: Task }) => {
+    const people = (task.assignees ?? []).map((a) => a.user).filter(Boolean) as { id: string; name: string }[];
+    if (people.length === 0) return null;
+    return (
+      <div className="flex items-center -space-x-1.5" title={people.map((p) => p.name).join(", ")}>
+        {people.slice(0, 2).map((p) => (
+          <span key={p.id}
+            className="w-6 h-6 rounded-full bg-indigo-100 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 text-[10px] font-semibold flex items-center justify-center ring-2 ring-white dark:ring-slate-900">
+            {p.name.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase()}
+          </span>
+        ))}
+        {people.length > 2 && (
+          <span className="w-6 h-6 rounded-full bg-gray-100 dark:bg-white/[0.08] text-gray-500 dark:text-slate-400 text-[10px] font-semibold flex items-center justify-center ring-2 ring-white dark:ring-slate-900">
+            +{people.length - 2}
+          </span>
+        )}
+      </div>
+    );
+  };
+
+  /**
+   * Your own reminders, kept beside the work rather than mixed into it.
+   *
+   * These have no due date, no assignee and no project — putting them in the
+   * date buckets would file most of them under "No date" and bury the
+   * genuinely undated work. They are the one list anyone can add to freely.
+   */
+  const MyListPanel = ({ personal, boxed }: { personal: PersonalRow[]; boxed?: boolean }) => (
+    <div className={boxed
+      ? "flex flex-col h-full bg-white dark:bg-slate-900 border border-gray-200 dark:border-white/[0.08] rounded-2xl overflow-hidden"
+      : "bg-white dark:bg-slate-900 border border-gray-200 dark:border-white/[0.08] rounded-2xl overflow-hidden mb-4"}>
+      <header className="px-4 py-3 border-b border-gray-100 dark:border-white/[0.05] flex-shrink-0">
+        <h2 className="text-[13px] font-semibold text-gray-800 dark:text-slate-200">My List</h2>
+        <p className="text-[11px] text-gray-400 mt-0.5">Your own reminders</p>
+      </header>
+      <div className={boxed ? "flex-1 overflow-y-auto p-2 min-h-0" : "p-2"}>
+        <AddTaskComposer listId={null} onAdded={fetchAll} />
+        {personal.length === 0 ? (
+          <p className="text-[12px] text-gray-400 text-center py-4">Nothing here yet.</p>
+        ) : (
+          <div className="space-y-px mt-1">{personal.map(renderPersonalRow)}</div>
+        )}
+      </div>
+    </div>
+  );
+
+  const EmptyBoard = ({ query: q }: { query: string }) => (
+    <div className="py-16 text-center">
+      <ListTodo className="w-9 h-9 text-gray-200 dark:text-slate-700 mx-auto mb-3" />
+      <p className="text-sm font-medium text-gray-600 dark:text-slate-300">
+        {q ? "Nothing matches that." : "Nothing open."}
+      </p>
+      <p className="text-xs text-gray-400 mt-1">
+        {q ? "Try a different word, or clear the search." : "Work assigned to you lands here."}
+      </p>
+    </div>
+  );
 
   const renderPersonalRow = (p: PersonalRow) => {
     const chip = dueChip(p.date);
@@ -899,6 +967,58 @@ function TasksBoardInner() {
     return m;
   }, [items]);
   const starredItems = useMemo(() => items.filter((p) => p.starred), [items]);
+
+  /*
+    List or tiles. A preference about how you read, so it is remembered —
+    being put back into the other one every morning is the kind of small
+    friction nobody reports and everybody feels.
+  */
+  const [layout, setLayout] = useState<"list" | "board">("list");
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("vsf:tasks:layout");
+      if (saved === "list" || saved === "board") setLayout(saved);
+    } catch { /* private window, or storage blocked — the default is fine */ }
+  }, []);
+  const chooseLayout = useCallback((next: "list" | "board") => {
+    setLayout(next);
+    try { localStorage.setItem("vsf:tasks:layout", next); } catch { /* ignore */ }
+  }, []);
+
+  const [collapsedBuckets, setCollapsedBuckets] = useState<Set<BucketId>>(new Set());
+  const toggleBucket = useCallback((id: BucketId) => {
+    setCollapsedBuckets((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+
+  /** Typed into the toolbar. Filters what is already loaded — no request. */
+  const [query, setQuery] = useState("");
+
+  /**
+   * What the two views are looking at: everything in scope, minus whatever
+   * the rail has hidden, minus anything the search rules out.
+   */
+  const boardTasks = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return orgTasks.filter((t) => {
+      if (t.projectId && hiddenLists.has(t.projectId)) return false;
+      if (!q) return true;
+      return (
+        t.title.toLowerCase().includes(q) ||
+        (t.project?.name ?? "").toLowerCase().includes(q) ||
+        (t.client?.name ?? "").toLowerCase().includes(q)
+      );
+    });
+  }, [orgTasks, hiddenLists, query]);
+
+  const buckets = useBuckets(
+    boardTasks,
+    useCallback((t: Task) => t.dueDate, []),
+    useCallback((t: Task) => t.status === "DONE", []),
+  );
   // What My List actually holds: personal reminders plus any task with no
   // project (project work lives in its own automatic list).
   const myListCount = looseTasks.filter((t) => t.status !== "DONE").length
@@ -1042,9 +1162,57 @@ function TasksBoardInner() {
         </div>
 
         {/* ── Board ── */}
-        <div className="flex-1 min-w-0 bg-gray-50 overflow-x-auto">
+        <div className="flex-1 min-w-0 bg-gray-50 dark:bg-slate-950 flex flex-col min-h-0">
+          {/* Toolbar: search, and how you want to read it. Sits above both
+              views so switching doesn't move the controls. */}
+          {view !== "starred" && (
+            <div className="flex items-center gap-2 px-4 sm:px-6 pt-4 pb-1 flex-shrink-0">
+              <div className="relative flex-1 min-w-0 max-w-xl">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                <input
+                  type="search"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search tasks"
+                  className="w-full min-w-0 pl-9 pr-3 py-2 text-[13px] bg-white dark:bg-slate-900 border border-gray-200 dark:border-white/[0.08] rounded-lg text-gray-900 dark:text-slate-100 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                />
+              </div>
+
+              <div className="flex items-center bg-white dark:bg-slate-900 border border-gray-200 dark:border-white/[0.08] rounded-lg p-0.5 flex-shrink-0">
+                {([["list", ListIcon, "List"], ["board", LayoutGrid, "Tiles"]] as const).map(([id, Icon, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => chooseLayout(id)}
+                    aria-pressed={layout === id}
+                    title={label}
+                    className={`p-1.5 rounded-md transition-surface duration-150 ${
+                      layout === id
+                        ? "bg-indigo-50 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-300"
+                        : "text-gray-400 hover:text-gray-600 dark:hover:text-slate-300"
+                    }`}
+                  >
+                    <Icon className="w-4 h-4" />
+                  </button>
+                ))}
+              </div>
+
+              {layout === "list" && (
+                <button
+                  type="button"
+                  onClick={() => setCollapsedBuckets((prev) =>
+                    prev.size > 0 ? new Set() : new Set(buckets.filter((b) => b.total > 0).map((b) => b.id)))}
+                  className="px-2.5 py-2 text-[12px] font-medium text-gray-500 hover:text-gray-800 dark:text-slate-400 dark:hover:text-slate-200 whitespace-nowrap flex-shrink-0"
+                >
+                  {collapsedBuckets.size > 0 ? "Expand all" : "Collapse all"}
+                </button>
+              )}
+            </div>
+          )}
+
+          {view === "starred" ? (
           <div className="h-full flex items-stretch gap-4 p-4 sm:p-6">
-            {view === "starred" ? (
+            {(
               <div className="w-[85vw] sm:w-[340px] flex-shrink-0 bg-white border border-gray-200 rounded-2xl flex flex-col h-full shadow-sm">
                 <div className="px-4 pt-4 pb-2 flex-shrink-0">
                   <h2 className="text-base font-semibold text-gray-900 flex items-center gap-2">
@@ -1061,21 +1229,29 @@ function TasksBoardInner() {
                   ) : starredItems.map(renderPersonalRow)}
                 </div>
               </div>
-            ) : (
-              <>
-                {/* My List — personal reminders plus any task with no project */}
-                <Column id="my-list" title="My List" kind="personal"
-                  subtitle="Your own reminders"
-                  personal={noListItems} org={looseTasks} />
-                {/* One per project you hold work in, named after the project */}
-                {autoLists.filter((l) => !hiddenLists.has(l.id)).map((l) => (
-                  <Column key={l.id} id={l.id} title={l.name} kind="project"
-                    subtitle={l.tasks[0]?.client?.name ?? undefined}
-                    personal={[]} org={l.tasks} />
-                ))}
-              </>
             )}
           </div>
+          ) : layout === "list" ? (
+            <div className="flex-1 min-h-0 overflow-y-auto">
+              <TaskListView
+                buckets={buckets}
+                collapsed={collapsedBuckets}
+                onToggle={toggleBucket}
+                renderRow={renderOrgTaskRow}
+                header={<MyListPanel personal={noListItems} />}
+                empty={<EmptyBoard query={query} />}
+              />
+            </div>
+          ) : (
+            <div className="flex-1 min-h-0">
+              <TaskBoardView
+                buckets={buckets}
+                renderRow={renderOrgTaskRow}
+                header={<MyListPanel personal={noListItems} boxed />}
+                empty={<EmptyBoard query={query} />}
+              />
+            </div>
+          )}
         </div>
       </div>
 

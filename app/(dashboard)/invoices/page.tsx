@@ -21,6 +21,7 @@ import { RequireCapability } from "@/components/layout/RequireCapability";
 import type { Invoice, InvoiceStatus, ClientSummary, Project } from "@/types";
 import { Select } from "@/components/ui/Select";
 import { todayKey } from "@/lib/date-key";
+import { TableCards } from "@/components/ui/TableCards";
 
 // ── Constants ─────────────────────────────────────────────────
 
@@ -589,6 +590,7 @@ function InvoicesPageInner() {
             <EmptyState onNew={() => setAddOpen(true)} />
           )
         ) : (
+          <TableCards>
           <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -696,6 +698,7 @@ function InvoicesPageInner() {
               </table>
             </div>
           </div>
+          </TableCards>
         )}
       </div>
 

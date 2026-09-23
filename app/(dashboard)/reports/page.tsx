@@ -14,6 +14,7 @@ import { BarChart3, Download, Loader2 } from "lucide-react";
 import { useCurrentUser } from "@/lib/useCurrentUser";
 import { can } from "@/lib/permissions";
 import { RequireCapability } from "@/components/layout/RequireCapability";
+import { TableCards } from "@/components/ui/TableCards";
 
 type Row = Record<string, string | number | null>;
 
@@ -113,6 +114,7 @@ function ReportsPageInner() {
             </p>
           </div>
         ) : (
+          <TableCards>
           <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -138,6 +140,7 @@ function ReportsPageInner() {
               </tbody>
             </table>
           </div>
+          </TableCards>
         )}
       </div>
     </div>

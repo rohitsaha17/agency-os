@@ -31,6 +31,7 @@ import { calcInvoiceTotal } from "@/lib/format";
 import { formatMoney, resolveClientCurrency } from "@/lib/money";
 import { Select } from "@/components/ui/Select";
 import { todayKey } from "@/lib/date-key";
+import { TableCards } from "@/components/ui/TableCards";
 
 // ── helpers ──────────────────────────────────────────────────
 type Tab = "content" | "overview" | "contacts" | "brand" | "tax" | "projects" | "files" | "contracts" | "chat" | "invoices" | "expenses" | "receipts";
@@ -1308,6 +1309,7 @@ export default function ClientDetailPage() {
                   </Link>
                 </div>
               ) : (
+                <TableCards>
                 <div className="overflow-x-auto bg-white border border-gray-200 rounded-xl overflow-hidden">
                   <table className="w-full text-sm">
                     <thead>
@@ -1366,6 +1368,7 @@ export default function ClientDetailPage() {
                     </tbody>
                   </table>
                 </div>
+                </TableCards>
               )}
             </div>
           );
@@ -1647,6 +1650,7 @@ export default function ClientDetailPage() {
                 </button>
               </div>
             ) : (
+              <TableCards>
               <div className="overflow-x-auto bg-white border border-gray-200 rounded-xl overflow-hidden">
                 <table className="w-full text-sm">
                   <thead>
@@ -1704,6 +1708,7 @@ export default function ClientDetailPage() {
                   </tbody>
                 </table>
               </div>
+              </TableCards>
             )}
           </div>
         )}
@@ -1786,6 +1791,7 @@ export default function ClientDetailPage() {
                           <span className="text-xs text-gray-400">({g.items.length})</span>
                           <span className="ml-auto text-xs font-medium text-gray-500">{formatMoney(groupTotal, currency)}</span>
                         </div>
+                        <TableCards>
                         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
                           <table className="w-full text-sm">
                             <thead>
@@ -1840,6 +1846,7 @@ export default function ClientDetailPage() {
                             </tbody>
                           </table>
                         </div>
+                        </TableCards>
                       </div>
                     );
                   })}
@@ -1898,6 +1905,7 @@ export default function ClientDetailPage() {
                   </button>
                 </div>
               ) : (
+                <TableCards>
                 <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
                   <table className="w-full text-sm">
                     <thead>
@@ -1955,6 +1963,7 @@ export default function ClientDetailPage() {
                     </tbody>
                   </table>
                 </div>
+                </TableCards>
               )}
             </div>
           );

@@ -14,6 +14,7 @@ import { can } from "@/lib/permissions";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { CreativeTypeDot } from "@/components/content/CreativeTypeDot";
 import { Select } from "@/components/ui/Select";
+import { TableCards } from "@/components/ui/TableCards";
 
 /* ─────────────────────────────────────────────────────────────
    Helpers
@@ -1506,6 +1507,7 @@ function RolesTab() {
             {[1, 2, 3, 4, 5].map((i) => <div key={i} className="h-8 bg-gray-100 rounded animate-pulse" />)}
           </div>
         ) : (
+          <TableCards>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -1563,6 +1565,7 @@ function RolesTab() {
               </tbody>
             </table>
           </div>
+          </TableCards>
         )}
         <p className="text-[11px] text-gray-400 mt-4">
           Enforced server-side in every API route. Hiding things in the interface is a second layer, never the only one.

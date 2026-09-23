@@ -21,6 +21,7 @@ import {
 import { formatMoney } from "@/lib/money";
 import { todayKey } from "@/lib/date-key";
 import type { Invoice } from "@/types";
+import { TableCards } from "@/components/ui/TableCards";
 
 const PAYMENT_METHODS = [
   { value: "BANK_TRANSFER", label: "Bank transfer" },
@@ -168,6 +169,7 @@ export function InvoiceDetailDialog({ invoice, onClose, onChanged }: Props) {
         </div>
 
         {/* Lines */}
+        <TableCards>
         <div className="rounded-xl border border-gray-200 dark:border-white/[0.08] overflow-hidden">
           <table className="w-full text-sm">
             <tbody className="divide-y divide-gray-100 dark:divide-white/[0.06]">
@@ -202,6 +204,7 @@ export function InvoiceDetailDialog({ invoice, onClose, onChanged }: Props) {
             </tbody>
           </table>
         </div>
+        </TableCards>
 
         {/* Totals */}
         <div className="rounded-xl bg-gray-50 dark:bg-white/[0.03] px-4 py-3 space-y-1.5 text-sm">

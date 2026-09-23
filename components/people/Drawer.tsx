@@ -19,6 +19,7 @@
 
 import { useEffect, useRef, type ReactNode } from "react";
 import { X } from "lucide-react";
+import { usePresence } from "@/lib/usePresence";
 
 interface Props {
   open: boolean;
@@ -40,6 +41,9 @@ export function Drawer({
 }: Props) {
   const panel = useRef<HTMLDivElement>(null);
   const restoreTo = useRef<HTMLElement | null>(null);
+  // Held on screen through its exit so it can slide back out rather than
+  // vanishing — see lib/usePresence.
+  const { mounted, shown } = usePresence(open, 220);
 
   useEffect(() => {
     if (!open) return;
@@ -88,14 +92,16 @@ export function Drawer({
     };
   }, [open, onClose]);
 
-  if (!open) return null;
+  if (!mounted) return null;
 
   return (
     <>
       {/* Phones only. On a wide screen the drawer sits beside the table and
           dimming it would hide the thing you are comparing against. */}
       <div
-        className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm lg:hidden"
+        className={`fixed inset-0 z-40 bg-black/40 backdrop-blur-sm lg:hidden transition-opacity duration-[var(--motion-base)] ease-[var(--motion-ease)] ${
+          shown ? "opacity-100" : "opacity-0"
+        }`}
         onClick={onClose}
         aria-hidden
       />
@@ -105,9 +111,20 @@ export function Drawer({
         aria-modal="true"
         aria-label={label ?? (typeof title === "string" ? title : "Details")}
         tabIndex={-1}
-        className="fixed inset-0 z-50 flex flex-col bg-white dark:bg-slate-900 outline-none
+        /*
+          Comes in from the right edge and leaves the same way, on a phone as
+          well as on a desktop. It is the same gesture as drilling into a row
+          and backing out of it, so the direction is doing the explaining —
+          and an exit that retraces the entrance is what makes the back
+          button feel like it undoes rather than replaces.
+        */
+        className={`fixed inset-0 z-50 flex flex-col bg-white dark:bg-slate-900 outline-none
           lg:inset-y-0 lg:right-0 lg:left-auto lg:w-[400px] lg:shadow-2xl
-          lg:border-l lg:border-gray-200 dark:lg:border-white/[0.08]"
+          lg:border-l lg:border-gray-200 dark:lg:border-white/[0.08]
+          will-change-[translate,opacity] [transition-property:translate,opacity]
+          duration-[var(--motion-panel)] ease-[var(--motion-ease-panel)] ${
+          shown ? "translate-x-0 opacity-100" : "translate-x-full opacity-0"
+        }`}
       >
         <header className="flex items-start gap-3 px-4 py-3 border-b border-gray-100 dark:border-white/[0.06] flex-shrink-0">
           <div className="min-w-0 flex-1">

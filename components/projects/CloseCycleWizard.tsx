@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { toast } from "@/lib/toast";
+import { TableCards } from "@/components/ui/TableCards";
 
 interface QuotaRow {
   creativeType: { id: string; name: string; icon: string | null };
@@ -174,6 +175,7 @@ export function CloseCycleWizard({
               <p className="text-xs text-gray-500">
                 What this cycle actually did, per deliverable.
               </p>
+              <TableCards>
               <div className="border border-gray-200 rounded-xl overflow-hidden">
                 <div className="overflow-x-auto -mx-1 px-1"><table className="w-full text-xs">
                   <thead>
@@ -213,6 +215,7 @@ export function CloseCycleWizard({
                   </tbody>
                 </table></div>
               </div>
+              </TableCards>
               <div className="flex items-center gap-4 text-xs text-gray-500">
                 <span><b className="text-gray-800">{data.unposted.length}</b> still unposted</span>
                 <span><b className="text-amber-600">{data.extras.length}</b> over-delivered</span>

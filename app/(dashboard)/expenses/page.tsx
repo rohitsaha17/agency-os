@@ -15,6 +15,7 @@ import { useCurrentUser } from "@/lib/useCurrentUser";
 import type { Expense, ExpenseCategory, ExpenseStatus, Project, ClientSummary } from "@/types";
 import { Select } from "@/components/ui/Select";
 import { todayKey } from "@/lib/date-key";
+import { TableCards } from "@/components/ui/TableCards";
 
 const CATEGORY_LABELS: Record<ExpenseCategory, string> = {
   SOFTWARE_TOOLS: "Software & Tools",
@@ -304,6 +305,7 @@ function ExpensesPageInner() {
             )}
           </div>
         ) : (
+          <TableCards>
           <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
             <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -368,6 +370,7 @@ function ExpensesPageInner() {
             </table>
             </div>
           </div>
+          </TableCards>
         )}
       </div>
 

@@ -9,6 +9,7 @@ import { Plus, Search, FileText, CheckCircle2, Clock, AlertCircle, XCircle } fro
 import { Button } from "@/components/ui/Button";
 import type { Contract, ContractType, ContractStatus, Project, ClientSummary } from "@/types";
 import { Select } from "@/components/ui/Select";
+import { TableCards } from "@/components/ui/TableCards";
 
 const TYPE_LABELS: Record<ContractType, string> = {
   NDA: "NDA",
@@ -173,6 +174,7 @@ function ContractsPageInner() {
             </Link>
           </div>
         ) : (
+          <TableCards>
           <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
             <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -230,6 +232,7 @@ function ContractsPageInner() {
             </table>
             </div>
           </div>
+          </TableCards>
         )}
       </div>
     </div>

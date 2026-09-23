@@ -825,6 +825,48 @@ input[type="time"]::-webkit-calendar-picker-indicator:hover {
 }
 
 /* ──────────────────────────────────────────────────────────────
+   Motion tokens
+   ──────────────────────────────────────────────────────────────
+   Three curves and three durations, named once.
+
+   The browser's built-in ease-out is too weak to read as
+   deliberate — it is nearly linear over the first half, which is
+   exactly the part somebody is watching. These are the standard
+   strong curves, taken as-is rather than hand-rolled.
+
+   ease-in is deliberately absent. It starts slow, which delays
+   the moment the user is waiting for; an ease-out at 200ms feels
+   faster than an ease-in at 200ms. Nothing in this interface
+   should use one.
+
+   Durations: anything the user triggers stays under 300ms. A
+   180ms dropdown feels more responsive than a 400ms one, and the
+   difference is not subtle.
+
+   EVERYTHING HERE IS NAMESPACED --motion-*, and that matters.
+
+   The first draft called them --ease-out and --ease-in-out, which
+   are names Tailwind v4 already defines in its own theme. The
+   build then emitted each twice, and whichever won the cascade
+   decided the curve — including for Tailwind's own `ease-out`
+   utility, which is on roughly a hundred and sixty transitions in
+   this app. Re-curving all of them is a decision worth making
+   deliberately one day; it is not one to make by accident while
+   animating a sheet. */
+:root {
+  --motion-ease: cubic-bezier(0.23, 1, 0.32, 1);        /* strong ease-out */
+  --motion-ease-inout: cubic-bezier(0.77, 0, 0.175, 1); /* on-screen movement */
+  /* Ionic's drawer curve. Sheets and panels that slide in from an
+     edge — it decelerates harder, which is what makes a sheet feel
+     like it has weight rather than like it was placed. */
+  --motion-ease-panel: cubic-bezier(0.32, 0.72, 0, 1);
+
+  --motion-fast: 140ms;   /* press feedback, small popovers */
+  --motion-base: 200ms;   /* the default for anything that opens */
+  --motion-panel: 280ms;  /* sheets and drawers, which travel further */
+}
+
+/* ──────────────────────────────────────────────────────────────
    transition-surface
    ──────────────────────────────────────────────────────────────
    What `transition-all` was being used for, without what makes
@@ -849,4 +891,117 @@ input[type="time"]::-webkit-calendar-picker-indicator:hover {
      layers and quietly beat any duration-* on the element, so a deliberate
      duration-300 would do nothing and nobody would know why. Call sites say
      how long, the same as they do for transition-colors. */
+}
+
+/* ──────────────────────────────────────────────────────────────
+   Tables, on a phone
+   ──────────────────────────────────────────────────────────────
+   Paired with components/ui/TableCards. Below sm each row becomes
+   a card and each cell a labelled line; above sm none of this
+   exists and the table is exactly the table it always was.
+
+   The labels come from the table's own <th> text, assigned by
+   TableCards at runtime — see that file for why they are not
+   written out by hand on every cell.
+
+   Scoped under .table-cards on purpose. A blanket rule on every
+   table in the app would also catch the attendance month and the
+   availability grid, where a cell means nothing away from the
+   intersection of its row and column, and restacking produces
+   thirty lines of "14: present". */
+@media (max-width: 639px) {
+  .table-cards { overflow: visible; }
+
+  /* The wrapper the table sat in was a bordered, rounded panel with a
+     horizontal scroller inside it. Once the rows are cards that panel is a
+     box drawn around a stack of boxes, so its chrome comes off and its
+     scroller is released. Two levels, because some of these pages wrap the
+     table twice and some once. */
+  .table-cards > div,
+  .table-cards > div > div {
+    overflow: visible !important;
+    border-width: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+  }
+  .table-cards table { display: block; width: 100%; min-width: 0 !important; }
+  .table-cards thead { display: none; }
+  .table-cards tbody { display: block; }
+
+  .table-cards tbody tr {
+    display: block;
+    border: 1px solid var(--tc-border, #e5e7eb);
+    border-radius: 0.75rem;
+    padding: 0.125rem 0.75rem;
+    margin-bottom: 0.375rem;
+    background: var(--tc-bg, #fff);
+  }
+
+  /* :not(.hidden) matters. Several tables drop columns on narrow screens
+     with `hidden md:table-cell`, and inside this media query the `hidden`
+     is the rule in force. A bare `td { display: flex }` is a class-plus-
+     element selector and outranks Tailwind's single class, so it would
+     quietly bring every deliberately-hidden column back — on a phone, which
+     is the one place the page had already decided it did not want them. */
+  .table-cards tbody td:not(.hidden) {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    width: auto;
+    padding: 0.375rem 0;
+    border: 0;
+    /* Undoes the right-alignment money columns carry for the desktop —
+       in a card the value is already hard against the right edge. */
+    text-align: right;
+  }
+
+  .table-cards tbody td:not(.hidden)[data-label]::before {
+    content: attr(data-label);
+    flex: 0 0 auto;
+    margin-right: auto;
+    font-size: 0.6875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--tc-label, #9ca3af);
+    font-weight: 500;
+    text-align: left;
+  }
+
+  /* The first cell is the row's identity — a name, an invoice number. It
+     gets the card's headline rather than a label of its own. */
+  .table-cards tbody td:not(.hidden):first-child {
+    justify-content: flex-start;
+    text-align: left;
+    padding-top: 0.625rem;
+    font-weight: 500;
+  }
+  .table-cards tbody td:not(.hidden):first-child::before { content: none; }
+
+  .table-cards tbody td:not(.hidden):last-child { padding-bottom: 0.625rem; }
+
+  /* A cell with nothing in it is a line saying nothing. The desktop keeps
+     its dash where the column alignment makes it meaningful. */
+  .table-cards tbody td[data-empty] { display: none; }
+
+  /* An unlabelled cell that is not the headline and not a spanning row is
+     the actions column. With nothing to sit opposite it, space-between
+     leaves the button stranded on the left; it belongs on the right, where
+     the thumb is. */
+  .table-cards tbody td:not(.hidden):not([data-label]):not([data-full]):not(:first-child) {
+    justify-content: flex-end;
+  }
+
+  /* A spanning cell is a section break or an "add a line" row, not a field. */
+  .table-cards tbody td[data-full] {
+    justify-content: flex-start;
+    text-align: left;
+  }
+  .table-cards tbody td[data-full]::before { content: none; }
+}
+
+.dark .table-cards {
+  --tc-border: rgba(255, 255, 255, 0.08);
+  --tc-bg: var(--color-slate-900, #0f172a);
+  --tc-label: #64748b;
 }

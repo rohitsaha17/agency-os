@@ -89,6 +89,11 @@ export function MonthGrid({
   onDayClick, cellCount, renderCell, renderCellMobile, renderStrip, fill,
 }: MonthGridProps) {
   const days = view === "month" ? getDaysInGrid(year, month) : getWeekDays(weekStart ?? new Date());
+  // Seven at a time, so each week can be a role="row".
+  const weeks = Array.from(
+    { length: Math.ceil(days.length / 7) },
+    (_, w) => days.slice(w * 7, w * 7 + 7),
+  );
   const rows = days.length / 7;
 
   return (
@@ -99,6 +104,8 @@ export function MonthGrid({
         {WEEKDAYS.map((d, i) => (
           <div
             key={d}
+            role="columnheader"
+            aria-label={d}
             className={`text-center text-[11px] font-semibold uppercase tracking-[0.08em] py-2.5 ${
               i === 0 || i === 6
                 ? "text-gray-400 dark:text-slate-500"
@@ -113,11 +120,26 @@ export function MonthGrid({
 
       {/* Day grid. The gap colour IS the gridline — one pixel of the
           container showing through between cells. */}
+      {/*
+        role="grid" is not decoration here. The cells below already carried
+        role="gridcell", and a gridcell with no grid above it is invalid ARIA
+        — a screen reader announces it as nothing in particular, so the one
+        piece of semantics this component had was not reaching anybody.
+
+        The week wrappers are role="row" with `display: contents`, which adds
+        the level ARIA requires without adding a box: the day cells stay
+        direct grid items and the layout is pixel-identical.
+      */}
       <div
+        role="grid"
+        aria-label={view === "week" ? "Week" : `${MONTH_NAMES[month]} ${year}`}
         className={`grid grid-cols-7 gap-px cal-gridlines ${fill ? "flex-1 min-h-0" : ""}`}
         style={fill ? { gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))` } : undefined}
       >
-        {days.map((day, i) => {
+        {weeks.map((week, w) => (
+        <div key={`w${w}`} role="row" className="contents">
+        {week.map((day, j) => {
+          const i = w * 7 + j;
           const inMonth = view === "week" || day.getMonth() === month;
           const todayCell = isToday(day);
           const isSelected = !!selected && isSameDay(day, selected);
@@ -147,7 +169,20 @@ export function MonthGrid({
               // tab stop, or a month costs 42 presses to walk past.
               {...(inMonth && onDayClick
                 ? clickable(() => onDayClick(day), { role: "gridcell" })
-                : {})}
+                : { role: "gridcell" })}
+              /* Without a name a screen reader reads the cell's contents —
+                 "14", then whatever the caller rendered into it. The date it
+                 belongs to, whether it is today, and how much is on it were
+                 all carried by colour and position alone. */
+              aria-label={
+                inMonth
+                  ? `${day.getDate()} ${MONTH_NAMES[day.getMonth()]} ${day.getFullYear()}` +
+                    (todayCell ? ", today" : "") +
+                    (count > 0 ? `, ${count} item${count === 1 ? "" : "s"}` : "")
+                  : undefined
+              }
+              aria-current={todayCell ? "date" : undefined}
+              aria-selected={onDayClick && inMonth ? isSelected : undefined}
               className={`relative transition-colors duration-150 flex flex-col ${surface} ${
                 inMonth ? "cursor-pointer hover:bg-indigo-50/60 dark:hover:bg-indigo-500/[0.07]" : ""
               } ${
@@ -225,6 +260,8 @@ export function MonthGrid({
             </div>
           );
         })}
+        </div>
+        ))}
       </div>
     </div>
   );

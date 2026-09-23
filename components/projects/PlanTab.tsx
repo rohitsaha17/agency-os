@@ -23,6 +23,7 @@ import { broadcastChange } from "@/lib/live";
 import type { ContentStatus } from "@/types";
 import { CreativeTypeDot } from "@/components/content/CreativeTypeDot";
 import { Select } from "@/components/ui/Select";
+import { LoadError } from "@/components/ui/LoadError";
 import { matchingCrafts } from "@/lib/craft-match";
 import { isSettled, settledReason } from "@/lib/content-status";
 
@@ -119,6 +120,13 @@ function QuotaMeter({ row }: { row: QuotaRow }) {
 export function PlanTab({ projectId }: { projectId: string }) {
   const [data, setData] = useState<PlanPayload | null>(null);
   const [loading, setLoading] = useState(true);
+  /*
+    A failed load used to leave `data` null, which fell through to the
+    "no cycles yet" state below — so a dropped request told somebody their
+    project had no cycles and advised them to go and set a period on it.
+    Wrong, and it sends them to change project settings over a network blip.
+  */
+  const [failed, setFailed] = useState(false);
   const [cycleId, setCycleId] = useState<string | null>(null);
   const [view, setView] = useState<"month" | "list">("month");
   const [dialogDate, setDialogDate] = useState<Date | null>(null);
@@ -130,13 +138,18 @@ export function PlanTab({ projectId }: { projectId: string }) {
     const url = cycleId
       ? `/api/projects/${projectId}/plan?cycleId=${cycleId}`
       : `/api/projects/${projectId}/plan`;
-    const res = await fetch(url);
-    if (res.ok) {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error();
       const payload: PlanPayload = await res.json();
       setData(payload);
+      setFailed(false);
       if (!cycleId && payload.cycle) setCycleId(payload.cycle.id);
+    } catch {
+      setFailed(true);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, [projectId, cycleId]);
 
   useEffect(() => { load(); }, [load]);
@@ -163,6 +176,17 @@ export function PlanTab({ projectId }: { projectId: string }) {
         <div className="h-16 bg-gray-100 rounded-xl animate-pulse" />
         <div className="h-72 bg-gray-100 rounded-xl animate-pulse" />
       </div>
+    );
+  }
+
+  if (failed) {
+    return (
+      <LoadError
+        message="Couldn't load the plan"
+        detail="This is a problem loading, not an empty plan."
+        onRetry={() => { setLoading(true); load(); }}
+        retrying={loading}
+      />
     );
   }
 

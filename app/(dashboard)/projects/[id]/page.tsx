@@ -36,6 +36,7 @@ import { useCurrentUser } from "@/lib/useCurrentUser";
 import { can } from "@/lib/permissions";
 import { formatMoney } from "@/lib/money";
 import { calcInvoiceTotal, calcInvoiceBalance } from "@/lib/format";
+import { LoadError } from "@/components/ui/LoadError";
 import { useToast } from "@/components/ui/Toast";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { Select } from "@/components/ui/Select";
@@ -320,56 +321,102 @@ export default function ProjectDetailPage() {
 
   useEffect(() => { fetchCycles(); }, [fetchCycles]);
 
+  /*
+    Which sections failed to load.
+
+    Every fetch on this page was written as `if (res.ok) { … }` with no else,
+    and one of them carried a catch block whose entire body was the comment
+    "silently fail". When the
+    request failed the state simply stayed empty and the loading flag went
+    false, so the tab rendered its EMPTY state: "No tasks yet", "No invoices".
+
+    That is the worst way for a fetch to fail, because it looks like success.
+    Somebody opens a project on a bad connection and is told, with confidence,
+    that it has no work and no invoices on it. An invoices tab is not a place
+    to be casually wrong.
+
+    Keyed by section so one tab failing does not blank the others, and cleared
+    on a successful reload so Retry can actually clear it.
+  */
+  const [sectionFailed, setSectionFailed] = useState<Record<string, boolean>>({});
+  const markSection = useCallback((key: string, ok: boolean) => {
+    setSectionFailed((prev) => (prev[key] === !ok ? prev : { ...prev, [key]: !ok }));
+  }, []);
+
   const fetchExpenses = useCallback(async () => {
-    const res = await fetch(`/api/projects/${id}/expenses`);
-    if (res.ok) {
+    try {
+      const res = await fetch(`/api/projects/${id}/expenses`);
+      if (!res.ok) throw new Error();
       const data = await res.json();
       setExpenses(data.expenses);
       setExpenseSummary(data.summary);
+      markSection("expenses", true);
+    } catch {
+      markSection("expenses", false);
     }
-  }, [id]);
+  }, [id, markSection]);
 
   const fetchContracts = useCallback(async () => {
-    const res = await fetch(`/api/contracts?projectId=${id}`);
-    if (res.ok) setContracts(await res.json());
-  }, [id]);
+    try {
+      const res = await fetch(`/api/contracts?projectId=${id}`);
+      if (!res.ok) throw new Error();
+      setContracts(await res.json());
+      markSection("contracts", true);
+    } catch {
+      markSection("contracts", false);
+    }
+  }, [id, markSection]);
 
   const fetchFiles = useCallback(async () => {
     setFilesLoading(true);
     try {
       const res = await fetch(`/api/files?projectId=${id}`);
-      if (res.ok) setProjectFiles(await res.json());
+      if (!res.ok) throw new Error();
+      setProjectFiles(await res.json());
+      markSection("files", true);
+      setFilesLoaded(true);
+    } catch {
+      markSection("files", false);
       setFilesLoaded(true);
     } finally { setFilesLoading(false); }
-  }, [id]);
+  }, [id, markSection]);
 
   const fetchTasks = useCallback(async () => {
     setTasksLoading(true);
     try {
       const res = await fetch(`/api/projects/${id}/tasks`);
-      if (res.ok) setTasks(await res.json());
-    } catch { /* silently fail */ }
+      if (!res.ok) throw new Error();
+      setTasks(await res.json());
+      markSection("tasks", true);
+    } catch {
+      // Was `catch { /* silently fail */ }`. The tasks ARE the project — a
+      // board that quietly reports none is the one thing this page must not do.
+      markSection("tasks", false);
+    }
     finally { setTasksLoading(false); }
-  }, [id]);
+  }, [id, markSection]);
 
   const fetchChannels = useCallback(async () => {
     setChatLoading(true);
     try {
       const res = await fetch(`/api/channels?projectId=${id}`);
-      if (res.ok) {
-        const data = await res.json();
-        setChannels(data);
-        setActiveChannel((prev) => {
-          if (prev) {
-            const updated = data.find((c: Channel) => c.id === prev.id);
-            return updated ?? data[0] ?? null;
-          }
-          return data[0] ?? null;
-        });
-      }
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      setChannels(data);
+      setActiveChannel((prev) => {
+        if (prev) {
+          const updated = data.find((c: Channel) => c.id === prev.id);
+          return updated ?? data[0] ?? null;
+        }
+        return data[0] ?? null;
+      });
+      markSection("chat", true);
+      setChatLoaded(true);
+    } catch {
+      markSection("chat", false);
       setChatLoaded(true);
     } finally { setChatLoading(false); }
-  }, [id]);
+  }, [id, markSection]);
 
   const fetchChatMessages = useCallback(async (channelId: string, silent = false) => {
     if (!silent) setChatMessagesLoading(true);
@@ -431,12 +478,19 @@ export default function ProjectDetailPage() {
     setInvoicesLoading(true);
     try {
       const res = await fetch(`/api/invoices?projectId=${id}`);
-      if (res.ok) setInvoices(await res.json());
+      if (!res.ok) throw new Error();
+      setInvoices(await res.json());
+      markSection("invoices", true);
+      // Billables are a secondary hint, not the tab's subject. Losing them
+      // leaves the invoice list correct, so this one stays tolerant.
       const br = await fetch(`/api/projects/${id}/billables`).catch(() => null);
       if (br?.ok) setBillables(await br.json());
       setInvoicesLoaded(true);
+    } catch {
+      markSection("invoices", false);
+      setInvoicesLoaded(true);
     } finally { setInvoicesLoading(false); }
-  }, [id]);
+  }, [id, markSection]);
 
   useEffect(() => {
     fetchProject();
@@ -506,10 +560,13 @@ export default function ProjectDetailPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ body: chatCompose.trim() }),
       });
-      if (res.ok) {
-        setChatCompose("");
-        fetchChatMessages(activeChannel.id, true);
-      }
+      if (!res.ok) throw new Error();
+      setChatCompose("");
+      fetchChatMessages(activeChannel.id, true);
+    } catch {
+      // The message stays in the box. Clearing it on a failed send loses what
+      // somebody just typed and tells them it went through.
+      toast.error("Message didn't send", "Check your connection and try again.");
     } finally { setChatSending(false); }
   };
 
@@ -526,15 +583,19 @@ export default function ProjectDetailPage() {
           ...(newChannelMemberIds.length > 0 ? { memberIds: newChannelMemberIds } : {}),
         }),
       });
-      if (res.ok) {
-        setNewChannelName("");
-        setNewChannelType("PROJECT_INTERNAL");
-        setNewChannelMemberIds([]);
-        setShowCreateChannel(false);
-        setChatLoaded(false);
-        fetchChannels();
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error?.message || "Couldn't create that channel");
       }
-    } catch { /* ignore */ }
+      setNewChannelName("");
+      setNewChannelType("PROJECT_INTERNAL");
+      setNewChannelMemberIds([]);
+      setShowCreateChannel(false);
+      setChatLoaded(false);
+      fetchChannels();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't create that channel");
+    }
   };
 
   const handleDeleteChannel = async (channelId: string, channelName: string) => {
@@ -713,6 +774,11 @@ export default function ProjectDetailPage() {
       setContractForm(EMPTY_CONTRACT_FORM);
       setContractParties([{ ...EMPTY_PARTY }]);
       fetchContracts();
+    } else {
+      // The modal has its own error line, so this speaks there rather than in
+      // a toast the person would have to read behind the dialog.
+      const data = await res.json().catch(() => ({}));
+      setContractError(data?.error?.message || "Couldn't save that contract");
     }
   };
 
@@ -969,6 +1035,20 @@ export default function ProjectDetailPage() {
         {pageTab === "plan" && <PlanTab projectId={id} />}
 
         {pageTab === "tasks" && (<>
+        {/* Above the board rather than instead of it: the board carries the
+            filters and the quick-add, and taking those away on a failed load
+            would remove the controls somebody needs after pressing Retry.
+            What matters is that an empty board can no longer be mistaken for
+            a project with no work on it. */}
+        {sectionFailed.tasks && (
+          <LoadError
+            compact
+            message="Couldn't load this project's tasks"
+            detail="This is a problem loading, not an empty project — the work is still there."
+            onRetry={fetchTasks}
+            retrying={tasksLoading}
+          />
+        )}
         {taskFilter && (
           <div className="flex items-center gap-2 mb-4 px-3 py-2 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20">
             <span className="text-[13px] text-indigo-800 dark:text-indigo-200">
@@ -1084,6 +1164,8 @@ export default function ProjectDetailPage() {
                   </div>
                 ))}
               </div>
+            ) : sectionFailed.files ? (
+              <LoadError compact message="Couldn't load this project's files" onRetry={fetchFiles} retrying={filesLoading} />
             ) : projectFiles.length === 0 ? (
               <div className="text-center py-10">
                 <Paperclip className="w-8 h-8 text-gray-300 mx-auto mb-2" />
@@ -1132,6 +1214,10 @@ export default function ProjectDetailPage() {
                           fd.append("file", f);
                           const res = await fetch(`/api/files/${file.id}/versions`, { method: "POST", body: fd });
                           if (res.ok) fetchFiles();
+                          else {
+                            const d = await res.json().catch(() => ({}));
+                            toast.error(d?.error?.message || `Couldn't upload a new version of ${file.name}`);
+                          }
                           e.target.value = "";
                         }} />
                       </label>
@@ -1198,7 +1284,9 @@ export default function ProjectDetailPage() {
               </Button>
             </div>
 
-            {expenses.length === 0 ? (
+            {sectionFailed.expenses ? (
+              <LoadError compact message="Couldn't load this project's expenses" onRetry={fetchExpenses} retrying={false} />
+            ) : expenses.length === 0 ? (
               <div className="bg-white border border-gray-200 rounded-xl p-10 text-center">
                 <TrendingDown className="w-8 h-8 text-gray-300 mx-auto mb-3" />
                 <p className="text-sm text-gray-500 mb-1">No expenses yet</p>
@@ -1256,7 +1344,9 @@ export default function ProjectDetailPage() {
               </Button>
             </div>
 
-            {contracts.length === 0 ? (
+            {sectionFailed.contracts ? (
+              <LoadError compact message="Couldn't load this project's contracts" onRetry={fetchContracts} retrying={false} />
+            ) : contracts.length === 0 ? (
               <div className="bg-white border border-gray-200 rounded-xl p-10 text-center">
                 <Scroll className="w-8 h-8 text-gray-300 mx-auto mb-3" />
                 <p className="text-sm text-gray-500 mb-1">No contracts yet</p>
@@ -1304,6 +1394,14 @@ export default function ProjectDetailPage() {
         )}
 
         {/* ── CHAT TAB ── */}
+        {pageTab === "chat" && sectionFailed.chat && (
+          <LoadError
+            compact
+            message="Couldn't load the conversation"
+            onRetry={fetchChannels}
+            retrying={chatLoading}
+          />
+        )}
         {pageTab === "chat" && (
           <div className="flex flex-col h-[calc(100vh-320px)]">
             {chatLoading ? (
@@ -1742,6 +1840,8 @@ export default function ProjectDetailPage() {
                   </div>
                 ))}
               </div>
+            ) : sectionFailed.invoices ? (
+              <LoadError compact message="Couldn't load this project's invoices" onRetry={fetchInvoices} retrying={invoicesLoading} />
             ) : invoices.length === 0 ? (
               <div className="bg-white border border-gray-200 rounded-xl p-10 text-center">
                 <Receipt className="w-8 h-8 text-gray-300 mx-auto mb-3" />

@@ -37,7 +37,24 @@
     "spacing": {},
     "radius": {},
     "shadows": {},
-    "motion": {},
+    "motion": {
+      "--motion-ease": {
+        "value": "cubic-bezier(0.23, 1, 0.32, 1)",
+        "source": "app/globals.css"
+      },
+      "--motion-ease-panel": {
+        "value": "cubic-bezier(0.32, 0.72, 0, 1)",
+        "source": "app/globals.css"
+      },
+      "--motion-base": {
+        "value": "200ms",
+        "source": "app/globals.css"
+      },
+      "--motion-panel": {
+        "value": "280ms",
+        "source": "app/globals.css"
+      }
+    },
     "density": "unknown"
   },
   "components": {
@@ -48,20 +65,59 @@
       "ConfirmDialog",
       "DateInputAutoOpen",
       "GlobalSearch",
+      "LoadError",
       "Modal",
       "PhoneInput",
       "Select",
+      "TableCards",
       "ThemeToggle",
       "Toast"
     ],
-    "preferredPrimitives": [],
+    "preferredPrimitives": [
+      "components/ui/LoadError — every failed fetch surfaces here, with a retry",
+      "components/ui/Modal — bottom sheet on phones, centred card above sm",
+      "components/ui/TableCards — wraps a record table; restacks to cards below sm",
+      "components/people/Drawer — right-side detail panel, focus-trapped",
+      "components/people/kit — SummaryCard, StatusBadge, Table/Row, RowMenu, EmptyState",
+      "components/calendar/MonthGrid — the one month/week grid, reused by every calendar",
+      "lib/a11y clickable/toggleable — for controls that cannot legally be a <button>",
+      "lib/usePresence — holds an overlay mounted through its exit"
+    ],
     "patterns": []
   },
   "constraints": {
-    "must": [],
-    "avoid": []
+    "must": [
+      "Surface every failed fetch — a request that fails must never render as an empty state",
+      "Keep server-side capability checks; hiding UI is a second layer, never the guard",
+      "Honour prefers-reduced-motion (handled globally in app/globals.css)",
+      "Indian money grouping on People/finance screens — lib/people money()",
+      "Name motion tokens --motion-*; --ease-out and --ease-in-out belong to Tailwind v4"
+    ],
+    "avoid": [
+      "Entrance/stagger animation on lists and tables — they are read on every page load",
+      "Route or tab content transitions — navigation is the app's most frequent action",
+      "Inventing data the schema does not hold (no 'late', no department, no overdue advances)",
+      "transition-all — use transition-surface or name the properties",
+      "Restacking a matrix (attendance month, availability grid) into cards"
+    ]
   },
-  "decisions": [],
+  "decisions": [
+    {
+      "date": "2026-09-23",
+      "decision": "Tables of records restack to cards below sm via TableCards; labels are read from the table's own <th> at runtime rather than hand-written per cell.",
+      "scope": "invoices, expenses, contracts, reports, clients detail, settings, CloseCycleWizard, InvoiceDetailDialog"
+    },
+    {
+      "date": "2026-09-23",
+      "decision": "Overlays animate: sheet from the bottom edge on phones, drawer from the right, toast from the bottom. Under 300ms, translate/scale/opacity only. Tailwind v4 emits the independent translate/scale properties, so transitions must name those rather than transform.",
+      "scope": "Modal, Drawer, Toast"
+    },
+    {
+      "date": "2026-09-23",
+      "decision": "MonthGrid is a real ARIA grid: role=grid on the container, role=row week wrappers using display:contents so layout is unchanged, and every cell named with its full date and item count.",
+      "scope": "calendar, my-calendar, client content calendars, PlanTab"
+    }
+  ],
   "evidence": [
     {
       "fact": "components.installed",
@@ -92,5 +148,5 @@
       "source": "package.json"
     }
   ],
-  "generatedAt": "2026-09-07T17:21:25.100Z"
+  "generatedAt": "2026-09-23T05:24:58.568600Z"
 }

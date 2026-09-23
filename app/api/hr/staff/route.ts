@@ -11,7 +11,7 @@ import { can } from "@/lib/permissions";
  * Two shapes, and which one you get is decided here on the server rather
  * than by the page hiding a column:
  *
- *   hr.view          name, role, craft, phone, joining date, employment type
+ *   hr.records       name, role, craft, phone, joining date, employment type
  *   payroll.manage   the same, plus monthlySalary and the advances balance
  *
  * `monthlySalary` is never selected at all without payroll.manage — not
@@ -27,7 +27,7 @@ const BASE_PROFILE = {
 export async function GET(req: NextRequest) {
   try {
     const user = await requireAuth(req);
-    requireCapability(user, "hr.view");
+    requireCapability(user, "hr.records");
     const seesPay = can(user, "payroll.manage");
 
     const people = await prisma.user.findMany({

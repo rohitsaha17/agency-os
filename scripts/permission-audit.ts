@@ -53,6 +53,25 @@ const PROBES: Probe[] = [
   { path: "/api/expenses",                  allow: ["ADMIN", "MANAGER", "SMM", "TEAM"], money: true, selfMoney: true,
     note: "everyone may file what they spent; below manager the list is scoped to your own rows, amounts included" },
 
+  // ── People: the HR blackout ──
+  //
+  // An SMM briefs juniors, which needs the diary, not the personnel file.
+  // hr.records — the personnel file. An SMM briefs juniors, which needs the
+  // diary, not a directory of dates of birth and next of kin.
+  { path: "/api/hr/staff",                  allow: ["ADMIN", "MANAGER"],
+    note: "the staff directory — contact details, DOB, address, next of kin" },
+  { path: "/api/hr/attendance?scope=team&month=2026-09", allow: ["ADMIN", "MANAGER"],
+    note: "the attendance history for everybody" },
+  // hr.today — the daily board. Everybody may ask; TEAM gets only their own
+  // row back, because `seesTeam` is decided inside the route.
+  { path: "/api/hr/today",                  allow: ["ADMIN", "MANAGER", "SMM", "TEAM"],
+    note: "SMM and above see the team; TEAM sees only their own row" },
+  // The diary stays open: it is how anyone answers "can I give them Thursday",
+  // and it carries a day, a category and a short reason written for that
+  // audience — never the HR record behind it.
+  { path: "/api/availability",              allow: ["ADMIN", "MANAGER", "SMM", "TEAM"],
+    note: "blocked days are public by design; the assignment guard enforces them server-side" },
+
   // ── Clients & projects ──
   { path: "/api/clients",                   allow: ["ADMIN", "MANAGER", "SMM", "TEAM"],
     note: "TEAM is scoped to clients they hold work on" },

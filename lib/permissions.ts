@@ -50,8 +50,24 @@ export type Capability =
    * Widening or narrowing this is one line per role below.
    */
   | "attendance.exempt"
-  /** See who is in today and who is on leave — the people who hand out work. */
-  | "hr.view"
+  /**
+   * The daily board: who is in, who is on leave, who has not checked in yet.
+   *
+   * Split out of the old hr.view because the two things it covered are not
+   * the same question. "Is Rahul in today" is asked by anybody handing out
+   * work — an SMM briefing a junior needs it. "What was Rahul's attendance
+   * in August, and what is his home address" is a supervisor's question, and
+   * one capability answering both meant granting the second to get the first.
+   */
+  | "hr.today"
+  /**
+   * The personnel file: the attendance history, and the staff directory with
+   * its phone numbers, dates of birth, addresses and next of kin.
+   *
+   * Managers and admins. This is the half of the old hr.view that an SMM
+   * never needed and should never have had.
+   */
+  | "hr.records"
   /** Staff records, and deciding leave. */
   | "hr.manage"
   /**
@@ -90,7 +106,8 @@ const MATRIX: Record<Exclude<Role, "MEMBER">, Record<Capability, boolean>> = {
     "tasks.assign": true, "tasks.review": true, "cycles.close": true,
     "billing.flag": true, "financials.view": true, "expenses.create": true,
     "invoices.manage": true, "reports.all": true, "reports.delivery": true,
-    "attendance.mark": true, "hr.view": true, "hr.manage": true, "payroll.manage": true,
+    "attendance.mark": true, "hr.today": true, "hr.records": true,
+    "hr.manage": true, "payroll.manage": true,
     "attendance.exempt": true,
   },
   ADMIN: {
@@ -99,7 +116,8 @@ const MATRIX: Record<Exclude<Role, "MEMBER">, Record<Capability, boolean>> = {
     "tasks.assign": true, "tasks.review": true, "cycles.close": true,
     "billing.flag": true, "financials.view": true, "expenses.create": true,
     "invoices.manage": true, "reports.all": true, "reports.delivery": true,
-    "attendance.mark": true, "hr.view": true, "hr.manage": true, "payroll.manage": true,
+    "attendance.mark": true, "hr.today": true, "hr.records": true,
+    "hr.manage": true, "payroll.manage": true,
     "attendance.exempt": true,
   },
   MANAGER: {
@@ -114,19 +132,62 @@ const MATRIX: Record<Exclude<Role, "MEMBER">, Record<Capability, boolean>> = {
     "invoices.manage": true,
     "reports.all": false, // no org P&L / revenue / margin
     "reports.delivery": true,
-    "attendance.mark": true, "hr.view": true, "hr.manage": true, "payroll.manage": false,
+    "attendance.mark": true, "hr.today": true, "hr.records": true,
+    "hr.manage": true, "payroll.manage": false,
     "attendance.exempt": false,
   },
+  /*
+    SMM is a TEAM member with social media lifted out.
+
+    The line this row draws: an SMM is senior about CONTENT and nothing else.
+    They plan a calendar, brief a junior, review what comes back and close
+    their own cycle. They are not a manager, and every capability that is
+    about running the agency rather than running a feed is false here — the
+    same as it is for TEAM.
+
+    Being able to delegate is not the same as being able to supervise, and
+    that is the distinction this row got wrong before.
+  */
   SMM: {
     "users.manage": false, "settings.manage": false, "clients.manage": false, "projects.manage": false,
     "projects.pricing": false, "projects.assignSmm": false,
     "content.plan": true, // own projects — scope checked by the caller
     "tasks.assign": true, // juniors only — see assignScope()
-    "tasks.review": true, "cycles.close": true, "billing.flag": true,
+    "tasks.review": true, "cycles.close": true,
+    /*
+      Was true, and it was inconsistent with the row it sits in: deciding
+      what a client is charged for is a money decision, and this role has
+      financials.view false precisely so money decisions are not theirs.
+      Nothing enforces it today either, so Settings ▸ Roles was advertising
+      a permission to SMMs that granted nothing and read as though it did.
+    */
+    "billing.flag": false,
     "financials.view": false, // THE money blackout
     "expenses.create": true, "invoices.manage": false,
     "reports.all": false, "reports.delivery": true, // own projects only
-    "attendance.mark": true, "hr.view": true, "hr.manage": false, "payroll.manage": false,
+    "attendance.mark": true,
+    /*
+      The daily board, and nothing behind it.
+
+      These were one capability, hr.view, and an SMM had it. That single flag
+      opened three things: who is in today, the month attendance grid for
+      every colleague, and the staff directory — phone numbers, dates of
+      birth, home addresses, next of kin. An SMM reading a colleague's
+      attendance record is what was reported; the directory was the larger
+      exposure and nobody had noticed it.
+
+      They are two different questions and now they are two capabilities.
+      "Is Rahul in today" is part of handing work out, so an SMM keeps it.
+      "What did Rahul's August look like, and where does he live" is a
+      supervisor's, and it is hr.records.
+
+      Losing hr.records costs an SMM nothing they need for scheduling. "Can I
+      give this person Thursday" is answered by the Availability module, which
+      is open to everyone by design, and enforced by the assignment guard on
+      the server whatever the UI shows. Approved leave already appears there
+      as a blocked day.
+    */
+    "hr.today": true, "hr.records": false, "hr.manage": false, "payroll.manage": false,
     "attendance.exempt": false,
   },
   TEAM: {
@@ -140,7 +201,8 @@ const MATRIX: Record<Exclude<Role, "MEMBER">, Record<Capability, boolean>> = {
     "expenses.create": true,
     "invoices.manage": false,
     "reports.all": false, "reports.delivery": false, // own tasks only
-    "attendance.mark": true, "hr.view": false, "hr.manage": false, "payroll.manage": false,
+    "attendance.mark": true, "hr.today": false, "hr.records": false,
+    "hr.manage": false, "payroll.manage": false,
     "attendance.exempt": false,
   },
 };

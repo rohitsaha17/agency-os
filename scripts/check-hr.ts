@@ -147,11 +147,50 @@ for (const role of ["OWNER", "ADMIN"]) {
 }
 check("MANAGER approves leave", can(U("MANAGER"), "hr.manage"), true);
 check("MANAGER does NOT see salary", can(U("MANAGER"), "payroll.manage"), false);
-check("SMM sees who is in", can(U("SMM"), "hr.view"), true);
+/*
+  An SMM is senior about content and nothing else.
+
+  hr.view is the whole People module — every colleague's attendance month and
+  a staff directory holding phone numbers, dates of birth, addresses and next
+  of kin. Delegating work to a junior does not require any of it, and these
+  assertions exist so nobody quietly hands it back while tidying the matrix.
+*/
+check("SMM sees who is in today", can(U("SMM"), "hr.today"), true);
+check("SMM cannot read the attendance history", can(U("SMM"), "hr.records"), false);
+check("SMM cannot read staff records", can(U("SMM"), "hr.records"), false);
 check("SMM does not manage staff records", can(U("SMM"), "hr.manage"), false);
 check("SMM does not see salary", can(U("SMM"), "payroll.manage"), false);
+check("SMM does not decide what is billable", can(U("SMM"), "billing.flag"), false);
+check("…and is exactly TEAM on every management capability",
+  (["users.manage", "settings.manage", "clients.manage", "projects.manage",
+    "projects.pricing", "projects.assignSmm", "financials.view", "invoices.manage",
+    "reports.all", "billing.flag", "hr.records", "hr.manage", "payroll.manage"] as const)
+    .every((c) => can(U("SMM"), c) === can(U("TEAM"), c)), true);
+
+console.log("");
+console.log("— but still senior about content —");
+check("SMM plans content", can(U("SMM"), "content.plan"), true);
+check("SMM briefs juniors", can(U("SMM"), "tasks.assign"), true);
+check("SMM reviews what comes back", can(U("SMM"), "tasks.review"), true);
+check("SMM closes their own cycle", can(U("SMM"), "cycles.close"), true);
+check("SMM sees delivery reporting", can(U("SMM"), "reports.delivery"), true);
+check("a TEAM member does none of those",
+  (["content.plan", "tasks.assign", "tasks.review", "cycles.close", "reports.delivery"] as const)
+    .every((c) => can(U("TEAM"), c) === false), true);
+
+console.log("");
+console.log("— and scheduling still works without the HR record —");
+check("SMM can still read the team's diary", mayReadAvailability(U("SMM"), "u2"), true);
+check("a MANAGER keeps the whole People module",
+  can(U("MANAGER"), "hr.today") && can(U("MANAGER"), "hr.records"), true);
+check("an ADMIN keeps it",
+  can(U("ADMIN"), "hr.today") && can(U("ADMIN"), "hr.records"), true);
+// The split is only worth having if the two halves can actually differ.
+check("hr.today and hr.records are genuinely separate for SMM",
+  can(U("SMM"), "hr.today") !== can(U("SMM"), "hr.records"), true);
 check("TEAM checks themselves in", can(U("TEAM"), "attendance.mark"), true);
-check("TEAM does not see the team board", can(U("TEAM"), "hr.view"), false);
+check("TEAM does not see the team board", can(U("TEAM"), "hr.today"), false);
+check("…nor the records behind it", can(U("TEAM"), "hr.records"), false);
 check("TEAM does not see salary", can(U("TEAM"), "payroll.manage"), false);
 check("everybody can check in", ["OWNER", "ADMIN", "MANAGER", "SMM", "TEAM"].every((r) => can(U(r), "attendance.mark")), true);
 check("OWNER is excused from checking in", can(U("OWNER"), "attendance.exempt"), true);

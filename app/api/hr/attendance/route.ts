@@ -11,7 +11,8 @@ import { dayKey, dayString, canSelfCheckIn, attendanceDay } from "@/lib/hr";
  * Which days somebody was in. Defaults to the caller's own record, which is
  * why there is no capability on the default path — everybody may see their
  * own attendance, and asking about ANYONE ELSE is the thing that needs
- * hr.view.
+ * hr.records. Not hr.today: seeing who is in right now is part of handing
+ * out work, reading back somebody's August is not.
  *
  * `scope=team` is the month-end grid: everybody, plus the names to put down
  * the side. The names ship with the rows rather than leaving the grid to
@@ -26,7 +27,9 @@ export async function GET(req: NextRequest) {
     const askedFor = sp.get("userId");
     const team = sp.get("scope") === "team";
 
-    if (team || (askedFor && askedFor !== user.id)) requireCapability(user, "hr.view");
+    // The month grid and anybody else's record are the personnel file, not
+    // the daily board — hr.today is not enough for either.
+    if (team || (askedFor && askedFor !== user.id)) requireCapability(user, "hr.records");
     const userId = askedFor ?? user.id;
     /** Everybody, or exactly one person. */
     const who = team ? {} : { userId };

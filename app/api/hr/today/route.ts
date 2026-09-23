@@ -25,7 +25,9 @@ import { dayKey, dayString, attendanceDay } from "@/lib/hr";
  *
  * Everybody gets their own row without any capability — knowing whether you
  * have checked in yourself is not privileged. Seeing the rest of the team
- * takes hr.view.
+ * takes hr.today, which an SMM holds: briefing a junior needs to know who is
+ * actually here. It does NOT carry the personnel file — that is hr.records,
+ * and this endpoint never returns it.
  */
 export async function GET(req: NextRequest) {
   try {
@@ -35,7 +37,7 @@ export async function GET(req: NextRequest) {
     // at 1am is looked up against the day they checked in on.
     const tz = user.organization?.timezone ?? "UTC";
     const day = dayKey(sp.get("date") ?? attendanceDay(new Date(), tz));
-    const seesTeam = can(user, "hr.view");
+    const seesTeam = can(user, "hr.today");
 
     /*
       Three more facts the board needs, fetched in the SAME request.

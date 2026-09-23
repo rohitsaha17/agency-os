@@ -43,11 +43,12 @@ import { AdvancesTab } from "@/components/hr/AdvancesTab";
 type TabId = "today" | "attendance" | "staff" | "leave" | "payroll" | "advances";
 
 const TABS: { id: TabId; label: string; icon: typeof Users; need: Capability | null }[] = [
-  { id: "today", label: "Today", icon: CalendarCheck, need: "hr.view" },
-  // The month-end grid. Same capability as Today: if you can see who is in
-  // now, you can see who was in on the 4th.
-  { id: "attendance", label: "Attendance", icon: CalendarRange, need: "hr.view" },
-  { id: "staff", label: "Staff", icon: Users, need: "hr.view" },
+  { id: "today", label: "Today", icon: CalendarCheck, need: "hr.today" },
+  // The month-end grid. NOT the same capability as Today any more: seeing who
+  // is in right now is part of handing out work, and an SMM needs it. Reading
+  // back what somebody's August looked like is a supervisor's business.
+  { id: "attendance", label: "Attendance", icon: CalendarRange, need: "hr.records" },
+  { id: "staff", label: "Staff", icon: Users, need: "hr.records" },
   // Everyone has their own leave, so this one is never hidden.
   { id: "leave", label: "Leave", icon: Plane, need: null },
   { id: "payroll", label: "Payroll", icon: Wallet, need: "payroll.manage" },
@@ -136,7 +137,7 @@ function HRPageBody() {
       </nav>
 
       {tab === "today" && (
-        <TodayTab query={query} canManage={canManageHr} onNavigate={navigate} />
+        <TodayTab query={query} canManage={canManageHr} seesRecords={can(user, "hr.records")} onNavigate={navigate} />
       )}
       {tab === "attendance" && (
         <AttendanceTab

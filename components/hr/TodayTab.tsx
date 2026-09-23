@@ -77,10 +77,12 @@ const STATE: Record<State, { label: string; tone: Tone; icon: typeof CheckCircle
 };
 
 export function TodayTab({
-  query, canManage, onNavigate,
+  query, canManage, seesRecords, onNavigate,
 }: {
   query: string;
   canManage: boolean;
+  /** Whether this viewer can open a colleague's history at all. */
+  seesRecords: boolean;
   onNavigate: (tab: "attendance" | "leave", userId?: string) => void;
 }) {
   const toast = useToast();
@@ -252,8 +254,11 @@ export function TodayTab({
                                   onSelect: () => markPresent(p),
                                   disabled: !canManage || p.state !== "UNKNOWN",
                                 },
-                                { label: "See their month", onSelect: () => onNavigate("attendance", p.id) },
-                                { label: "See their leave", onSelect: () => onNavigate("leave", p.id) },
+                                // Both land on a tab this viewer may not have.
+                                // Offering a menu item that silently does
+                                // nothing is worse than not offering it.
+                                { label: "See their month", onSelect: () => onNavigate("attendance", p.id), disabled: !seesRecords },
+                                { label: "See their leave", onSelect: () => onNavigate("leave", p.id), disabled: !seesRecords },
                               ]}
                             />
                           </Td>

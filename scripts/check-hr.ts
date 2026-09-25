@@ -18,6 +18,7 @@ import {
   money, amount, longDate, shortDate, dateRange, monthName, shiftMonth,
   monthDays, attendanceState, leaveOn, attendanceRate, recoveryMonths,
   advanceState, matchesQuery, ATTENDANCE_LABEL,
+  monthDay, monthDayLabel, nextOccurrence, daysUntil, countdownLabel, serviceYears,
 } from "../lib/people";
 
 let fails = 0;
@@ -351,6 +352,59 @@ check("200 draws, 200 distinct values", new Set(temps).size, 200);
 // that turn a reset into a support call.
 check("no ambiguous characters", temps.every((t) => !/[O0Il1]/.test(t)), true);
 check("grouped for transcription", temps.every((t) => /^[A-Za-z2-9]{4}-[A-Za-z2-9]{4}-[A-Za-z2-9]{4}$/.test(t)), true);
+
+
+console.log("");
+console.log("— a date that comes round every year —");
+const MD = (v: string | null) => monthDay(v);
+check("a stored date becomes a month-day", MD("1991-03-14T00:00:00Z"), "03-14");
+check("read as UTC, not local", MD("1991-01-01T00:00:00Z"), "01-01");
+check("nothing recorded is null", MD(null), null);
+check("the birth YEAR is not in it", MD("1991-03-14T00:00:00Z")?.includes("1991"), false);
+check("it renders without a year", monthDayLabel("03-14"), "14 Mar");
+
+console.log("");
+console.log("— when it next falls —");
+const JUN1 = new Date(2026, 5, 1); // 1 June 2026, local
+check("later this year", nextOccurrence("08-20", JUN1)?.toISOString().slice(0, 10), "2026-08-20");
+check("already gone, so next year", nextOccurrence("03-14", JUN1)?.toISOString().slice(0, 10), "2027-03-14");
+check("today counts as today", nextOccurrence("06-01", JUN1)?.toISOString().slice(0, 10), "2026-06-01");
+check("a junk value is null rather than a wrong date", nextOccurrence("nope", JUN1), null);
+check("an impossible month is null", nextOccurrence("13-01", JUN1), null);
+
+console.log("");
+console.log("— 29 February, which is the whole reason that is a function —");
+// new Date(2027, 1, 29) silently rolls into 1 March, which would move a
+// leap-day birthday onto somebody else's day, and only in some years.
+check("a leap year keeps the 29th",
+  nextOccurrence("02-29", new Date(2028, 0, 1))?.toISOString().slice(0, 10), "2028-02-29");
+check("a common year falls back to the 28th",
+  nextOccurrence("02-29", new Date(2027, 0, 1))?.toISOString().slice(0, 10), "2027-02-28");
+check("and never leaks into March",
+  nextOccurrence("02-29", new Date(2027, 0, 1))?.getUTCMonth(), 1);
+check("2100 is not a leap year",
+  nextOccurrence("02-29", new Date(2100, 0, 1))?.toISOString().slice(0, 10), "2100-02-28");
+check("2000 was",
+  nextOccurrence("02-29", new Date(2000, 0, 1))?.toISOString().slice(0, 10), "2000-02-29");
+
+console.log("");
+console.log("— the countdown —");
+check("today is zero", daysUntil(new Date(Date.UTC(2026, 5, 1)), JUN1), 0);
+check("tomorrow is one", daysUntil(new Date(Date.UTC(2026, 5, 2)), JUN1), 1);
+check("across a month boundary", daysUntil(new Date(Date.UTC(2026, 6, 1)), JUN1), 30);
+check("said in words", countdownLabel(0), "Today");
+check("…and again", countdownLabel(1), "Tomorrow");
+check("…and otherwise counted", countdownLabel(9), "In 9 days");
+
+console.log("");
+console.log("— years of service —");
+check("five years", serviceYears("2021-06-01T00:00:00Z", new Date(Date.UTC(2026, 5, 1))), 5);
+check("one year", serviceYears("2025-06-01T00:00:00Z", new Date(Date.UTC(2026, 5, 1))), 1);
+// "0 years" is not an anniversary, it is the day somebody started — putting it
+// on a celebration list a week after they arrive reads as a bug.
+check("the joining year itself is not an anniversary",
+  serviceYears("2026-06-01T00:00:00Z", new Date(Date.UTC(2026, 5, 1))), null);
+check("a junk joining date is null", serviceYears("not-a-date", new Date(Date.UTC(2026, 5, 1))), null);
 
 
 console.log(fails === 0 ? "\nAll HR checks passed." : `\n${fails} FAILED`);

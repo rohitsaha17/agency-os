@@ -7,6 +7,7 @@
  *   Attendance who worked, and what the month looks like
  *   Staff      who works here and what we hold on them
  *   Leave      who is asking for time off, and who is out
+ *   Celebrations birthdays and work anniversaries
  *   Payroll    what we owe, and what has been paid
  *   Advances   what has been lent, and what is left to come back
  *
@@ -27,7 +28,7 @@
 import { useState, useEffect, useCallback, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import {
-  Users, CalendarCheck, CalendarRange, Plane, Wallet, HandCoins,
+  Users, CalendarCheck, CalendarRange, Plane, Wallet, HandCoins, Cake,
 } from "lucide-react";
 import { useCurrentUser } from "@/lib/useCurrentUser";
 import { can, type Capability } from "@/lib/permissions";
@@ -39,8 +40,9 @@ import { StaffTab } from "@/components/hr/StaffTab";
 import { LeaveTab } from "@/components/hr/LeaveTab";
 import { PayrollTab } from "@/components/hr/PayrollTab";
 import { AdvancesTab } from "@/components/hr/AdvancesTab";
+import { CelebrationsTab } from "@/components/hr/CelebrationsTab";
 
-type TabId = "today" | "attendance" | "staff" | "leave" | "payroll" | "advances";
+type TabId = "today" | "attendance" | "staff" | "leave" | "celebrations" | "payroll" | "advances";
 
 const TABS: { id: TabId; label: string; icon: typeof Users; need: Capability | null }[] = [
   { id: "today", label: "Today", icon: CalendarCheck, need: "hr.today" },
@@ -51,6 +53,15 @@ const TABS: { id: TabId; label: string; icon: typeof Users; need: Capability | n
   { id: "staff", label: "Staff", icon: Users, need: "hr.records" },
   // Everyone has their own leave, so this one is never hidden.
   { id: "leave", label: "Leave", icon: Plane, need: null },
+  /*
+    Also never hidden, and that is the point of it.
+
+    Date of birth lives in the staff record, which is hr.records — but a
+    birthday calendar only a manager can see is not a birthday calendar. The
+    endpoint behind this sends a month and a day and never the birth year, so
+    what is shared is the occasion rather than somebody's age.
+  */
+  { id: "celebrations", label: "Celebrations", icon: Cake, need: null },
   { id: "payroll", label: "Payroll", icon: Wallet, need: "payroll.manage" },
   { id: "advances", label: "Advances", icon: HandCoins, need: "payroll.manage" },
 ];
@@ -159,6 +170,7 @@ function HRPageBody() {
           focusUserId={focus} onFocusHandled={clearFocus}
         />
       )}
+      {tab === "celebrations" && <CelebrationsTab query={query} />}
       {tab === "payroll" && (
         <PayrollTab
           currency={currency} query={query}

@@ -291,3 +291,91 @@ export function matchesQuery(
   return [person.name, person.craft, person.email, person.phone, person.role]
     .some((v) => (v ?? "").toLowerCase().includes(q));
 }
+
+/* ------------------------------------------------------------------ *
+ * Birthdays and work anniversaries
+ *
+ * A date that comes round every year is not the same kind of thing as a
+ * date. What the team wants is "the 14th of March, every year"; what the
+ * record holds is "14 March 1991", and the difference between those two is
+ * somebody's age.
+ *
+ * So everything here works on a MONTH-DAY — "03-14" — and the birth year
+ * never leaves the server. Years of service are different and are carried in
+ * full, because "five years today" IS the occasion.
+ * ------------------------------------------------------------------ */
+
+/** "03-14" from a stored date, read as UTC like every other day key here. */
+export function monthDay(value: string | Date | null | undefined): string | null {
+  if (!value) return null;
+  const d = asDate(value);
+  if (Number.isNaN(d.getTime())) return null;
+  return `${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+}
+
+function isLeapYear(y: number): boolean {
+  return (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+}
+
+/**
+ * The next date a "MM-DD" falls on, today included.
+ *
+ * 29 FEBRUARY IS THE WHOLE REASON THIS IS A FUNCTION.
+ *
+ * Somebody born on a leap day has no birthday in three years out of four, and
+ * `new Date(2027, 1, 29)` silently rolls into 1 March — so the naive version
+ * moves their birthday to a day that belongs to somebody else, and only in
+ * some years, which is the kind of bug nobody reports because it looks
+ * plausible. They are celebrated on the 28th in common years: it keeps the
+ * occasion inside February, where they were born.
+ */
+export function nextOccurrence(md: string, from: Date = new Date()): Date | null {
+  if (!/^\d{2}-\d{2}$/.test(md)) return null;
+  const [m, d] = md.split("-").map(Number);
+  if (m < 1 || m > 12 || d < 1 || d > 31) return null;
+
+  // Compare on the viewer's own calendar day, so "today" means today here.
+  const todayKey = Date.UTC(from.getFullYear(), from.getMonth(), from.getDate());
+
+  for (const year of [from.getFullYear(), from.getFullYear() + 1]) {
+    const day = m === 2 && d === 29 && !isLeapYear(year) ? 28 : d;
+    const candidate = Date.UTC(year, m - 1, day);
+    if (candidate >= todayKey) return new Date(candidate);
+  }
+  return null;
+}
+
+/** Whole days from today until `date`. 0 means today. */
+export function daysUntil(date: Date, from: Date = new Date()): number {
+  const a = Date.UTC(from.getFullYear(), from.getMonth(), from.getDate());
+  const b = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+  return Math.round((b - a) / 86_400_000);
+}
+
+/** "Today", "Tomorrow", "In 9 days" — a countdown reads better than a date. */
+export function countdownLabel(days: number): string {
+  if (days === 0) return "Today";
+  if (days === 1) return "Tomorrow";
+  return `In ${days} days`;
+}
+
+/**
+ * How many years of service this anniversary marks.
+ *
+ * Returns null for the joining year itself — "0 years" is not an anniversary,
+ * it is the day somebody started, and putting it on a celebration list a week
+ * after they arrive reads as a mistake.
+ */
+export function serviceYears(joinedISO: string, occurrence: Date): number | null {
+  const joined = asDate(joinedISO);
+  if (Number.isNaN(joined.getTime())) return null;
+  const years = occurrence.getUTCFullYear() - joined.getUTCFullYear();
+  return years > 0 ? years : null;
+}
+
+/** "14 Mar" — a recurring date has no year to show. */
+export function monthDayLabel(md: string): string {
+  if (!/^\d{2}-\d{2}$/.test(md)) return "—";
+  const [m, d] = md.split("-").map(Number);
+  return `${d} ${MONTHS_SHORT[m - 1] ?? ""}`.trim();
+}

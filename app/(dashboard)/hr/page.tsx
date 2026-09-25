@@ -149,6 +149,7 @@ function HRPageBody() {
         <StaffTab
           query={query} canEdit={canManageHr} seesPay={seesPay}
           canInvite={can(user, "users.manage")} currency={currency}
+          meId={user?.id ?? null} meIsOwner={user?.role === "OWNER"}
           onNavigate={navigate}
         />
       )}

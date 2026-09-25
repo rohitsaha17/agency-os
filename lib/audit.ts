@@ -13,7 +13,10 @@ export type StatusEntityType =
   | "INVOICE"
   | "CONTRACT"
   | "EXPENSE"
-  | "FILE";
+  | "FILE"
+  /// v3: not a status change in the usual sense, but a password reset is
+  /// exactly the kind of act that has to leave a trace saying who did it.
+  | "USER";
 
 export interface LogStatusArgs {
   organizationId: string;

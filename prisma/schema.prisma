@@ -300,6 +300,13 @@ model User {
   // freshly-invited teammates) are prompted to set one on first sign-in.
   passwordHash   String?
   passwordSetAt  DateTime?
+  /// Set when an admin reset this password, cleared when the person changes it.
+  ///
+  /// A reset hands the admin a temporary password, which means that for a
+  /// while somebody other than the account holder knows how to sign in as
+  /// them. This is what closes that window: the temporary password works
+  /// exactly once, and the next screen after it is "choose a new one".
+  mustChangePassword Boolean @default(false)
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 

@@ -17,7 +17,13 @@ const FEATURES = [
   { icon: MessageSquare, label: "Team Chat",           desc: "Per-project and per-client channels" },
 ];
 
-type Phase = "email" | "password" | "setup";
+/*
+  "rotate" is the step after signing in with a password an admin reset for
+  you. You are genuinely signed in by then — the cookie is set, the password
+  you typed was correct — but somebody else has seen that password, so it is
+  spent and this is where it gets replaced.
+*/
+type Phase = "email" | "password" | "setup" | "rotate";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -25,6 +31,10 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
+  // Held only for the length of the rotate step: change-password wants the
+  // current password, and the current password is the temporary one that was
+  // just typed.
+  const [tempPassword, setTempPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -74,9 +84,46 @@ export default function LoginPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(errMsg(data) || "Login failed");
+      if (data.mustChangePassword) {
+        setTempPassword(password);
+        setPassword("");
+        setConfirm("");
+        setPhase("rotate");
+        setLoading(false);
+        return;
+      }
       goNext(!!data.needsOnboarding);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
+      setLoading(false);
+    }
+  };
+
+  // Phase 2c — replace a password an admin reset. The session already exists,
+  // so this is the ordinary change-password endpoint, which is also what
+  // clears the flag.
+  const submitRotate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    if (password.length < 8) { setError("Password must be at least 8 characters"); return; }
+    if (password !== confirm) { setError("Passwords do not match"); return; }
+    if (password === tempPassword) {
+      setError("Choose something other than the temporary password you were given.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch("/api/auth/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword: tempPassword, newPassword: password }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(errMsg(data) || "Could not set your new password");
+      setTempPassword("");
+      goNext(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
       setLoading(false);
     }
   };
@@ -169,12 +216,15 @@ export default function LoginPage() {
       <div className="flex items-center justify-center p-8 sm:p-12 lg:w-[480px] lg:border-l lg:border-white/[0.06] bg-slate-900/40">
         <div className="w-full max-w-sm">
           <h2 className="text-2xl font-bold tracking-tight">
-            {phase === "setup" ? "Set your password" : "Welcome back"}
+            {phase === "setup" ? "Set your password" : phase === "rotate" ? "Choose a new password" : "Welcome back"}
           </h2>
           <p className="mt-2 text-sm text-slate-400">
             {phase === "email" && "Sign in with the email your workspace was set up with."}
             {phase === "password" && (
               <>Signing in as <span className="text-slate-200 font-medium">{email}</span>.</>
+            )}
+            {phase === "rotate" && (
+              <>Your password was reset by an admin. Pick one only you know.</>
             )}
             {phase === "setup" && (
               <>First time in? Create a password for <span className="text-slate-200 font-medium">{email}</span> to secure your account.</>
@@ -270,6 +320,41 @@ export default function LoginPage() {
               <button type="button" onClick={backToEmail} className="w-full text-center text-xs text-slate-500 hover:text-slate-300 transition-colors">
                 Use a different email
               </button>
+            </form>
+          )}
+
+          {phase === "rotate" && (
+            <form onSubmit={submitRotate} className="mt-6 space-y-4">
+              <div>
+                <label htmlFor="rotate-password" className="block text-xs font-medium text-slate-400 mb-1.5">
+                  New password
+                </label>
+                <input
+                  id="rotate-password" type="password" required autoFocus value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="At least 8 characters"
+                  className="w-full px-4 py-3 text-sm rounded-xl bg-slate-900 border border-slate-700 text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                />
+              </div>
+              <div>
+                <label htmlFor="rotate-confirm" className="block text-xs font-medium text-slate-400 mb-1.5">
+                  Confirm password
+                </label>
+                <input
+                  id="rotate-confirm" type="password" required value={confirm}
+                  onChange={(e) => setConfirm(e.target.value)}
+                  placeholder="Re-enter your password"
+                  className="w-full px-4 py-3 text-sm rounded-xl bg-slate-900 border border-slate-700 text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                />
+              </div>
+              <button
+                type="submit" disabled={loading}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-semibold rounded-xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white transition-colors disabled:opacity-60"
+              >
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <>Save &amp; continue <ArrowRight className="w-4 h-4" /></>}
+              </button>
+              {/* No "use a different email" here on purpose: they are already
+                  signed in, and the only way out of this step is through it. */}
             </form>
           )}
 

@@ -12,7 +12,8 @@ import {
   attendanceDay, DAY_STARTS_AT_HOUR,
 } from "../lib/hr";
 import { can } from "../lib/permissions";
-import { maySetAvailability, mayReadAvailability } from "../lib/api-permissions";
+import { maySetAvailability, mayReadAvailability, mayResetPassword } from "../lib/api-permissions";
+import { generateTemporaryPassword, validatePassword, verifyPassword, hashPassword } from "../lib/password";
 import {
   money, amount, longDate, shortDate, dateRange, monthName, shiftMonth,
   monthDays, attendanceState, leaveOn, attendanceRate, recoveryMonths,
@@ -301,6 +302,55 @@ check("by email", matchesQuery(person, "vibrnd.in"), true);
 check("by phone", matchesQuery(person, "98765"), true);
 check("an empty box matches everyone", matchesQuery(person, "   "), true);
 check("and a miss is a miss", matchesQuery(person, "zzz"), false);
+
+
+console.log("");
+console.log("— who may reset whose password —");
+const P = (id: string, role: string) => ({ id, role });
+const T = (id: string, role: string, isActive = true) => ({ id, role, isActive });
+
+check("an ADMIN resets a TEAM member", mayResetPassword(P("a1", "ADMIN"), T("t1", "TEAM")).ok, true);
+check("an ADMIN resets an SMM", mayResetPassword(P("a1", "ADMIN"), T("s1", "SMM")).ok, true);
+check("an ADMIN resets a MANAGER", mayResetPassword(P("a1", "ADMIN"), T("m1", "MANAGER")).ok, true);
+check("an OWNER resets an ADMIN", mayResetPassword(P("o1", "OWNER"), T("a1", "ADMIN")).ok, true);
+
+console.log("");
+console.log("— and the two refusals that matter —");
+// Self-reset would route around change-password, which asks for the current
+// one first. Without it, an unlocked laptop becomes a permanent takeover.
+check("nobody resets their own", mayResetPassword(P("a1", "ADMIN"), T("a1", "ADMIN")).ok, false);
+check("…not even an owner", mayResetPassword(P("o1", "OWNER"), T("o1", "OWNER")).ok, false);
+// users.manage belongs to ADMIN too, so without this an admin could become
+// the owner and hold every capability, including the ones withheld from them.
+check("an ADMIN cannot reset the OWNER", mayResetPassword(P("a1", "ADMIN"), T("o1", "OWNER")).ok, false);
+check("only an OWNER can reset another OWNER",
+  mayResetPassword(P("o1", "OWNER"), T("o2", "OWNER")).ok, true);
+
+console.log("");
+console.log("— and nobody below admin resets anybody —");
+for (const role of ["MANAGER", "SMM", "TEAM"]) {
+  check(`a ${role} cannot reset a password`,
+    mayResetPassword(P("x1", role), T("t1", "TEAM")).ok, false);
+}
+check("a deactivated account is refused rather than pretended at",
+  mayResetPassword(P("a1", "ADMIN"), T("t1", "TEAM", false)).ok, false);
+check("every refusal says why",
+  (["a1", "o1"] as const).every((id) => {
+    const v = mayResetPassword(P("a1", "ADMIN"), T(id, id === "o1" ? "OWNER" : "ADMIN"));
+    return v.ok === false && typeof v.reason === "string" && v.reason.length > 10;
+  }), true);
+
+console.log("");
+console.log("— the temporary password itself —");
+const temps = Array.from({ length: 200 }, () => generateTemporaryPassword());
+check("passes the app's own password rules", temps.every((t) => validatePassword(t) === null), true);
+check("is verifiable once hashed", verifyPassword(temps[0], hashPassword(temps[0])), true);
+check("a different one does not verify", verifyPassword(temps[1], hashPassword(temps[0])), false);
+check("200 draws, 200 distinct values", new Set(temps).size, 200);
+// Read down a phone line or copied off a screen. O/0 and I/l/1 are the pairs
+// that turn a reset into a support call.
+check("no ambiguous characters", temps.every((t) => !/[O0Il1]/.test(t)), true);
+check("grouped for transcription", temps.every((t) => /^[A-Za-z2-9]{4}-[A-Za-z2-9]{4}-[A-Za-z2-9]{4}$/.test(t)), true);
 
 
 console.log(fails === 0 ? "\nAll HR checks passed." : `\n${fails} FAILED`);

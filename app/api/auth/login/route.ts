@@ -38,6 +38,7 @@ export async function POST(req: NextRequest) {
       where: { email: { equals: normalized, mode: "insensitive" }, isActive: true },
       select: {
         id: true, name: true, email: true, role: true, passwordHash: true,
+        mustChangePassword: true,
         organization: { select: { id: true, name: true, onboardingCompleted: true } },
       },
     });
@@ -69,6 +70,16 @@ export async function POST(req: NextRequest) {
       role: user.role,
       organization: user.organization,
       needsOnboarding: !user.organization.onboardingCompleted,
+      /*
+        Set when an admin reset this password. The credential that just worked
+        is a temporary one somebody else has seen, so the client sends them
+        straight to choosing a new one.
+
+        The cookie is still issued. They are genuinely signed in — they typed
+        the current password — and being signed in is what lets them call
+        change-password at all. This is a prompt, not a half-session.
+      */
+      mustChangePassword: user.mustChangePassword,
     });
 
     res.cookies.set("userId", user.id, {

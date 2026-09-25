@@ -20,12 +20,13 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Plus, UserPlus, Pencil, ExternalLink } from "lucide-react";
+import { Plus, UserPlus, Pencil, ExternalLink, KeyRound, Copy, Check } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
 import { LoadError } from "@/components/ui/LoadError";
 import { useToast } from "@/components/ui/Toast";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { Drawer, DrawerLine, DrawerSection } from "@/components/people/Drawer";
 import {
   PersonAvatar, PersonCell, StatusBadge, SummaryCard, SummaryStrip,
@@ -50,16 +51,21 @@ const EMPLOYMENT = ["FULL_TIME", "PART_TIME", "CONTRACT", "INTERN"] as const;
 const forInput = (iso: string | null) => (iso ? iso.slice(0, 10) : "");
 
 export function StaffTab({
-  query, canEdit, seesPay, canInvite, currency, onNavigate,
+  query, canEdit, seesPay, canInvite, currency, meId, meIsOwner, onNavigate,
 }: {
   query: string;
   canEdit: boolean;
   seesPay: boolean;
+  /** users.manage — the same capability that gates adding a person. */
   canInvite: boolean;
   currency: string;
+  meId: string | null;
+  meIsOwner: boolean;
   onNavigate: (tab: "attendance" | "leave" | "payroll" | "advances", userId?: string) => void;
 }) {
   const toast = useToast();
+  const confirm = useConfirm();
+  const [resetResult, setResetResult] = useState<{ name: string; password: string } | null>(null);
   const [staff, setStaff] = useState<Staff[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
@@ -104,6 +110,33 @@ export function StaffTab({
     if (!status && !s.isActive) return false;
     return true;
   }), [staff, query, craft, type, status]);
+
+  /**
+   * Reset somebody's password.
+   *
+   * The temporary password comes back exactly once and is never stored in
+   * plaintext, so it goes straight into a dialog rather than a toast — a
+   * toast would take it away again after four seconds, and there is no second
+   * request that can fetch it back.
+   */
+  async function resetPassword(s: Staff) {
+    const ok = await confirm({
+      title: `Reset ${s.name.split(" ")[0]}'s password?`,
+      message:
+        "Their current password stops working immediately. You'll get a temporary one to pass on, and they'll be asked to choose a new one when they next sign in.",
+      confirmLabel: "Reset password",
+      variant: "danger",
+    });
+    if (!ok) return;
+    try {
+      const res = await fetch(`/api/users/${s.id}/reset-password`, { method: "POST" });
+      const d = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(d?.error?.message ?? "Couldn't reset that password");
+      setResetResult({ name: d.name ?? s.name, password: d.temporaryPassword });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't reset that password");
+    }
+  }
 
   const filtersOn = !!(craft || type || status);
   const opened = (staff ?? []).find((s) => s.id === open) ?? null;
@@ -236,6 +269,18 @@ export function StaffTab({
                               items={[
                                 { label: "View record", onSelect: () => setOpen(s.id) },
                                 { label: "Edit details", onSelect: () => setEditing(s), disabled: !canEdit },
+                                {
+                                  label: "Reset password",
+                                  onSelect: () => resetPassword(s),
+                                  // Mirrors the route's own refusals: your own
+                                  // password has its own screen, and only an
+                                  // owner may reset an owner.
+                                  disabled:
+                                    !canInvite ||
+                                    s.id === meId ||
+                                    (s.role === "OWNER" && !meIsOwner) ||
+                                    !s.isActive,
+                                },
                                 { label: "View attendance", onSelect: () => onNavigate("attendance", s.id) },
                                 { label: "View leave", onSelect: () => onNavigate("leave", s.id) },
                                 { label: "View payroll", onSelect: () => onNavigate("payroll", s.id), disabled: !seesPay },
@@ -365,6 +410,14 @@ export function StaffTab({
           currency={currency}
           onClose={() => setEditing(null)}
           onSaved={() => { setEditing(null); toast.success("Saved"); load(); }}
+        />
+      )}
+
+      {resetResult && (
+        <ShowTemporaryPassword
+          name={resetResult.name}
+          password={resetResult.password}
+          onClose={() => setResetResult(null)}
         />
       )}
 
@@ -614,5 +667,75 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <span className="block text-[11px] font-medium text-gray-500 dark:text-slate-400 mb-1">{label}</span>
       {children}
     </label>
+  );
+}
+
+
+/**
+ * The temporary password, shown once.
+ *
+ * It exists in one place — this dialog — and nowhere else: it was hashed
+ * before it was stored and there is no endpoint that returns it again. So the
+ * dialog says so plainly, and closing it is deliberate rather than incidental
+ * (no backdrop dismissal to fat-finger past).
+ *
+ * Copy rather than select-and-drag, because this gets pasted into a message
+ * to the person it belongs to, and a half-selected credential is a support
+ * call.
+ */
+function ShowTemporaryPassword({
+  name, password, onClose,
+}: {
+  name: string; password: string; onClose: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(password);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard access can be refused outright. The password is on screen
+      // and selectable, so this is a convenience failing, not the feature.
+    }
+  };
+
+  return (
+    <Modal
+      open onClose={onClose} title={`Temporary password for ${name}`} width="max-w-md"
+      footer={
+        <div className="flex items-center justify-end">
+          <Button size="sm" onClick={onClose}>Done</Button>
+        </div>
+      }
+    >
+      <div className="space-y-3">
+        <p className="text-[13px] text-gray-600 dark:text-slate-300">
+          Pass this to {name.split(" ")[0]}. They&rsquo;ll be asked to choose their own
+          password the moment they sign in with it.
+        </p>
+
+        <div className="flex items-center gap-2 rounded-xl border border-gray-200 dark:border-white/[0.1] bg-gray-50 dark:bg-white/[0.04] px-3 py-2.5">
+          <code className="flex-1 text-[15px] font-mono tracking-wider text-gray-900 dark:text-slate-100 select-all">
+            {password}
+          </code>
+          <Button
+            size="sm" variant="secondary" onClick={copy}
+            icon={copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+          >
+            {copied ? "Copied" : "Copy"}
+          </Button>
+        </div>
+
+        <div className="flex items-start gap-2 rounded-lg bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/25 px-3 py-2.5">
+          <KeyRound className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" aria-hidden />
+          <p className="text-xs text-amber-800 dark:text-amber-200">
+            This is the only time it is shown — it isn&rsquo;t stored anywhere it can be
+            read back. If you lose it, reset again.
+          </p>
+        </div>
+      </div>
+    </Modal>
   );
 }

@@ -35,7 +35,13 @@ export async function POST(req: NextRequest) {
 
     await prisma.user.update({
       where: { id: user.id },
-      data: { passwordHash: hashPassword(String(newPassword)), passwordSetAt: new Date() },
+      data: {
+        passwordHash: hashPassword(String(newPassword)),
+        passwordSetAt: new Date(),
+        // Whatever an admin handed over is now worthless, which is the point
+        // of having handed over something temporary.
+        mustChangePassword: false,
+      },
     });
 
     return NextResponse.json({ ok: true });

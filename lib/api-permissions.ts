@@ -158,3 +158,51 @@ export function maySetAvailability(
   if (can(user, "users.manage")) return true;
   return targetUserId === user.id && !!user.jobTitle?.blocksOwnDays;
 }
+
+/**
+ * May `actor` reset `target`'s password?
+ *
+ * Pulled out of the route so the two refusals can be asserted directly rather
+ * than only through a request — they are the kind of rule that is quietly
+ * broken by a later refactor and noticed by nobody.
+ *
+ * NOT YOURSELF. Changing your own password already exists and it asks for the
+ * current one first. A self-reset here would route around that, turning "I am
+ * signed in on a laptop somebody left open" into a permanent takeover.
+ *
+ * NOT AN OWNER, UNLESS YOU ARE ONE. users.manage belongs to ADMIN as well as
+ * OWNER. Without this line an admin could reset the owner's password, sign in
+ * as them, and hold every capability there is — including the ones deliberately
+ * withheld from admins. The owner is the one account an admin must not be able
+ * to become.
+ *
+ * Deactivated accounts are refused too, not for safety but for honesty: a new
+ * password on a deactivated account lets nobody in, so handing one over would
+ * be theatre.
+ */
+export function mayResetPassword(
+  actor: { id?: string | null; role?: string | null } | null | undefined,
+  target: { id: string; role?: string | null; isActive?: boolean },
+): { ok: true } | { ok: false; reason: string } {
+  // `can` takes id?: string, so a null id is normalised away here rather than
+  // widening HasRole for one caller.
+  if (!actor || !can({ id: actor.id ?? undefined, role: actor.role }, "users.manage")) {
+    return { ok: false, reason: "Only an admin can reset somebody's password." };
+  }
+  if (actor.id && actor.id === target.id) {
+    return {
+      ok: false,
+      reason: "Use Settings ▸ Change password for your own account — it asks for your current one.",
+    };
+  }
+  if (target.role === "OWNER" && actor.role !== "OWNER") {
+    return { ok: false, reason: "Only the owner can reset the owner's password." };
+  }
+  if (target.isActive === false) {
+    return {
+      ok: false,
+      reason: "That account is deactivated. Reactivate it first, or the new password lets nobody in.",
+    };
+  }
+  return { ok: true };
+}

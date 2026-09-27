@@ -1007,62 +1007,107 @@ input[type="time"]::-webkit-calendar-picker-indicator:hover {
 }
 
 /* ═════════════════════════════════════════════════════════════
-   GLO — a per-workspace theme
+   GLOO — a per-workspace theme
    ═════════════════════════════════════════════════════════════
 
-   INERT UNTIL A WORKSPACE OPTS IN. Nothing below matches anything
-   unless <html> carries `theme-glo`, and that class is written
-   only by the server, only from Organization.theme, and no
-   organization has a value other than 'default'. Every existing
-   workspace renders byte-identically to before this block existed.
+   Applies only where <html> carries `theme-glo`, written by the
+   server from Organization.theme. Every other workspace is on
+   "default" and is untouched by everything below.
 
-   HOW IT WORKS, AND WHY IT LOOKS LIKE THIS
+   HOW IT WORKS
 
-   This app has no design tokens. Components write Tailwind's
-   literal utilities — bg-white, text-gray-900, bg-indigo-600 —
-   which compile to fixed hex values, so there is no variable to
-   hand a tenant colour to. Retrofitting semantic tokens across
-   every component is a very large change to shared code for one
-   client.
+   This app has no design tokens — components write Tailwind's
+   literal utilities (bg-white, text-gray-900, bg-indigo-600),
+   which compile to fixed hex. Dark mode already solves that by
+   remapping those literal classes from an unlayered block that
+   outranks Tailwind's @layer utilities without !important. This
+   is the same mechanism, scoped to one tenant.
 
-   Dark mode already solved the same problem the same way: 230
-   unlayered rules remapping 175 utility classes, beating
-   Tailwind's @layer utilities on cascade order without a single
-   !important and without touching a component. This is that
-   mechanism with a different palette and a narrower scope.
+   The remapping rules below all read CSS variables, so light and
+   dark are two sets of variable values rather than two sets of
+   rules. One place to change a colour, and the two modes cannot
+   drift apart.
 
-   PLACED AFTER .dark DELIBERATELY
+   LIGHT AND DARK BOTH EXIST, AND THE TOGGLE WORKS
 
-   `.theme-glo .bg-white` and `.dark .bg-white` have identical
-   specificity (0,2,0), so whichever comes later wins. Glo is
-   later, which means a Glo workspace looks like Glo whether or
-   not the person has dark mode toggled. A tenant's identity is
-   not a user preference.
+   .theme-glo        white page, black text, orange accent
+   .theme-glo.dark   black page, white text, THE SAME orange
 
-   THE ACCENT IS A PLACEHOLDER
+   The accent is deliberately identical in both: it is the brand,
+   not a mode. Earlier this block overrode the light/dark toggle
+   entirely; it no longer does, so a Gloo user's preference is
+   still theirs.
 
-   --glo-accent is a single documented value, to be replaced with
-   the exact orange sampled from the Glo logo. Everything accented
-   derives from it, so finalising the brand colour is a one-line
-   change. The alpha variants are separate because colour-mix()
-   support is not universal enough to rely on for chrome.
+   THE ORANGE IS MEASURED, NOT PICKED
 
-   CONTRAST: #FF7A1A on #000 is ~8.6:1, comfortably past 4.5:1 for
-   body text. If the final orange is darker, re-check before
-   shipping — a brand colour that fails contrast on black is worse
-   than a slightly-off brand colour.
+   #FF4D1D is sampled from the sparkle in the Gloo logo — the
+   dominant swatch across the artwork, with every near neighbour
+   clustering on it. It is not an approximation.
+
+   Contrast: #FF4D1D on black is ~5.4:1 and on white ~3.6:1. The
+   first clears AA for body text; the second does not, which is
+   why in light mode the accent is used for fills, borders and
+   emphasis but the text colour steps down to --glo-accent-text
+   (#D93A0B, ~4.6:1). The brand colour is preserved where it is
+   seen and darkened only where it has to be read.
    ───────────────────────────────────────────────────────────── */
 
 .theme-glo {
-  /* ── PLACEHOLDER: replace from the Glo logo artwork ── */
-  --glo-accent: #ff7a1a;
-  --glo-accent-hover: #ff8f3d;
-  --glo-accent-soft: rgba(255, 122, 26, 0.14);
-  --glo-accent-softer: rgba(255, 122, 26, 0.08);
-  --glo-accent-border: rgba(255, 122, 26, 0.34);
+  /* ── Brand. Identical in both modes. ── */
+  --glo-accent: #ff4d1d;            /* sampled from the logo */
+  --glo-accent-hover: #ff6a42;
+  --glo-accent-text: #d93a0b;       /* light mode only — see note above */
+  --glo-accent-soft: rgba(255, 77, 29, 0.12);
+  --glo-accent-softer: rgba(255, 77, 29, 0.07);
+  --glo-accent-border: rgba(255, 77, 29, 0.38);
 
-  /* Elevation. The page is true black; surfaces lift off it, or a
-     card on a card is invisible. */
+  /* ── LIGHT: white page, black text ── */
+  --glo-bg: #ffffff;
+  --glo-surface: #ffffff;
+  --glo-surface-2: #f4f4f4;
+  --glo-surface-3: #e9e9e9;
+  --glo-surface-4: #dcdcdc;
+
+  --glo-text: #000000;
+  --glo-text-2: #141414;
+  --glo-text-3: #2e2e2e;
+  --glo-text-4: #4a4a4a;
+  --glo-text-muted: #6b6b6b;
+  --glo-text-faint: #8a8a8a;
+  --glo-text-fainter: #adadad;
+
+  /* Stronger than the default theme's borders on purpose. The page and the
+     cards are both pure white here, so the border is the only thing saying
+     where a card begins. */
+  --glo-line: rgba(0, 0, 0, 0.13);
+  --glo-line-soft: rgba(0, 0, 0, 0.08);
+  --glo-line-softer: rgba(0, 0, 0, 0.05);
+  --glo-line-strong: rgba(0, 0, 0, 0.22);
+  --glo-line-stronger: rgba(0, 0, 0, 0.32);
+
+  --glo-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --glo-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --glo-shadow-md: 0 4px 12px -4px rgba(0, 0, 0, 0.12);
+  --glo-shadow-lg: 0 10px 24px -12px rgba(0, 0, 0, 0.16);
+  --glo-shadow-xl: 0 16px 36px -16px rgba(0, 0, 0, 0.18);
+  --glo-shadow-2xl: 0 26px 60px -24px rgba(0, 0, 0, 0.22);
+
+  /* Status hues stay hues: green still has to mean paid and red still has to
+     mean overdue, whatever the brand colour is. Amber is nudged toward yellow
+     so a warning is never mistaken for the accent. */
+  --glo-ok: #047857;      --glo-ok-bg: rgba(5, 150, 105, 0.10);   --glo-ok-line: rgba(5, 150, 105, 0.30);
+  --glo-danger: #b91c1c;  --glo-danger-bg: rgba(220, 38, 38, 0.09); --glo-danger-line: rgba(220, 38, 38, 0.28);
+  --glo-warn: #a16207;    --glo-warn-bg: rgba(202, 138, 4, 0.11);  --glo-warn-line: rgba(202, 138, 4, 0.30);
+  --glo-info: #0369a1;    --glo-info-bg: rgba(2, 132, 199, 0.09);  --glo-info-line: rgba(2, 132, 199, 0.28);
+  --glo-violet: #6d28d9;  --glo-violet-bg: rgba(124, 58, 237, 0.09); --glo-violet-line: rgba(124, 58, 237, 0.28);
+  --glo-pink: #be185d;    --glo-pink-bg: rgba(219, 39, 119, 0.09);
+  --glo-teal: #0f766e;    --glo-teal-bg: rgba(13, 148, 136, 0.09);  --glo-teal-line: rgba(13, 148, 136, 0.28);
+}
+
+/* ── DARK: black page, white text, same orange ──────────────── */
+.theme-glo.dark {
+  --glo-accent-text: var(--glo-accent);  /* 5.4:1 on black — reads fine as-is */
+
   --glo-bg: #000000;
   --glo-surface: #0b0b0b;
   --glo-surface-2: #161616;
@@ -1082,181 +1127,173 @@ input[type="time"]::-webkit-calendar-picker-indicator:hover {
   --glo-line-softer: rgba(255, 255, 255, 0.04);
   --glo-line-strong: rgba(255, 255, 255, 0.18);
   --glo-line-stronger: rgba(255, 255, 255, 0.26);
+
+  /* A shadow is invisible on black, so depth comes from a darker halo. */
+  --glo-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.8);
+  --glo-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
+  --glo-shadow-md: 0 4px 12px -4px rgba(0, 0, 0, 0.9);
+  --glo-shadow-lg: 0 10px 24px -12px rgba(0, 0, 0, 0.95);
+  --glo-shadow-xl: 0 16px 36px -16px rgba(0, 0, 0, 0.95);
+  --glo-shadow-2xl: 0 26px 60px -24px rgba(0, 0, 0, 1);
+
+  --glo-ok: #34d399;      --glo-ok-bg: rgba(16, 185, 129, 0.12);   --glo-ok-line: rgba(16, 185, 129, 0.34);
+  --glo-danger: #fb7185;  --glo-danger-bg: rgba(244, 63, 94, 0.12); --glo-danger-line: rgba(244, 63, 94, 0.34);
+  --glo-warn: #fbbf24;    --glo-warn-bg: rgba(250, 204, 21, 0.12); --glo-warn-line: rgba(250, 204, 21, 0.34);
+  --glo-info: #38bdf8;    --glo-info-bg: rgba(56, 189, 248, 0.12); --glo-info-line: rgba(56, 189, 248, 0.34);
+  --glo-violet: #a78bfa;  --glo-violet-bg: rgba(167, 139, 250, 0.12); --glo-violet-line: rgba(167, 139, 250, 0.34);
+  --glo-pink: #f472b6;    --glo-pink-bg: rgba(244, 114, 182, 0.12);
+  --glo-teal: #2dd4bf;    --glo-teal-bg: rgba(45, 212, 191, 0.12);  --glo-teal-line: rgba(45, 212, 191, 0.34);
 }
+
+/* ═══ Everything below reads the variables above, so it is written
+       once and serves both modes. ═══ */
 
 /* ── Document ─────────────────────────────────────────────── */
-.theme-glo body {
-  background-color: var(--glo-bg);
-  color: var(--glo-text);
-}
-.theme-glo ::selection {
-  background-color: var(--glo-accent-soft);
-  color: inherit;
-}
+.theme-glo body { background-color: var(--glo-bg); color: var(--glo-text); }
+.theme-glo ::selection { background-color: var(--glo-accent-soft); color: inherit; }
 .theme-glo ::-webkit-scrollbar-thumb { background: var(--glo-surface-4); }
-.theme-glo ::-webkit-scrollbar-thumb:hover { background: #3a3a3a; }
+.theme-glo ::-webkit-scrollbar-thumb:hover { background: var(--glo-text-fainter); }
 
 /* ── Surfaces ─────────────────────────────────────────────── */
-.theme-glo .bg-white       { background-color: var(--glo-surface); }
-.theme-glo .bg-gray-50     { background-color: var(--glo-bg); }
-.theme-glo .bg-gray-100    { background-color: var(--glo-surface-2); }
-.theme-glo .bg-gray-200    { background-color: var(--glo-surface-3); }
-.theme-glo .bg-gray-300    { background-color: var(--glo-surface-4); }
-.theme-glo .bg-slate-50    { background-color: var(--glo-bg); }
-.theme-glo .bg-slate-100   { background-color: var(--glo-surface-2); }
-.theme-glo .bg-black       { background-color: #000; }
+.theme-glo .bg-white     { background-color: var(--glo-surface); }
+.theme-glo .bg-gray-50   { background-color: var(--glo-bg); }
+.theme-glo .bg-gray-100  { background-color: var(--glo-surface-2); }
+.theme-glo .bg-gray-200  { background-color: var(--glo-surface-3); }
+.theme-glo .bg-gray-300  { background-color: var(--glo-surface-4); }
+.theme-glo .bg-slate-50  { background-color: var(--glo-bg); }
+.theme-glo .bg-slate-100 { background-color: var(--glo-surface-2); }
+/* slate-800/900/950 are dark chrome, not surfaces - see the end of this block. */
 
-.theme-glo .hover\:bg-white:hover   { background-color: var(--glo-surface-2); }
-.theme-glo .hover\:bg-gray-50:hover { background-color: var(--glo-surface-2); }
-.theme-glo .hover\:bg-gray-100:hover{ background-color: var(--glo-surface-3); }
-.theme-glo .focus\:bg-white:focus   { background-color: var(--glo-surface-2); }
+.theme-glo .hover\:bg-white:hover    { background-color: var(--glo-surface-2); }
+.theme-glo .hover\:bg-gray-50:hover  { background-color: var(--glo-surface-2); }
+.theme-glo .hover\:bg-gray-100:hover { background-color: var(--glo-surface-3); }
+.theme-glo .focus\:bg-white:focus    { background-color: var(--glo-surface-2); }
 
-.theme-glo .bg-white\/70 { background-color: rgba(11, 11, 11, 0.7); }
-.theme-glo .bg-white\/80 { background-color: rgba(11, 11, 11, 0.8); }
-.theme-glo .bg-white\/90 { background-color: rgba(11, 11, 11, 0.9); }
-.theme-glo .bg-white\/60 { background-color: rgba(11, 11, 11, 0.6); }
-.theme-glo .bg-white\/50 { background-color: rgba(11, 11, 11, 0.5); }
-.theme-glo .bg-gray-50\/50  { background-color: rgba(0, 0, 0, 0.5); }
-.theme-glo .bg-gray-50\/80  { background-color: rgba(0, 0, 0, 0.8); }
-.theme-glo .bg-gray-100\/80 { background-color: rgba(22, 22, 22, 0.8); }
+.theme-glo .bg-white\/50 { background-color: color-mix(in srgb, var(--glo-surface) 50%, transparent); }
+.theme-glo .bg-white\/60 { background-color: color-mix(in srgb, var(--glo-surface) 60%, transparent); }
+.theme-glo .bg-white\/70 { background-color: color-mix(in srgb, var(--glo-surface) 70%, transparent); }
+.theme-glo .bg-white\/80 { background-color: color-mix(in srgb, var(--glo-surface) 80%, transparent); }
+.theme-glo .bg-white\/90 { background-color: color-mix(in srgb, var(--glo-surface) 90%, transparent); }
+.theme-glo .bg-gray-50\/50  { background-color: color-mix(in srgb, var(--glo-bg) 50%, transparent); }
+.theme-glo .bg-gray-50\/80  { background-color: color-mix(in srgb, var(--glo-bg) 80%, transparent); }
+.theme-glo .bg-gray-100\/80 { background-color: color-mix(in srgb, var(--glo-surface-2) 80%, transparent); }
 
 /* ── Text ─────────────────────────────────────────────────── */
-.theme-glo .text-gray-950 { color: var(--glo-text); }
-.theme-glo .text-gray-900 { color: var(--glo-text); }
-.theme-glo .text-gray-800 { color: var(--glo-text-2); }
-.theme-glo .text-gray-700 { color: var(--glo-text-3); }
-.theme-glo .text-gray-600 { color: var(--glo-text-4); }
-.theme-glo .text-gray-500 { color: var(--glo-text-muted); }
+.theme-glo .text-gray-950, .theme-glo .text-gray-900,
+.theme-glo .text-slate-900, .theme-glo .text-slate-100 { color: var(--glo-text); }
+.theme-glo .text-gray-800, .theme-glo .text-slate-800,
+.theme-glo .text-slate-200 { color: var(--glo-text-2); }
+.theme-glo .text-gray-700, .theme-glo .text-slate-700,
+.theme-glo .text-slate-300 { color: var(--glo-text-3); }
+.theme-glo .text-gray-600, .theme-glo .text-slate-600,
+.theme-glo .text-slate-400 { color: var(--glo-text-4); }
+.theme-glo .text-gray-500, .theme-glo .text-slate-500 { color: var(--glo-text-muted); }
 .theme-glo .text-gray-400 { color: var(--glo-text-faint); }
 .theme-glo .text-gray-300 { color: var(--glo-text-fainter); }
-.theme-glo .text-slate-900 { color: var(--glo-text); }
-.theme-glo .text-slate-800 { color: var(--glo-text-2); }
-.theme-glo .text-slate-700 { color: var(--glo-text-3); }
-.theme-glo .text-slate-600 { color: var(--glo-text-4); }
+/* text-white is NOT remapped. It is used where the background is already
+   dark or accent-filled - a filled button, the sidebar - so in light mode
+   mapping it to --glo-text would put black labels on an orange button and
+   black text on the black sidebar. White there is correct in both modes. */
 
 /* ── Lines ────────────────────────────────────────────────── */
-.theme-glo .border-gray-50  { border-color: var(--glo-line-softer); }
-.theme-glo .border-gray-100 { border-color: var(--glo-line-soft); }
-.theme-glo .border-gray-200 { border-color: var(--glo-line); }
-.theme-glo .border-gray-300 { border-color: var(--glo-line-strong); }
+.theme-glo .border-gray-50,  .theme-glo .border-slate-50  { border-color: var(--glo-line-softer); }
+.theme-glo .border-gray-100, .theme-glo .border-slate-100 { border-color: var(--glo-line-soft); }
+.theme-glo .border-gray-200, .theme-glo .border-slate-200 { border-color: var(--glo-line); }
+.theme-glo .border-gray-300, .theme-glo .border-slate-300 { border-color: var(--glo-line-strong); }
 .theme-glo .border-gray-400 { border-color: var(--glo-line-stronger); }
-.theme-glo .border-slate-100 { border-color: var(--glo-line-soft); }
-.theme-glo .border-slate-200 { border-color: var(--glo-line); }
 .theme-glo .hover\:border-gray-200:hover { border-color: var(--glo-line-strong); }
 .theme-glo .hover\:border-gray-300:hover { border-color: var(--glo-line-stronger); }
 .theme-glo .divide-gray-50  > * + * { border-color: var(--glo-line-softer); }
 .theme-glo .divide-gray-100 > * + * { border-color: var(--glo-line-soft); }
 .theme-glo .divide-gray-200 > * + * { border-color: var(--glo-line); }
 
-/* ── Accent: indigo becomes Glo orange ────────────────────── */
-.theme-glo .bg-indigo-600 { background-color: var(--glo-accent); }
-.theme-glo .bg-indigo-500 { background-color: var(--glo-accent); }
+/* ── Accent: indigo becomes Gloo orange ───────────────────── */
+.theme-glo .bg-indigo-500, .theme-glo .bg-indigo-600 { background-color: var(--glo-accent); }
 .theme-glo .bg-indigo-700 { background-color: var(--glo-accent-hover); }
-.theme-glo .hover\:bg-indigo-500:hover { background-color: var(--glo-accent-hover); }
+.theme-glo .hover\:bg-indigo-500:hover,
 .theme-glo .hover\:bg-indigo-600:hover { background-color: var(--glo-accent-hover); }
 .theme-glo .active\:bg-indigo-700:active { background-color: var(--glo-accent-hover); }
-.theme-glo .bg-indigo-50  { background-color: var(--glo-accent-softer); }
-.theme-glo .bg-indigo-100 { background-color: var(--glo-accent-soft); }
-.theme-glo .bg-indigo-50\/30 { background-color: var(--glo-accent-softer); }
+.theme-glo .bg-indigo-50, .theme-glo .bg-indigo-50\/30,
 .theme-glo .bg-indigo-50\/50 { background-color: var(--glo-accent-softer); }
+.theme-glo .bg-indigo-100 { background-color: var(--glo-accent-soft); }
 
-.theme-glo .text-indigo-600 { color: var(--glo-accent); }
-.theme-glo .text-indigo-700 { color: var(--glo-accent); }
-.theme-glo .text-indigo-800 { color: var(--glo-accent-hover); }
-.theme-glo .text-indigo-900 { color: var(--glo-accent-hover); }
-.theme-glo .text-indigo-300 { color: var(--glo-accent-hover); }
-.theme-glo .text-indigo-400 { color: var(--glo-accent-hover); }
+.theme-glo .text-indigo-600, .theme-glo .text-indigo-700,
+.theme-glo .text-indigo-800, .theme-glo .text-indigo-900,
+.theme-glo .text-indigo-300, .theme-glo .text-indigo-400 { color: var(--glo-accent-text); }
 
-.theme-glo .border-indigo-200 { border-color: var(--glo-accent-border); }
-.theme-glo .border-indigo-300 { border-color: var(--glo-accent-border); }
+.theme-glo .border-indigo-200, .theme-glo .border-indigo-300 { border-color: var(--glo-accent-border); }
 .theme-glo .border-indigo-500 { border-color: var(--glo-accent); }
-.theme-glo .ring-indigo-200   { --tw-ring-color: var(--glo-accent-border); }
-.theme-glo .ring-indigo-500   { --tw-ring-color: var(--glo-accent); }
+.theme-glo .ring-indigo-200 { --tw-ring-color: var(--glo-accent-border); }
+.theme-glo .ring-indigo-500 { --tw-ring-color: var(--glo-accent); }
 .theme-glo .focus\:ring-indigo-500:focus { --tw-ring-color: var(--glo-accent); }
+.theme-glo .focus-visible\:ring-indigo-500:focus-visible { --tw-ring-color: var(--glo-accent); }
+.theme-glo { --tw-ring-color: var(--glo-accent-border); }
 
-/* ── Status colours ───────────────────────────────────────────
-   Kept as hues rather than folded into the accent: green still
-   has to mean paid and red still has to mean overdue. Tuned for
-   a black ground, and amber is nudged yellow so a warning is not
-   mistaken for the brand orange. */
-.theme-glo .bg-emerald-50  { background-color: rgba(16, 185, 129, 0.10); }
-.theme-glo .bg-emerald-100 { background-color: rgba(16, 185, 129, 0.16); }
-.theme-glo .bg-green-50    { background-color: rgba(16, 185, 129, 0.10); }
-.theme-glo .bg-green-100   { background-color: rgba(16, 185, 129, 0.16); }
-.theme-glo .text-emerald-600, .theme-glo .text-emerald-700,
-.theme-glo .text-emerald-800 { color: #34d399; }
-.theme-glo .text-green-600, .theme-glo .text-green-700 { color: #34d399; }
-.theme-glo .border-emerald-200, .theme-glo .border-green-200 { border-color: rgba(16, 185, 129, 0.34); }
-.theme-glo .ring-emerald-200, .theme-glo .ring-green-200 { --tw-ring-color: rgba(16, 185, 129, 0.34); }
-
-.theme-glo .bg-red-50   { background-color: rgba(244, 63, 94, 0.10); }
-.theme-glo .bg-red-100  { background-color: rgba(244, 63, 94, 0.16); }
-.theme-glo .bg-rose-50  { background-color: rgba(244, 63, 94, 0.10); }
-.theme-glo .text-red-600, .theme-glo .text-red-700,
-.theme-glo .text-red-800, .theme-glo .text-red-900 { color: #fb7185; }
-.theme-glo .text-rose-600, .theme-glo .text-rose-700 { color: #fb7185; }
-.theme-glo .border-red-200 { border-color: rgba(244, 63, 94, 0.34); }
-.theme-glo .ring-red-200   { --tw-ring-color: rgba(244, 63, 94, 0.34); }
-
-.theme-glo .bg-amber-50   { background-color: rgba(250, 204, 21, 0.10); }
-.theme-glo .bg-amber-100  { background-color: rgba(250, 204, 21, 0.16); }
-.theme-glo .bg-amber-50\/50 { background-color: rgba(250, 204, 21, 0.08); }
-.theme-glo .bg-yellow-50  { background-color: rgba(250, 204, 21, 0.10); }
-.theme-glo .bg-yellow-100 { background-color: rgba(250, 204, 21, 0.16); }
-.theme-glo .text-amber-600, .theme-glo .text-amber-700,
-.theme-glo .text-amber-800 { color: #fbbf24; }
-.theme-glo .text-yellow-700 { color: #fbbf24; }
-.theme-glo .border-amber-200 { border-color: rgba(250, 204, 21, 0.34); }
-.theme-glo .ring-amber-200, .theme-glo .ring-yellow-200 { --tw-ring-color: rgba(250, 204, 21, 0.34); }
-
-.theme-glo .bg-sky-50   { background-color: rgba(56, 189, 248, 0.10); }
-.theme-glo .bg-sky-100  { background-color: rgba(56, 189, 248, 0.16); }
-.theme-glo .bg-blue-50  { background-color: rgba(56, 189, 248, 0.10); }
-.theme-glo .bg-blue-100 { background-color: rgba(56, 189, 248, 0.16); }
-.theme-glo .bg-blue-50\/30 { background-color: rgba(56, 189, 248, 0.08); }
-.theme-glo .text-sky-600, .theme-glo .text-sky-700 { color: #38bdf8; }
-.theme-glo .text-blue-600, .theme-glo .text-blue-700 { color: #38bdf8; }
-.theme-glo .border-blue-200 { border-color: rgba(56, 189, 248, 0.34); }
-.theme-glo .ring-blue-200, .theme-glo .ring-sky-200 { --tw-ring-color: rgba(56, 189, 248, 0.34); }
-
-/* The remaining accents the app uses for categories and tags. */
+/* Anything the app already draws in orange IS the accent here. */
 .theme-glo .bg-orange-50  { background-color: var(--glo-accent-softer); }
 .theme-glo .bg-orange-100 { background-color: var(--glo-accent-soft); }
-.theme-glo .text-orange-600, .theme-glo .text-orange-700 { color: var(--glo-accent); }
+.theme-glo .text-orange-600, .theme-glo .text-orange-700 { color: var(--glo-accent-text); }
 .theme-glo .border-orange-200 { border-color: var(--glo-accent-border); }
 
+/* ── Status ───────────────────────────────────────────────── */
+.theme-glo .bg-emerald-50, .theme-glo .bg-green-50 { background-color: var(--glo-ok-bg); }
+.theme-glo .bg-emerald-100, .theme-glo .bg-green-100 { background-color: var(--glo-ok-bg); }
+.theme-glo .text-emerald-600, .theme-glo .text-emerald-700, .theme-glo .text-emerald-800,
+.theme-glo .text-green-600, .theme-glo .text-green-700 { color: var(--glo-ok); }
+.theme-glo .border-emerald-200, .theme-glo .border-green-200 { border-color: var(--glo-ok-line); }
+.theme-glo .ring-emerald-200, .theme-glo .ring-green-200 { --tw-ring-color: var(--glo-ok-line); }
+
+.theme-glo .bg-red-50, .theme-glo .bg-rose-50 { background-color: var(--glo-danger-bg); }
+.theme-glo .bg-red-100 { background-color: var(--glo-danger-bg); }
+.theme-glo .text-red-600, .theme-glo .text-red-700, .theme-glo .text-red-800,
+.theme-glo .text-red-900, .theme-glo .text-rose-600,
+.theme-glo .text-rose-700 { color: var(--glo-danger); }
+.theme-glo .border-red-200, .theme-glo .border-rose-200 { border-color: var(--glo-danger-line); }
+.theme-glo .ring-red-200 { --tw-ring-color: var(--glo-danger-line); }
+
+.theme-glo .bg-amber-50, .theme-glo .bg-amber-50\/50,
+.theme-glo .bg-yellow-50 { background-color: var(--glo-warn-bg); }
+.theme-glo .bg-amber-100, .theme-glo .bg-yellow-100 { background-color: var(--glo-warn-bg); }
+.theme-glo .text-amber-600, .theme-glo .text-amber-700, .theme-glo .text-amber-800,
+.theme-glo .text-yellow-700 { color: var(--glo-warn); }
+.theme-glo .border-amber-200 { border-color: var(--glo-warn-line); }
+.theme-glo .ring-amber-200, .theme-glo .ring-yellow-200 { --tw-ring-color: var(--glo-warn-line); }
+
+.theme-glo .bg-sky-50, .theme-glo .bg-blue-50,
+.theme-glo .bg-blue-50\/30 { background-color: var(--glo-info-bg); }
+.theme-glo .bg-sky-100, .theme-glo .bg-blue-100 { background-color: var(--glo-info-bg); }
+.theme-glo .text-sky-600, .theme-glo .text-sky-700,
+.theme-glo .text-blue-600, .theme-glo .text-blue-700 { color: var(--glo-info); }
+.theme-glo .border-blue-200, .theme-glo .border-sky-200 { border-color: var(--glo-info-line); }
+.theme-glo .ring-blue-200, .theme-glo .ring-sky-200 { --tw-ring-color: var(--glo-info-line); }
+
 .theme-glo .bg-purple-50, .theme-glo .bg-violet-50,
-.theme-glo .bg-fuchsia-50 { background-color: rgba(167, 139, 250, 0.10); }
-.theme-glo .bg-purple-100, .theme-glo .bg-violet-100 { background-color: rgba(167, 139, 250, 0.16); }
-.theme-glo .text-purple-600, .theme-glo .text-purple-700,
-.theme-glo .text-violet-600, .theme-glo .text-violet-700,
-.theme-glo .text-fuchsia-700 { color: #a78bfa; }
-.theme-glo .border-purple-200 { border-color: rgba(167, 139, 250, 0.34); }
-.theme-glo .ring-purple-200 { --tw-ring-color: rgba(167, 139, 250, 0.34); }
+.theme-glo .bg-fuchsia-50 { background-color: var(--glo-violet-bg); }
+.theme-glo .bg-purple-100, .theme-glo .bg-violet-100 { background-color: var(--glo-violet-bg); }
+.theme-glo .text-purple-600, .theme-glo .text-purple-700, .theme-glo .text-violet-600,
+.theme-glo .text-violet-700, .theme-glo .text-fuchsia-700 { color: var(--glo-violet); }
+.theme-glo .border-purple-200 { border-color: var(--glo-violet-line); }
+.theme-glo .ring-purple-200 { --tw-ring-color: var(--glo-violet-line); }
 
-.theme-glo .bg-pink-50  { background-color: rgba(244, 114, 182, 0.10); }
-.theme-glo .bg-pink-100 { background-color: rgba(244, 114, 182, 0.16); }
-.theme-glo .text-pink-600, .theme-glo .text-pink-700 { color: #f472b6; }
+.theme-glo .bg-pink-50, .theme-glo .bg-pink-100 { background-color: var(--glo-pink-bg); }
+.theme-glo .text-pink-600, .theme-glo .text-pink-700 { color: var(--glo-pink); }
 
-.theme-glo .bg-teal-50  { background-color: rgba(45, 212, 191, 0.10); }
-.theme-glo .bg-teal-100 { background-color: rgba(45, 212, 191, 0.16); }
-.theme-glo .text-teal-600, .theme-glo .text-teal-700 { color: #2dd4bf; }
-.theme-glo .border-teal-200 { border-color: rgba(45, 212, 191, 0.34); }
+.theme-glo .bg-teal-50, .theme-glo .bg-teal-100 { background-color: var(--glo-teal-bg); }
+.theme-glo .text-teal-600, .theme-glo .text-teal-700 { color: var(--glo-teal); }
+.theme-glo .border-teal-200 { border-color: var(--glo-teal-line); }
 
-/* ── Depth ────────────────────────────────────────────────────
-   Shadows are invisible on black, so they become edges instead —
-   the same substitution the dark theme makes. */
-.theme-glo .shadow-sm  { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.8); }
-.theme-glo .shadow     { box-shadow: 0 1px 3px rgba(0, 0, 0, 0.85); }
-.theme-glo .shadow-md  { box-shadow: 0 4px 12px -4px rgba(0, 0, 0, 0.9); }
-.theme-glo .shadow-lg  { box-shadow: 0 10px 24px -12px rgba(0, 0, 0, 0.95); }
-.theme-glo .shadow-xl  { box-shadow: 0 16px 36px -16px rgba(0, 0, 0, 0.95); }
-.theme-glo .shadow-2xl { box-shadow: 0 26px 60px -24px rgba(0, 0, 0, 1); }
+/* ── Depth ────────────────────────────────────────────────── */
+.theme-glo .shadow-sm  { box-shadow: var(--glo-shadow-sm); }
+.theme-glo .shadow     { box-shadow: var(--glo-shadow); }
+.theme-glo .shadow-md  { box-shadow: var(--glo-shadow-md); }
+.theme-glo .shadow-lg  { box-shadow: var(--glo-shadow-lg); }
+.theme-glo .shadow-xl  { box-shadow: var(--glo-shadow-xl); }
+.theme-glo .shadow-2xl { box-shadow: var(--glo-shadow-2xl); }
 
-/* ── Calendar + table surfaces, matching the dark treatment ── */
+/* ── Calendar + table surfaces ────────────────────────────── */
 .theme-glo .cal-cell         { background-color: var(--glo-surface); }
 .theme-glo .cal-cell-muted   { background-color: var(--glo-bg); }
-.theme-glo .cal-cell-weekend { background-color: rgba(255, 255, 255, 0.02); }
+.theme-glo .cal-cell-weekend { background-color: var(--glo-surface-2); }
 .theme-glo .cal-cell-today   { background-color: var(--glo-accent-softer); }
 .theme-glo .cal-gridlines    { background-color: var(--glo-line-soft); }
 
@@ -1265,3 +1302,50 @@ input[type="time"]::-webkit-calendar-picker-indicator:hover {
   --tc-bg: var(--glo-surface);
   --tc-label: var(--glo-text-faint);
 }
+
+/* -- Dark chrome: black in both modes -------------------------
+   Three surfaces in the dashboard are dark whatever the toggle
+   says: the sidebar (with its mobile drawer and appbar), the
+   files page and the messages page. The mappings above would
+   turn them white in light mode while their contents stayed
+   light - white text on a white sidebar.
+
+   So they are pinned black, and the text and line variables are
+   REDEFINED on them. Every rule above reads those variables, so
+   the same `text-slate-400` comes out light grey inside here and
+   mid grey on a white card, from one set of rules and with no
+   per-page exceptions. Descendants inherit, which is why nothing
+   needs listing twice.
+
+   This is also what makes remapping `text-slate-*` safe at all.
+   Those classes do two unrelated jobs in this app - muted text on
+   white cards, and readable text on dark chrome - and the
+   variable indirection is what lets one mapping serve both. */
+.theme-glo .bg-slate-800,
+.theme-glo .bg-slate-900,
+.theme-glo .bg-slate-950 {
+  --glo-surface: #0b0b0b;
+  --glo-surface-2: #161616;
+  --glo-surface-3: #222222;
+  --glo-surface-4: #2e2e2e;
+
+  --glo-text: #ffffff;
+  --glo-text-2: #ededed;
+  --glo-text-3: #d4d4d4;
+  --glo-text-4: #b0b0b0;
+  --glo-text-muted: #909090;
+  --glo-text-faint: #6f6f6f;
+  --glo-text-fainter: #545454;
+
+  --glo-line: rgba(255, 255, 255, 0.10);
+  --glo-line-soft: rgba(255, 255, 255, 0.06);
+  --glo-line-softer: rgba(255, 255, 255, 0.04);
+  --glo-line-strong: rgba(255, 255, 255, 0.18);
+  --glo-line-stronger: rgba(255, 255, 255, 0.26);
+
+  /* The accent needs no darkening on black. */
+  --glo-accent-text: var(--glo-accent);
+}
+.theme-glo .bg-slate-900,
+.theme-glo .bg-slate-950 { background-color: #000000; }
+.theme-glo .bg-slate-800 { background-color: #161616; }

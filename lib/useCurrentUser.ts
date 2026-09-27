@@ -27,6 +27,16 @@ export interface CurrentUser {
     timezone?: string;
     dateFormat?: string;
     onboardingCompleted?: boolean;
+    /**
+     * The workspace's theme, as the server resolved it.
+     *
+     * Carried for components that may one day want to branch on it. It is NOT
+     * what applies the theme — that is a class on <html>, written by the
+     * server-rendered dashboard layout. Nothing reads this from storage, and
+     * nothing should: localStorage is per-browser, so a value left there by
+     * one workspace's user would outlive their session and greet the next.
+     */
+    theme?: string;
   } | null;
 }
 
@@ -68,6 +78,39 @@ export function primeCurrentUser(user: CurrentUser | null) {
 export function clearCurrentUser() {
   cachedUser = null;
   inFlight = null;
+}
+
+/**
+ * Sign out — the only way the app should.
+ *
+ * The cache above is module state, which lives as long as the JavaScript
+ * context does. `primeCurrentUser` deliberately refuses to overwrite a
+ * populated cache, so once a stale user is in there, the server's answer on
+ * the next render cannot displace it.
+ *
+ * Until now nothing called clearCurrentUser at all, and the only reason that
+ * was safe is that both sign-out buttons happened to use
+ * `window.location.href`, which tears down the whole context. That is an
+ * accident of how somebody wrote a navigation, not a guarantee — swap it for
+ * a router.push one day and the next person to sign in on that tab inherits
+ * the previous user's identity, their organization, and with per-workspace
+ * theming, their branding.
+ *
+ * So the clearing is explicit and happens first, before the network call that
+ * might fail and before the navigation. Both sign-out buttons call this, so
+ * there is one path rather than two copies to keep in step.
+ */
+export async function signOut(): Promise<void> {
+  clearCurrentUser();
+  try {
+    await fetch("/api/auth/logout", { method: "POST" });
+  } catch {
+    // The cookie may survive a failed request, but the session is over as far
+    // as this tab is concerned and /login will resolve it either way.
+  }
+  // A full document load, not a client navigation: it also discards every
+  // other module-level cache in the bundle, which is the belt to this brace.
+  window.location.href = "/login";
 }
 
 function loadCurrentUser(): Promise<CurrentUser | null> {

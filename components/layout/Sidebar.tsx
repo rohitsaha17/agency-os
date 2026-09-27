@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useCurrentUser } from "@/lib/useCurrentUser";
+import { useCurrentUser, signOut } from "@/lib/useCurrentUser";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -285,10 +285,7 @@ function NavContent({
               <Settings className="w-4 h-4" />
             </Link>
             <button
-              onClick={async () => {
-                try { await fetch("/api/auth/logout", { method: "POST" }); } catch { /* ignore */ }
-                window.location.href = "/login";
-              }}
+              onClick={signOut}
               title="Log out"
               className="w-full flex items-center justify-center py-2 rounded-lg text-slate-500 hover:text-red-400 hover:bg-white/[0.06] transition-colors"
             >
@@ -315,10 +312,7 @@ function NavContent({
 
             {/* Sign out */}
             <button
-              onClick={async () => {
-                try { await fetch("/api/auth/logout", { method: "POST" }); } catch { /* ignore */ }
-                window.location.href = "/login";
-              }}
+              onClick={signOut}
               className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-400 hover:text-red-400 hover:bg-white/[0.05] transition-colors duration-150"
             >
               <LogOut className="w-4 h-4 text-slate-500" />

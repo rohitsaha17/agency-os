@@ -42,6 +42,8 @@ export type AuthUser = {
     timezone: string;
     dateFormat: string;
     onboardingCompleted: boolean;
+    /** Raw column value — narrow it through resolveTheme before use. */
+    theme?: string;
   } | null;
 };
 

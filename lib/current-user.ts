@@ -53,6 +53,11 @@ export async function getCurrentUser(_req?: Request) {
           id: true, name: true, slug: true, logoUrl: true,
           currency: true, timezone: true, dateFormat: true,
           onboardingCompleted: true,
+          // Free, for the same reason the rest of this select is: a column on
+          // a row already being read inside a round trip already being paid
+          // for. The theme is decided here, on the server, from the tenant
+          // the cookie resolves to — never from the client.
+          theme: true,
         },
       },
     },

@@ -1005,3 +1005,263 @@ input[type="time"]::-webkit-calendar-picker-indicator:hover {
   --tc-bg: var(--color-slate-900, #0f172a);
   --tc-label: #64748b;
 }
+
+/* ═════════════════════════════════════════════════════════════
+   GLO — a per-workspace theme
+   ═════════════════════════════════════════════════════════════
+
+   INERT UNTIL A WORKSPACE OPTS IN. Nothing below matches anything
+   unless <html> carries `theme-glo`, and that class is written
+   only by the server, only from Organization.theme, and no
+   organization has a value other than 'default'. Every existing
+   workspace renders byte-identically to before this block existed.
+
+   HOW IT WORKS, AND WHY IT LOOKS LIKE THIS
+
+   This app has no design tokens. Components write Tailwind's
+   literal utilities — bg-white, text-gray-900, bg-indigo-600 —
+   which compile to fixed hex values, so there is no variable to
+   hand a tenant colour to. Retrofitting semantic tokens across
+   every component is a very large change to shared code for one
+   client.
+
+   Dark mode already solved the same problem the same way: 230
+   unlayered rules remapping 175 utility classes, beating
+   Tailwind's @layer utilities on cascade order without a single
+   !important and without touching a component. This is that
+   mechanism with a different palette and a narrower scope.
+
+   PLACED AFTER .dark DELIBERATELY
+
+   `.theme-glo .bg-white` and `.dark .bg-white` have identical
+   specificity (0,2,0), so whichever comes later wins. Glo is
+   later, which means a Glo workspace looks like Glo whether or
+   not the person has dark mode toggled. A tenant's identity is
+   not a user preference.
+
+   THE ACCENT IS A PLACEHOLDER
+
+   --glo-accent is a single documented value, to be replaced with
+   the exact orange sampled from the Glo logo. Everything accented
+   derives from it, so finalising the brand colour is a one-line
+   change. The alpha variants are separate because colour-mix()
+   support is not universal enough to rely on for chrome.
+
+   CONTRAST: #FF7A1A on #000 is ~8.6:1, comfortably past 4.5:1 for
+   body text. If the final orange is darker, re-check before
+   shipping — a brand colour that fails contrast on black is worse
+   than a slightly-off brand colour.
+   ───────────────────────────────────────────────────────────── */
+
+.theme-glo {
+  /* ── PLACEHOLDER: replace from the Glo logo artwork ── */
+  --glo-accent: #ff7a1a;
+  --glo-accent-hover: #ff8f3d;
+  --glo-accent-soft: rgba(255, 122, 26, 0.14);
+  --glo-accent-softer: rgba(255, 122, 26, 0.08);
+  --glo-accent-border: rgba(255, 122, 26, 0.34);
+
+  /* Elevation. The page is true black; surfaces lift off it, or a
+     card on a card is invisible. */
+  --glo-bg: #000000;
+  --glo-surface: #0b0b0b;
+  --glo-surface-2: #161616;
+  --glo-surface-3: #222222;
+  --glo-surface-4: #2e2e2e;
+
+  --glo-text: #ffffff;
+  --glo-text-2: #ededed;
+  --glo-text-3: #d4d4d4;
+  --glo-text-4: #b0b0b0;
+  --glo-text-muted: #909090;
+  --glo-text-faint: #6f6f6f;
+  --glo-text-fainter: #545454;
+
+  --glo-line: rgba(255, 255, 255, 0.10);
+  --glo-line-soft: rgba(255, 255, 255, 0.06);
+  --glo-line-softer: rgba(255, 255, 255, 0.04);
+  --glo-line-strong: rgba(255, 255, 255, 0.18);
+  --glo-line-stronger: rgba(255, 255, 255, 0.26);
+}
+
+/* ── Document ─────────────────────────────────────────────── */
+.theme-glo body {
+  background-color: var(--glo-bg);
+  color: var(--glo-text);
+}
+.theme-glo ::selection {
+  background-color: var(--glo-accent-soft);
+  color: inherit;
+}
+.theme-glo ::-webkit-scrollbar-thumb { background: var(--glo-surface-4); }
+.theme-glo ::-webkit-scrollbar-thumb:hover { background: #3a3a3a; }
+
+/* ── Surfaces ─────────────────────────────────────────────── */
+.theme-glo .bg-white       { background-color: var(--glo-surface); }
+.theme-glo .bg-gray-50     { background-color: var(--glo-bg); }
+.theme-glo .bg-gray-100    { background-color: var(--glo-surface-2); }
+.theme-glo .bg-gray-200    { background-color: var(--glo-surface-3); }
+.theme-glo .bg-gray-300    { background-color: var(--glo-surface-4); }
+.theme-glo .bg-slate-50    { background-color: var(--glo-bg); }
+.theme-glo .bg-slate-100   { background-color: var(--glo-surface-2); }
+.theme-glo .bg-black       { background-color: #000; }
+
+.theme-glo .hover\:bg-white:hover   { background-color: var(--glo-surface-2); }
+.theme-glo .hover\:bg-gray-50:hover { background-color: var(--glo-surface-2); }
+.theme-glo .hover\:bg-gray-100:hover{ background-color: var(--glo-surface-3); }
+.theme-glo .focus\:bg-white:focus   { background-color: var(--glo-surface-2); }
+
+.theme-glo .bg-white\/70 { background-color: rgba(11, 11, 11, 0.7); }
+.theme-glo .bg-white\/80 { background-color: rgba(11, 11, 11, 0.8); }
+.theme-glo .bg-white\/90 { background-color: rgba(11, 11, 11, 0.9); }
+.theme-glo .bg-white\/60 { background-color: rgba(11, 11, 11, 0.6); }
+.theme-glo .bg-white\/50 { background-color: rgba(11, 11, 11, 0.5); }
+.theme-glo .bg-gray-50\/50  { background-color: rgba(0, 0, 0, 0.5); }
+.theme-glo .bg-gray-50\/80  { background-color: rgba(0, 0, 0, 0.8); }
+.theme-glo .bg-gray-100\/80 { background-color: rgba(22, 22, 22, 0.8); }
+
+/* ── Text ─────────────────────────────────────────────────── */
+.theme-glo .text-gray-950 { color: var(--glo-text); }
+.theme-glo .text-gray-900 { color: var(--glo-text); }
+.theme-glo .text-gray-800 { color: var(--glo-text-2); }
+.theme-glo .text-gray-700 { color: var(--glo-text-3); }
+.theme-glo .text-gray-600 { color: var(--glo-text-4); }
+.theme-glo .text-gray-500 { color: var(--glo-text-muted); }
+.theme-glo .text-gray-400 { color: var(--glo-text-faint); }
+.theme-glo .text-gray-300 { color: var(--glo-text-fainter); }
+.theme-glo .text-slate-900 { color: var(--glo-text); }
+.theme-glo .text-slate-800 { color: var(--glo-text-2); }
+.theme-glo .text-slate-700 { color: var(--glo-text-3); }
+.theme-glo .text-slate-600 { color: var(--glo-text-4); }
+
+/* ── Lines ────────────────────────────────────────────────── */
+.theme-glo .border-gray-50  { border-color: var(--glo-line-softer); }
+.theme-glo .border-gray-100 { border-color: var(--glo-line-soft); }
+.theme-glo .border-gray-200 { border-color: var(--glo-line); }
+.theme-glo .border-gray-300 { border-color: var(--glo-line-strong); }
+.theme-glo .border-gray-400 { border-color: var(--glo-line-stronger); }
+.theme-glo .border-slate-100 { border-color: var(--glo-line-soft); }
+.theme-glo .border-slate-200 { border-color: var(--glo-line); }
+.theme-glo .hover\:border-gray-200:hover { border-color: var(--glo-line-strong); }
+.theme-glo .hover\:border-gray-300:hover { border-color: var(--glo-line-stronger); }
+.theme-glo .divide-gray-50  > * + * { border-color: var(--glo-line-softer); }
+.theme-glo .divide-gray-100 > * + * { border-color: var(--glo-line-soft); }
+.theme-glo .divide-gray-200 > * + * { border-color: var(--glo-line); }
+
+/* ── Accent: indigo becomes Glo orange ────────────────────── */
+.theme-glo .bg-indigo-600 { background-color: var(--glo-accent); }
+.theme-glo .bg-indigo-500 { background-color: var(--glo-accent); }
+.theme-glo .bg-indigo-700 { background-color: var(--glo-accent-hover); }
+.theme-glo .hover\:bg-indigo-500:hover { background-color: var(--glo-accent-hover); }
+.theme-glo .hover\:bg-indigo-600:hover { background-color: var(--glo-accent-hover); }
+.theme-glo .active\:bg-indigo-700:active { background-color: var(--glo-accent-hover); }
+.theme-glo .bg-indigo-50  { background-color: var(--glo-accent-softer); }
+.theme-glo .bg-indigo-100 { background-color: var(--glo-accent-soft); }
+.theme-glo .bg-indigo-50\/30 { background-color: var(--glo-accent-softer); }
+.theme-glo .bg-indigo-50\/50 { background-color: var(--glo-accent-softer); }
+
+.theme-glo .text-indigo-600 { color: var(--glo-accent); }
+.theme-glo .text-indigo-700 { color: var(--glo-accent); }
+.theme-glo .text-indigo-800 { color: var(--glo-accent-hover); }
+.theme-glo .text-indigo-900 { color: var(--glo-accent-hover); }
+.theme-glo .text-indigo-300 { color: var(--glo-accent-hover); }
+.theme-glo .text-indigo-400 { color: var(--glo-accent-hover); }
+
+.theme-glo .border-indigo-200 { border-color: var(--glo-accent-border); }
+.theme-glo .border-indigo-300 { border-color: var(--glo-accent-border); }
+.theme-glo .border-indigo-500 { border-color: var(--glo-accent); }
+.theme-glo .ring-indigo-200   { --tw-ring-color: var(--glo-accent-border); }
+.theme-glo .ring-indigo-500   { --tw-ring-color: var(--glo-accent); }
+.theme-glo .focus\:ring-indigo-500:focus { --tw-ring-color: var(--glo-accent); }
+
+/* ── Status colours ───────────────────────────────────────────
+   Kept as hues rather than folded into the accent: green still
+   has to mean paid and red still has to mean overdue. Tuned for
+   a black ground, and amber is nudged yellow so a warning is not
+   mistaken for the brand orange. */
+.theme-glo .bg-emerald-50  { background-color: rgba(16, 185, 129, 0.10); }
+.theme-glo .bg-emerald-100 { background-color: rgba(16, 185, 129, 0.16); }
+.theme-glo .bg-green-50    { background-color: rgba(16, 185, 129, 0.10); }
+.theme-glo .bg-green-100   { background-color: rgba(16, 185, 129, 0.16); }
+.theme-glo .text-emerald-600, .theme-glo .text-emerald-700,
+.theme-glo .text-emerald-800 { color: #34d399; }
+.theme-glo .text-green-600, .theme-glo .text-green-700 { color: #34d399; }
+.theme-glo .border-emerald-200, .theme-glo .border-green-200 { border-color: rgba(16, 185, 129, 0.34); }
+.theme-glo .ring-emerald-200, .theme-glo .ring-green-200 { --tw-ring-color: rgba(16, 185, 129, 0.34); }
+
+.theme-glo .bg-red-50   { background-color: rgba(244, 63, 94, 0.10); }
+.theme-glo .bg-red-100  { background-color: rgba(244, 63, 94, 0.16); }
+.theme-glo .bg-rose-50  { background-color: rgba(244, 63, 94, 0.10); }
+.theme-glo .text-red-600, .theme-glo .text-red-700,
+.theme-glo .text-red-800, .theme-glo .text-red-900 { color: #fb7185; }
+.theme-glo .text-rose-600, .theme-glo .text-rose-700 { color: #fb7185; }
+.theme-glo .border-red-200 { border-color: rgba(244, 63, 94, 0.34); }
+.theme-glo .ring-red-200   { --tw-ring-color: rgba(244, 63, 94, 0.34); }
+
+.theme-glo .bg-amber-50   { background-color: rgba(250, 204, 21, 0.10); }
+.theme-glo .bg-amber-100  { background-color: rgba(250, 204, 21, 0.16); }
+.theme-glo .bg-amber-50\/50 { background-color: rgba(250, 204, 21, 0.08); }
+.theme-glo .bg-yellow-50  { background-color: rgba(250, 204, 21, 0.10); }
+.theme-glo .bg-yellow-100 { background-color: rgba(250, 204, 21, 0.16); }
+.theme-glo .text-amber-600, .theme-glo .text-amber-700,
+.theme-glo .text-amber-800 { color: #fbbf24; }
+.theme-glo .text-yellow-700 { color: #fbbf24; }
+.theme-glo .border-amber-200 { border-color: rgba(250, 204, 21, 0.34); }
+.theme-glo .ring-amber-200, .theme-glo .ring-yellow-200 { --tw-ring-color: rgba(250, 204, 21, 0.34); }
+
+.theme-glo .bg-sky-50   { background-color: rgba(56, 189, 248, 0.10); }
+.theme-glo .bg-sky-100  { background-color: rgba(56, 189, 248, 0.16); }
+.theme-glo .bg-blue-50  { background-color: rgba(56, 189, 248, 0.10); }
+.theme-glo .bg-blue-100 { background-color: rgba(56, 189, 248, 0.16); }
+.theme-glo .bg-blue-50\/30 { background-color: rgba(56, 189, 248, 0.08); }
+.theme-glo .text-sky-600, .theme-glo .text-sky-700 { color: #38bdf8; }
+.theme-glo .text-blue-600, .theme-glo .text-blue-700 { color: #38bdf8; }
+.theme-glo .border-blue-200 { border-color: rgba(56, 189, 248, 0.34); }
+.theme-glo .ring-blue-200, .theme-glo .ring-sky-200 { --tw-ring-color: rgba(56, 189, 248, 0.34); }
+
+/* The remaining accents the app uses for categories and tags. */
+.theme-glo .bg-orange-50  { background-color: var(--glo-accent-softer); }
+.theme-glo .bg-orange-100 { background-color: var(--glo-accent-soft); }
+.theme-glo .text-orange-600, .theme-glo .text-orange-700 { color: var(--glo-accent); }
+.theme-glo .border-orange-200 { border-color: var(--glo-accent-border); }
+
+.theme-glo .bg-purple-50, .theme-glo .bg-violet-50,
+.theme-glo .bg-fuchsia-50 { background-color: rgba(167, 139, 250, 0.10); }
+.theme-glo .bg-purple-100, .theme-glo .bg-violet-100 { background-color: rgba(167, 139, 250, 0.16); }
+.theme-glo .text-purple-600, .theme-glo .text-purple-700,
+.theme-glo .text-violet-600, .theme-glo .text-violet-700,
+.theme-glo .text-fuchsia-700 { color: #a78bfa; }
+.theme-glo .border-purple-200 { border-color: rgba(167, 139, 250, 0.34); }
+.theme-glo .ring-purple-200 { --tw-ring-color: rgba(167, 139, 250, 0.34); }
+
+.theme-glo .bg-pink-50  { background-color: rgba(244, 114, 182, 0.10); }
+.theme-glo .bg-pink-100 { background-color: rgba(244, 114, 182, 0.16); }
+.theme-glo .text-pink-600, .theme-glo .text-pink-700 { color: #f472b6; }
+
+.theme-glo .bg-teal-50  { background-color: rgba(45, 212, 191, 0.10); }
+.theme-glo .bg-teal-100 { background-color: rgba(45, 212, 191, 0.16); }
+.theme-glo .text-teal-600, .theme-glo .text-teal-700 { color: #2dd4bf; }
+.theme-glo .border-teal-200 { border-color: rgba(45, 212, 191, 0.34); }
+
+/* ── Depth ────────────────────────────────────────────────────
+   Shadows are invisible on black, so they become edges instead —
+   the same substitution the dark theme makes. */
+.theme-glo .shadow-sm  { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.8); }
+.theme-glo .shadow     { box-shadow: 0 1px 3px rgba(0, 0, 0, 0.85); }
+.theme-glo .shadow-md  { box-shadow: 0 4px 12px -4px rgba(0, 0, 0, 0.9); }
+.theme-glo .shadow-lg  { box-shadow: 0 10px 24px -12px rgba(0, 0, 0, 0.95); }
+.theme-glo .shadow-xl  { box-shadow: 0 16px 36px -16px rgba(0, 0, 0, 0.95); }
+.theme-glo .shadow-2xl { box-shadow: 0 26px 60px -24px rgba(0, 0, 0, 1); }
+
+/* ── Calendar + table surfaces, matching the dark treatment ── */
+.theme-glo .cal-cell         { background-color: var(--glo-surface); }
+.theme-glo .cal-cell-muted   { background-color: var(--glo-bg); }
+.theme-glo .cal-cell-weekend { background-color: rgba(255, 255, 255, 0.02); }
+.theme-glo .cal-cell-today   { background-color: var(--glo-accent-softer); }
+.theme-glo .cal-gridlines    { background-color: var(--glo-line-soft); }
+
+.theme-glo .table-cards {
+  --tc-border: var(--glo-line);
+  --tc-bg: var(--glo-surface);
+  --tc-label: var(--glo-text-faint);
+}

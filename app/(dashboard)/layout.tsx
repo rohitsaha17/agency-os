@@ -11,6 +11,8 @@ import type { CurrentUser } from "@/lib/useCurrentUser";
 import { CheckInGate } from "@/components/hr/CheckInGate";
 import { attendanceDay, dayString } from "@/lib/hr";
 import { can } from "@/lib/permissions";
+import { resolveTheme, type WorkspaceTheme } from "@/lib/theme";
+import { WorkspaceThemeClass } from "@/components/layout/WorkspaceTheme";
 
 /*
   A window wide enough to contain whichever day "today" turns out to be once
@@ -40,6 +42,16 @@ export default async function DashboardLayout({
   let seed: CurrentUser | null = null;
   /** Nothing else on the dashboard renders until this is false. */
   let needsCheckIn = false;
+  /*
+    The workspace's theme, decided here and nowhere else.
+
+    Defaults to "default" and stays there if anything at all goes wrong — an
+    unreachable database, a row from a newer deploy naming a theme this build
+    has never heard of. Every existing workspace is on "default", so the
+    failure mode is the app everybody already knows rather than a half-styled
+    one.
+  */
+  let theme: WorkspaceTheme = "default";
   try {
     // Widened from the four gate fields to the whole shape the client needs.
     // It is the same round trip either way, and it saves the browser asking
@@ -61,6 +73,8 @@ export default async function DashboardLayout({
             id: true, name: true, slug: true, logoUrl: true, currency: true,
             timezone: true, dateFormat: true,
             onboardingCompleted: true, plan: true, trialEndsAt: true,
+            // One more column on a row this query already reads.
+            theme: true,
           },
         },
         // Three days either side of now, because which day counts as "today"
@@ -82,6 +96,7 @@ export default async function DashboardLayout({
         },
       },
     });
+    if (user?.organization) theme = resolveTheme(user.organization.theme);
     if (!user || !user.isActive) gate = "login";
     else if (!user.organization.onboardingCompleted) gate = "onboarding";
     else if (!user.passwordHash) gate = "set-password";
@@ -140,6 +155,9 @@ export default async function DashboardLayout({
   return (
     <ToastProvider>
       <ConfirmProvider>
+        {/* First thing in the subtree: the class lands before anything
+            below it paints. See components/layout/WorkspaceTheme. */}
+        <WorkspaceThemeClass theme={theme} />
         <CurrentUserSeed user={seed} />
         {needsCheckIn && <CheckInGate name={seed?.name ?? ""} />}
         <DateInputAutoOpen />

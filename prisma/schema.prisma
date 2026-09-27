@@ -1535,6 +1535,21 @@ model Organization {
   dateFormat       String  @default("MMM D, YYYY")
   taxRegistrations Json? // [{ id, type, number, country }]
 
+  /// Which visual theme this workspace renders in.
+  ///
+  /// A KEY, not a palette. Arbitrary per-tenant colours cannot be injected
+  /// into Tailwind's compiled utilities at runtime — this app writes literal
+  /// classes (bg-white, bg-indigo-600) rather than semantic tokens, so a
+  /// free-form { primaryColor, accentColor } blob would require retrofitting
+  /// tokens across every component before it could do anything. A named theme
+  /// is one reviewed CSS block scoped by a class on <html>, exactly the way
+  /// dark mode already works here.
+  ///
+  /// "default" is every existing workspace and renders identically to what
+  /// shipped before this column existed. A tenant opts in by having this row
+  /// updated — no organization id appears anywhere in the codebase.
+  theme            String  @default("default")
+
   // Letterhead / PDF template
   letterheadLogoUrl  String?
   letterheadHeader   String?

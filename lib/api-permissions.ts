@@ -78,6 +78,30 @@ export function taskVisibilityScope(user: { id: string; role?: string | null }) 
 }
 
 /**
+ * Is this person part of the working roster?
+ *
+ * Availability is a picture of who can be given a shoot or a deadline. An
+ * owner or an admin is not somebody you book — they run the place — so
+ * listing them produces rows nobody will ever act on and makes the board
+ * longer than the team.
+ *
+ * Decided by attendance.exempt rather than by naming roles, because that
+ * capability already draws exactly this line: the people who REVIEW
+ * attendance rather than record it. Managers are not exempt and so stay on
+ * the board, which is right — a manager takes work.
+ *
+ * The viewer is passed in for their organization's permission overrides, so a
+ * workspace that has moved attendance.exempt gets a roster that agrees with
+ * the rest of its own rules.
+ */
+export function isRostered(
+  person: { role?: string | null },
+  viewer: { organization?: { permissions?: unknown } | null },
+): boolean {
+  return !can({ role: person.role, organization: viewer.organization }, "attendance.exempt");
+}
+
+/**
  * May this person export a task sheet for `requested`?
  *
  * `requested` is a user id, the literal "all", or "" meaning "me".

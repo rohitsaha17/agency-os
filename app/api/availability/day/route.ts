@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
-import { requireCapability } from "@/lib/api-permissions";
+import { isRostered } from "@/lib/api-permissions";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 import { dayKey } from "@/lib/availability";
 
@@ -20,14 +20,20 @@ import { dayKey } from "@/lib/availability";
  * The picker needs every row at once to be useful, and a fan-out of ten
  * requests every time somebody changes the date would be worse for everyone.
  *
- * Gated on content.plan: this is a planner's tool, and it reveals how loaded
- * each colleague is. That is exactly what a planner needs and not something a
- * junior has any call to enumerate.
+ * Open to everyone in the workspace.
+ *
+ * It was gated on content.plan, on the reasoning that showing how loaded each
+ * colleague is was a planner's business. That line no longer sits anywhere
+ * sensible: the team calendar shows everybody the actual work, in full, and
+ * this shows a count of it. Withholding the count while publishing the tasks
+ * protects nothing and leaves the page half broken for a junior, who could
+ * open it from the sidebar and then watch the day board fail.
+ *
+ * Owners and admins are left out of the roster — see isRostered.
  */
 export async function GET(req: NextRequest) {
   try {
     const user = await requireAuth(req);
-    requireCapability(user, "content.plan");
 
     const raw = req.nextUrl.searchParams.get("date");
     if (!raw) throw new ApiError("A date is required", 400);
@@ -41,7 +47,7 @@ export async function GET(req: NextRequest) {
     const [people, blocks, due] = await Promise.all([
       prisma.user.findMany({
         where: { organizationId: user.organizationId, isActive: true },
-        select: { id: true, name: true, jobTitle: { select: { name: true } } },
+        select: { id: true, name: true, role: true, jobTitle: { select: { name: true } } },
         orderBy: { name: "asc" },
       }),
       prisma.unavailability.findMany({
@@ -78,7 +84,8 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       date: day.toISOString().slice(0, 10),
-      people: people.map((p) => {
+      // Owners and admins are not people you book a shoot with.
+      people: people.filter((p) => isRostered(p, user)).map((p) => {
         const blocked = blockByUser.get(p.id);
         const load = loadByUser.get(p.id) ?? [];
         return {

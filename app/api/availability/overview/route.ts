@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
+import { isRostered } from "@/lib/api-permissions";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 import { dayKey, dayString, loadKey } from "@/lib/availability";
 
@@ -112,7 +113,9 @@ export async function GET(req: NextRequest) {
       seesLoad,
       /** Drives which buttons the page offers — the server still decides. */
       canBlockOthers: can(user, "users.manage"),
-      people: people.map((p) => ({
+      // Owners and admins run the place rather than take the work, so they
+      // are not rows on a board about who is free — see isRostered.
+      people: people.filter((p) => isRostered(p, user)).map((p) => ({
         id: p.id,
         name: p.name,
         avatarUrl: p.avatarUrl,

@@ -5,6 +5,7 @@
  *   npx tsx scripts/check-availability.ts
  * Exits non-zero on any regression.
  */
+import { isRostered } from "../lib/api-permissions";
 import {
   dayKey, dayString, expandRange, validateReason, blockedOn, blockedMessage,
   loadLevel, MAX_REASON, dayStatus, cellLabel, cellDescription, loadKey,
@@ -116,6 +117,34 @@ console.log("\n— the load map key —");
 check("keyed by person and day", loadKey("vik", "2026-09-04"), "vik|2026-09-04");
 check("a timestamp lands on the same key", loadKey("vik", "2026-09-04T19:30:00Z"), "vik|2026-09-04");
 
+
+console.log("");
+console.log("— who belongs on a board about who is free —");
+/*
+  Availability answers "who can I give this shoot to". An owner or an admin is
+  not somebody you book, so listing them adds rows nobody will ever act on and
+  makes the board longer than the team.
+
+  Drawn by attendance.exempt rather than by naming roles, because that
+  capability already separates the people who REVIEW attendance from the
+  people who record it. A manager takes work, so a manager stays.
+*/
+const noOverrides = { organization: { permissions: null } };
+check("an owner is not on the board", isRostered({ role: "OWNER" }, noOverrides), false);
+check("nor an admin", isRostered({ role: "ADMIN" }, noOverrides), false);
+check("a manager is", isRostered({ role: "MANAGER" }, noOverrides), true);
+check("an SMM is", isRostered({ role: "SMM" }, noOverrides), true);
+check("a junior is", isRostered({ role: "TEAM" }, noOverrides), true);
+check("and so is somebody with no role recorded",
+  isRostered({ role: null }, noOverrides), true);
+
+// A workspace that has moved attendance.exempt gets a roster that agrees
+// with its own rules, rather than one hard-coded against two role names.
+const managersExempt = { organization: { permissions: { MANAGER: { "attendance.exempt": true } } } };
+check("a workspace that exempts its managers drops them from the board",
+  isRostered({ role: "MANAGER" }, managersExempt), false);
+check("...without touching anybody else",
+  isRostered({ role: "TEAM" }, managersExempt), true);
 
 console.log(fails === 0 ? "\nAll checks passed." : `\n${fails} FAILED`);
 process.exit(fails === 0 ? 0 : 1);

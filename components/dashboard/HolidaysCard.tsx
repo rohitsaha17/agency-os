@@ -9,6 +9,12 @@ type Holiday = { id: string; name: string; date: string; endDate?: string | null
 /** Shown on the dashboard. Long enough to be useful, short enough to ignore. */
 const ON_DASHBOARD = 4;
 
+/** One field, one spelling. The dialog had four copies of this string. */
+const FIELD =
+  "w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-slate-700 " +
+  "bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 " +
+  "focus:outline-none focus:ring-2 focus:ring-indigo-500";
+
 /**
  * The days the office is closed.
  *
@@ -160,42 +166,67 @@ function HolidayManager({ open, onClose }: { open: boolean; onClose: () => void 
   };
 
   return (
-    <Modal open={open} onClose={onClose} title={`Holidays ${year}`} width="max-w-md">
+    <Modal open={open} onClose={onClose} title={`Holidays ${year}`} width="max-w-xl">
       <div className="space-y-4">
-        <div className="flex flex-col sm:flex-row gap-2">
-          <input
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            aria-label="Date"
-            className="px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-          <input
-            type="date"
-            value={endDate}
-            min={date || undefined}
-            onChange={(e) => setEndDate(e.target.value)}
-            aria-label="Last day, if it runs over several"
-            title="Last day — leave empty for a single day"
-            className="px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Diwali"
-            aria-label="Holiday name"
-            maxLength={80}
-            className="flex-1 px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-          <button
-            onClick={add}
-            disabled={busy || !name.trim() || !date}
-            className="inline-flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-semibold rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-            Add
-          </button>
+        {/*
+          Two rows, not one.
+
+          Four controls abreast — two dates, a name and a button — did not fit
+          the dialog and pushed a horizontal scrollbar under it, which is the
+          one direction nobody expects a form to move in. The dates share a
+          row because they are one question; the name gets the width it needs
+          because it is the only free text here.
+
+          Both dates are labelled. Two identical dd-mm-yyyy boxes said nothing
+          about which was which, or that the second one is optional.
+        */}
+        <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-2">
+            <label className="block min-w-0">
+              <span className="block text-[11px] font-medium text-gray-500 dark:text-slate-400 mb-1">
+                First day
+              </span>
+              <input
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className={FIELD}
+              />
+            </label>
+            <label className="block min-w-0">
+              <span className="block text-[11px] font-medium text-gray-500 dark:text-slate-400 mb-1">
+                Last day <span className="font-normal text-gray-400 dark:text-slate-500">· optional</span>
+              </span>
+              <input
+                type="date"
+                value={endDate}
+                min={date || undefined}
+                onChange={(e) => setEndDate(e.target.value)}
+                title="Leave empty for a single day"
+                className={FIELD}
+              />
+            </label>
+          </div>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && name.trim() && date && !busy) add(); }}
+              placeholder="Diwali"
+              aria-label="Holiday name"
+              maxLength={80}
+              className={`flex-1 min-w-0 ${FIELD}`}
+            />
+            <button
+              onClick={add}
+              disabled={busy || !name.trim() || !date}
+              className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+            >
+              {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+              Add
+            </button>
+          </div>
         </div>
 
         {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}

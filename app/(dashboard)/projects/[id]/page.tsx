@@ -184,7 +184,7 @@ export default function ProjectDetailPage() {
     can(currentUser, "projects.manage") ||
     (project?.members ?? []).some((m) => m.userId === currentUser?.id && m.role === "SMM");
   /** Who may read the audit trail. Owner, admin and manager by default. */
-  const seesActivity = can(currentUser, "projects.activity");
+  const seesActivity = can(currentUser, "activity.view");
   // v3: the project's billing periods, and which one the page is showing.
   // Defaults to the cycle containing today so the page opens on "now".
   const [cycles, setCycles] = useState<ProjectCycle[]>([]);

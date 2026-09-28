@@ -31,7 +31,7 @@ export async function GET(
 ) {
   try {
     const user = await requireAuth(req);
-    requireCapability(user, "projects.activity");
+    requireCapability(user, "activity.view");
     const { id } = await params;
 
     const project = await prisma.project.findFirst({

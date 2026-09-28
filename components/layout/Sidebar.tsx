@@ -5,6 +5,7 @@ import { useCurrentUser, signOut } from "@/lib/useCurrentUser";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  History,
   LayoutDashboard, Users, FolderKanban, CheckSquare,
   Calendar, CalendarClock, Receipt, Settings,
   HardDrive, TrendingDown, Scroll, Menu, X, CalendarOff,
@@ -80,6 +81,9 @@ const navItems: {
       { href: "/calendar",     label: "Team Calendar", icon: Calendar,     need: null                },
       { href: "/files",        label: "Files",        icon: HardDrive,     need: null                },
       { href: "/reports",      label: "Reports",      icon: BarChart3,     need: "reports.delivery"  },
+      // Who changed what. A place you go when something needs explaining,
+      // so it sits at the end rather than among the day's work.
+      { href: "/activity",     label: "Activity",     icon: History,       need: "activity.view"     },
       // Everyone lands here to check in and ask for leave; the staff record,
       // the salary sheet and the advances are tabs inside, each behind its
       // own capability. `need: null` because checking in is for everybody.

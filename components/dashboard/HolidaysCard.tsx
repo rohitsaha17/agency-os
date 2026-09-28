@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { CalendarDays, Plus, Trash2, Loader2 } from "lucide-react";
+import { CalendarDays, Plus, Trash2, Pencil, Loader2 } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Panel, DayBlock, Row, Empty, Pill } from "./kit";
 
@@ -149,6 +149,43 @@ function HolidayManager({ open, onClose }: { open: boolean; onClose: () => void 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
+  /** Which row is open for correction, and what it currently says. */
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editDate, setEditDate] = useState("");
+  const [editEnd, setEditEnd] = useState("");
+
+  const startEdit = (h: Holiday) => {
+    setError("");
+    setEditingId(h.id);
+    setEditName(h.name);
+    setEditDate(h.date);
+    setEditEnd(h.endDate ?? "");
+  };
+
+  const saveEdit = async () => {
+    if (!editingId) return;
+    setError("");
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/holidays/${editingId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: editName, date: editDate, endDate: editEnd || null }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d?.error?.message || "Could not save that");
+      setRows((prev) => prev
+        .map((r) => (r.id === d.id ? d : r))
+        .sort((a, b) => a.date.localeCompare(b.date)));
+      setEditingId(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save that");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const year = new Date().getFullYear();
 
   const load = useCallback(() => {
@@ -265,13 +302,44 @@ function HolidayManager({ open, onClose }: { open: boolean; onClose: () => void 
           </p>
         ) : (
           <ul className="divide-y divide-gray-100 dark:divide-slate-800 max-h-80 overflow-y-auto">
-            {rows.map((h) => (
+            {rows.map((h) => editingId === h.id ? (
+              /* The same three fields as adding one, in the row's place —
+                 a dialog on top of a dialog to change a spelling is worse
+                 than the typo. */
+              <li key={h.id} className="py-2 space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <input type="date" value={editDate} aria-label="First day"
+                    onChange={(e) => setEditDate(e.target.value)} className={FIELD} />
+                  <input type="date" value={editEnd} min={editDate || undefined} aria-label="Last day"
+                    onChange={(e) => setEditEnd(e.target.value)} className={FIELD} />
+                </div>
+                <div className="flex gap-2">
+                  <input type="text" value={editName} maxLength={80} aria-label="Holiday name"
+                    onChange={(e) => setEditName(e.target.value)} className={`flex-1 min-w-0 ${FIELD}`} />
+                  <button onClick={saveEdit} disabled={busy || !editName.trim() || !editDate}
+                    className="px-3 py-2 text-sm font-semibold rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-50 flex-shrink-0">
+                    Save
+                  </button>
+                  <button onClick={() => setEditingId(null)}
+                    className="px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-slate-700 text-gray-600 dark:text-slate-300 flex-shrink-0">
+                    Cancel
+                  </button>
+                </div>
+              </li>
+            ) : (
               <li key={h.id} className="flex items-center gap-3 py-2">
                 <span className="text-xs font-semibold text-gray-900 dark:text-slate-100 tabular-nums w-[5.5rem] flex-shrink-0">
                   {spanRange(h)}
                 </span>
                 <span className="text-sm text-gray-700 dark:text-slate-300 min-w-0 truncate">{h.name}</span>
                 <span className="ml-auto text-[11px] text-gray-400 flex-shrink-0">{spanNote(h)}</span>
+                <button
+                  onClick={() => startEdit(h)}
+                  aria-label={`Edit ${h.name}`}
+                  className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 transition-colors flex-shrink-0"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                </button>
                 <button
                   onClick={() => remove(h.id)}
                   aria-label={`Remove ${h.name}`}

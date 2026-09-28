@@ -25,6 +25,11 @@ export interface CurrentUser {
     logoUrl: string | null;
     /** Chrome carries the workspace's own logo. Platform-admin decision. */
     whiteLabel?: boolean;
+    /**
+     * What this workspace changed about MANAGER, SMM and TEAM.
+     * Raw JSON — narrow it through parsePermissionOverrides.
+     */
+    permissions?: unknown;
     currency?: string;
     timezone?: string;
     dateFormat?: string;

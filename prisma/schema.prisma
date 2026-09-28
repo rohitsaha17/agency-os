@@ -1560,6 +1560,19 @@ model Organization {
   /// product. Default false, so every existing workspace is unchanged.
   whiteLabel       Boolean @default(false)
 
+  /// Per-workspace changes to what MANAGER, SMM and TEAM may do.
+  ///
+  /// A DELTA, not a copy of the matrix: `{ "SMM": { "financials.view": true } }`
+  /// says one thing differs and everything else follows lib/permissions.ts.
+  /// Storing the whole matrix would freeze each workspace at the shape it had
+  /// the day somebody opened Settings, and a capability added later would
+  /// arrive switched off for them with no way to tell that from a decision.
+  ///
+  /// OWNER and ADMIN are never in here. They always hold everything — both
+  /// because that is what an administrator is, and because a workspace that
+  /// can revoke its own administrators can be locked out of itself.
+  permissions      Json?
+
   // Letterhead / PDF template
   letterheadLogoUrl  String?
   letterheadHeader   String?

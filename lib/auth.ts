@@ -44,6 +44,11 @@ export type AuthUser = {
     onboardingCompleted: boolean;
     /** Raw column value — narrow it through resolveTheme before use. */
     theme?: string;
+    /**
+     * What this workspace changed about MANAGER, SMM and TEAM.
+     * Raw JSON — narrow it through parsePermissionOverrides.
+     */
+    permissions?: unknown;
   } | null;
 };
 

@@ -1474,22 +1474,69 @@ interface MatrixRow {
   label: string;
   group: string;
   allowed: Record<string, boolean>;
+  /** Where this workspace has decided differently from the built-in default. */
+  changed?: Record<string, boolean>;
 }
 
 function RolesTab() {
   const [roles, setRoles] = useState<string[]>([]);
   const [rows, setRows] = useState<MatrixRow[]>([]);
   const [assignScope, setAssignScope] = useState<Record<string, string>>({});
+  const [editableRoles, setEditableRoles] = useState<string[]>([]);
+  const [canEdit, setCanEdit] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetch("/api/permissions/matrix")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        if (d) { setRoles(d.roles); setRows(d.rows); setAssignScope(d.assignScope); }
+        if (d) {
+          setRoles(d.roles); setRows(d.rows); setAssignScope(d.assignScope);
+          setEditableRoles(d.editableRoles ?? []);
+          setCanEdit(!!d.canEdit);
+        }
       })
       .finally(() => setLoading(false));
   }, []);
+
+  /**
+   * Move one capability for one role.
+   *
+   * Optimistic, and put back on failure — a permission cell that stays
+   * flipped after the server refused is worse than one that never moved,
+   * because it reads as granted.
+   */
+  const toggle = async (role: string, capability: string, next: boolean) => {
+    const key = `${role}:${capability}`;
+    setBusy(key);
+    setSaveError("");
+    const before = rows;
+    setRows((prev) => prev.map((r) => r.capability !== capability ? r : {
+      ...r,
+      allowed: { ...r.allowed, [role]: next },
+      changed: { ...(r.changed ?? {}), [role]: true },
+    }));
+    try {
+      const res = await fetch("/api/permissions/matrix", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role, capability, allowed: next }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d?.error?.message || "Could not save that");
+      setRows((prev) => prev.map((r) => r.capability !== capability ? r : {
+        ...r,
+        changed: { ...(r.changed ?? {}), [role]: !!d.changed },
+      }));
+    } catch (err) {
+      setRows(before);
+      setSaveError(err instanceof Error ? err.message : "Could not save that");
+    } finally {
+      setBusy(null);
+    }
+  };
 
   const groups = rows.reduce<Record<string, MatrixRow[]>>((acc, r) => {
     (acc[r.group] = acc[r.group] ?? []).push(r);
@@ -1500,7 +1547,7 @@ function RolesTab() {
     <div className="space-y-6">
       <SectionCard
         title="Role Permissions"
-        desc="What each role can do. Generated from the permission layer the API enforces, so this table is always the truth rather than a description of it."
+        desc="What each role can do here. Click a cell to change it for a manager, an SMM or a junior. Owners and admins always hold everything. The API enforces this same table, so it is the truth rather than a description of it."
       >
         {loading ? (
           <div className="space-y-2">
@@ -1537,13 +1584,42 @@ function RolesTab() {
                           {row.label}
                           <span className="block text-[10px] text-gray-300 font-mono">{row.capability}</span>
                         </td>
-                        {roles.map((role) => (
-                          <td key={role} className="text-center py-2.5 px-3">
-                            {row.allowed[role]
-                              ? <Check className="w-4 h-4 text-emerald-500 mx-auto" />
-                              : <X className="w-4 h-4 text-gray-200 mx-auto" />}
-                          </td>
-                        ))}
+                        {roles.map((role) => {
+                          const on = row.allowed[role];
+                          const mark = on
+                            ? <Check className="w-4 h-4 text-emerald-500 mx-auto" />
+                            : <X className="w-4 h-4 text-gray-200 dark:text-slate-700 mx-auto" />;
+                          const adjustable = canEdit && editableRoles.includes(role);
+                          const key = `${role}:${row.capability}`;
+                          return (
+                            <td key={role} className="text-center py-2.5 px-3">
+                              {adjustable ? (
+                                <button
+                                  type="button"
+                                  onClick={() => toggle(role, row.capability, !on)}
+                                  disabled={busy === key}
+                                  aria-pressed={on}
+                                  aria-label={`${row.label} — ${ROLE_LABELS[role]?.label ?? role}`}
+                                  title={row.changed?.[role] ? "Changed from the default" : "Click to change"}
+                                  className={`relative mx-auto flex items-center justify-center w-9 h-9 rounded-lg transition-colors disabled:opacity-50 hover:bg-gray-100 dark:hover:bg-white/[0.06] ${
+                                    row.changed?.[role] ? "ring-1 ring-indigo-300 dark:ring-indigo-500/40" : ""
+                                  }`}
+                                >
+                                  {mark}
+                                </button>
+                              ) : (
+                                // Owner and admin hold everything, by code rather
+                                // than by data — see lib/permissions.ts.
+                                <span
+                                  className="mx-auto flex items-center justify-center w-9 h-9 opacity-90"
+                                  title={canEdit ? "Owners and admins always hold every capability" : undefined}
+                                >
+                                  {mark}
+                                </span>
+                              )}
+                            </td>
+                          );
+                        })}
                       </tr>
                     ))}
                   </Fragment>
@@ -1567,8 +1643,13 @@ function RolesTab() {
           </div>
           </TableCards>
         )}
+        {saveError && (
+          <p className="text-xs text-red-600 dark:text-red-400 mt-3">{saveError}</p>
+        )}
         <p className="text-[11px] text-gray-400 mt-4">
-          Enforced server-side in every API route. Hiding things in the interface is a second layer, never the only one.
+          Enforced server-side in every API route. Hiding things in the interface is a
+          second layer, never the only one.
+          {canEdit && " A ring marks a capability this workspace has moved off its default. Anyone already signed in picks up a change on their next page load."}
         </p>
       </SectionCard>
 

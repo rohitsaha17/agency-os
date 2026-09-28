@@ -17,6 +17,15 @@ export interface HasRole {
   id?: string;
   /** Optional so a half-loaded client-side user resolves to least privilege. */
   role?: string | null;
+  /**
+   * Carried so can() can honour a workspace's own changes without a query.
+   *
+   * can() is synchronous and called during render, hundreds of times a page;
+   * it cannot go and ask the database what this workspace decided. The
+   * organization is already joined into the user in the one round trip that
+   * loads them (lib/current-user.ts), so the answer is simply here.
+   */
+  organization?: { permissions?: unknown } | null;
 }
 
 export type Capability =
@@ -230,6 +239,130 @@ const SCOPE_TARGETS: Record<AssignScope, Exclude<Role, "MEMBER">[]> = {
  * content.plan is true for an SMM, but only on a project they're on, which
  * the caller establishes and passes as `ownsProject`.
  */
+/* ─────────────────────────────────────────────────────────────
+   Per-workspace permissions
+   ─────────────────────────────────────────────────────────────
+
+   The matrix above is the DEFAULT. A workspace may move what MANAGER, SMM
+   and TEAM can do, from Settings ▸ Roles, and what it stores is a delta:
+   only the answers it changed.
+
+   OWNER AND ADMIN ARE NOT ADJUSTABLE
+
+   Not an oversight and not a convenience. An administrator who can be
+   stripped of users.manage is an administrator who can be locked out of
+   their own workspace — by a colleague, by a mis-click, or by a bug in this
+   very file — with nobody left able to put it back. Their column is read
+   straight from the matrix and never from data.
+
+   EVERYTHING IS VALIDATED, NOTHING IS TRUSTED
+
+   This value arrives as free-form JSON from a database column. A role name
+   nobody defined, a capability that no longer exists, a string where a
+   boolean belongs, an array pretending to be an object — each is dropped
+   rather than reasoned about. The only way a `true` reaches an answer is if
+   both the role and the capability are ones this build names.
+   ───────────────────────────────────────────────────────────── */
+
+/** The roles a workspace may adjust. Owner and admin are deliberately absent. */
+export const OVERRIDABLE_ROLES = ["MANAGER", "SMM", "TEAM"] as const;
+export type OverridableRole = (typeof OVERRIDABLE_ROLES)[number];
+
+export type PermissionOverrides = Partial<
+  Record<OverridableRole, Partial<Record<Capability, boolean>>>
+>;
+
+/** Every capability this build knows, taken from the matrix itself. */
+export const ALL_CAPABILITIES = Object.keys(MATRIX.OWNER) as Capability[];
+
+export function isOverridableRole(role: string): role is OverridableRole {
+  return (OVERRIDABLE_ROLES as readonly string[]).includes(role);
+}
+
+export function isCapability(value: string): value is Capability {
+  return (ALL_CAPABILITIES as readonly string[]).includes(value);
+}
+
+const EMPTY: PermissionOverrides = Object.freeze({});
+
+/** Narrow whatever is in the column down to answers this build can act on. */
+export function parsePermissionOverrides(raw: unknown): PermissionOverrides {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return EMPTY;
+
+  const out: PermissionOverrides = {};
+  for (const [role, caps] of Object.entries(raw as Record<string, unknown>)) {
+    if (!isOverridableRole(role)) continue;
+    if (!caps || typeof caps !== "object" || Array.isArray(caps)) continue;
+
+    const bucket: Partial<Record<Capability, boolean>> = {};
+    for (const [cap, value] of Object.entries(caps as Record<string, unknown>)) {
+      if (typeof value !== "boolean") continue;
+      if (!isCapability(cap)) continue;
+      bucket[cap] = value;
+    }
+    if (Object.keys(bucket).length) out[role] = bucket;
+  }
+  return out;
+}
+
+/*
+  Parsed once per distinct column value rather than once per call.
+
+  can() runs during render, many times a page. Walking the JSON on each one
+  would put a loop inside every permission check in the app. The key is the
+  raw object, which the user carries for as long as they are loaded, so the
+  cache lives exactly as long as it is useful and never has to be cleared.
+*/
+const parsedCache = new WeakMap<object, PermissionOverrides>();
+
+function overridesOf(user: HasRole): PermissionOverrides {
+  const raw = user.organization?.permissions;
+  if (!raw || typeof raw !== "object") return EMPTY;
+  const hit = parsedCache.get(raw as object);
+  if (hit) return hit;
+  const parsed = parsePermissionOverrides(raw);
+  parsedCache.set(raw as object, parsed);
+  return parsed;
+}
+
+/** The default answer, plus whatever this workspace changed. */
+export function isGranted(
+  role: Exclude<Role, "MEMBER">,
+  capability: Capability,
+  overrides: PermissionOverrides = EMPTY,
+): boolean {
+  // Read from code, never from data. See the note above.
+  if (role === "OWNER" || role === "ADMIN") return MATRIX[role][capability];
+
+  const chosen = overrides[role]?.[capability];
+  return typeof chosen === "boolean" ? chosen : MATRIX[role][capability];
+}
+
+/**
+ * The delta after one change, with anything back at its default removed.
+ *
+ * Kept minimal on purpose: a stored `false` that merely agrees with the
+ * matrix is indistinguishable from a decision, and it would pin the
+ * workspace to today's default if that default were ever revisited.
+ */
+export function withOverride(
+  current: PermissionOverrides,
+  role: OverridableRole,
+  capability: Capability,
+  allowed: boolean,
+): PermissionOverrides {
+  const next: PermissionOverrides = {};
+  for (const r of OVERRIDABLE_ROLES) {
+    const bucket = { ...(current[r] ?? {}) };
+    if (r === role) {
+      if (allowed === MATRIX[role][capability]) delete bucket[capability];
+      else bucket[capability] = allowed;
+    }
+    if (Object.keys(bucket).length) next[r] = bucket;
+  }
+  return next;
+}
+
 export function can(
   user: HasRole | null | undefined,
   capability: Capability,
@@ -237,7 +370,7 @@ export function can(
 ): boolean {
   if (!user) return false;
   const role = normalizeRole(user.role);
-  const allowed = MATRIX[role][capability];
+  const allowed = isGranted(role, capability, overridesOf(user));
   if (!allowed) return false;
 
   // SMM capabilities are scoped to projects they're assigned to. When the

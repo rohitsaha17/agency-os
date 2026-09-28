@@ -402,7 +402,7 @@ function CollapsedMark() {
         alt={own.name}
         title={own.name}
         draggable={false}
-        className="w-8 h-8 object-contain select-none"
+        className="w-11 h-11 object-contain select-none"
       />
     );
   }
@@ -442,14 +442,19 @@ function Logo() {
   if (own) {
     // Their mark replaces the whole lockup, wordmark included — a logo next
     // to somebody else's product name reads as a co-brand, which is not what
-    // this is. Height-bounded so a wide or a square logo both behave.
+    // this is.
+    //
+    // Sized to the bar it sits in rather than to one number: 44px inside the
+    // desktop rail's 64px header, 40px inside the 56px mobile app bar. The
+    // width ceiling is what is actually free once the bell and the collapse
+    // toggle have taken their side — about 150px of the 256px rail.
     // eslint-disable-next-line @next/next/no-img-element
     return (
       <img
         src={own.url}
         alt={own.name}
         draggable={false}
-        className="h-8 w-auto max-w-[170px] object-contain object-left select-none"
+        className="h-10 lg:h-11 w-auto max-w-[150px] object-contain object-left select-none"
       />
     );
   }

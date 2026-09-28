@@ -698,11 +698,23 @@ export default function DashboardPage() {
 
         {/* Whose day it is. Above the work, because it is about people, and
             it renders nothing at all in a week when nobody is celebrating. */}
-        <CelebrationsCard />
 
         {/* v3: the blocks THIS role needs — a junior lands on their work, an
             SMM on their review queue, a manager on the money. */}
         <RoleBlocks currency={data.currency} />
+
+        {/*
+          The two reference panels, side by side and below the work.
+
+          Neither is something to act on — one says whose birthday it is, the
+          other which days the office is shut — so they sit under what needs
+          doing rather than above it. Outside the seesOrgOverview block,
+          because everybody gets both.
+        */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <CelebrationsCard />
+          <HolidaysCard />
+        </div>
 
         {/*
           Everything below is the AGENCY's position: total projects, org-wide
@@ -858,15 +870,6 @@ export default function DashboardPage() {
         </SectionCard>
 
         </>)}
-
-        {/*
-          The days the office is closed.
-
-          At the foot on purpose: it is reference material, not something to
-          act on, and it was pushing the day's actual work down the page.
-          Outside the seesOrgOverview block, because everybody gets it.
-        */}
-        <HolidaysCard />
 
       </div>
     </div>

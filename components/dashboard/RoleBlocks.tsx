@@ -12,6 +12,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
+  Bell,
   AlertTriangle, RotateCcw, Send, ClipboardCheck, CalendarClock,
   IndianRupee, Users, ChevronRight,
 } from "lucide-react";
@@ -40,16 +41,59 @@ interface Payload {
   team: { id: string; name: string; jobTitle: string | null; open: number; overdue: number; inReview: number }[];
 }
 
-function Card({ title, action, children }: {
-  title: string; action?: React.ReactNode; children: React.ReactNode;
+/**
+ * The role blocks' card.
+ *
+ * `urgent` lights it: a warmer border and a stronger wash, and a count beside
+ * the title. The block that wants doing should not look the same as the one
+ * that is only telling you something — on a page of identical white cards
+ * there was nothing to draw the eye to the one thing overdue.
+ *
+ * Built from indigo utilities, which the Gloo theme turns orange; see
+ * components/dashboard/kit.
+ */
+function Card({ title, action, children, icon, urgent, count }: {
+  title: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+  icon?: React.ReactNode;
+  urgent?: boolean;
+  count?: number;
 }) {
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-gray-800">{title}</h3>
-        {action}
+    <div className={`relative overflow-hidden rounded-2xl border ${
+      urgent
+        ? "border-indigo-300 dark:border-indigo-500/40"
+        : "border-gray-200 dark:border-white/[0.07]"
+    } bg-white dark:bg-slate-900`}>
+      <div
+        aria-hidden="true"
+        className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${
+          urgent
+            ? "from-indigo-500/[0.16] via-indigo-500/[0.04] to-transparent"
+            : "from-indigo-500/[0.06] via-transparent to-transparent"
+        }`}
+      />
+      <div className="relative p-4">
+        <div className="flex items-center gap-2.5 mb-3">
+          {icon && (
+            <span
+              aria-hidden="true"
+              className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 bg-indigo-50 text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-300"
+            >
+              {icon}
+            </span>
+          )}
+          <h3 className="text-sm font-semibold text-gray-900 truncate">{title}</h3>
+          {typeof count === "number" && count > 0 && (
+            <span className="text-[10px] font-bold min-w-[18px] h-[18px] px-1.5 rounded-full bg-indigo-600 text-white flex items-center justify-center flex-shrink-0">
+              {count}
+            </span>
+          )}
+          <span className="ml-auto flex-shrink-0">{action}</span>
+        </div>
+        {children}
       </div>
-      {children}
     </div>
   );
 }
@@ -87,7 +131,10 @@ export function RoleBlocks({ currency = "USD" }: { currency?: string }) {
 
       {/* ── Everyone: what needs me ── */}
       <Card
-        title="Needs you"
+        title="Needs your attention"
+        icon={<Bell className="w-4 h-4" />}
+        urgent={!nothingUrgent}
+        count={nothingUrgent ? 0 : myWork.changesRequested.length + myWork.overdue.length}
         action={<span className="text-xs text-gray-400">{myWork.open} open</span>}
       >
         {nothingUrgent ? (

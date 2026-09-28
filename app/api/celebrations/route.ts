@@ -108,7 +108,7 @@ async function dispatchTodaysNotices(
         type: "CELEBRATION",
         title: isSubject ? noticeForSelf(c) : noticeForOthers(c),
         body: isSubject ? null : c.craft,
-        link: "/people?tab=celebrations",
+        link: "/hr?tab=celebrations",
         dedupeKey: celebrationDedupeKey(organizationId, on, c.kind, c.personId, recipientId),
       };
     }),

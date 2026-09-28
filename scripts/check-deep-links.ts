@@ -118,5 +118,46 @@ check(
   "NotificationBell must recognise acceptTask, or that link does nothing",
 );
 
+console.log("");
+console.log("— every internal link points at a route that exists —");
+/*
+  The celebrations card linked to /people?tab=celebrations, and the module is
+  at /hr. So "View all" produced a 404 — and so did the link on every birthday
+  notification the product sends, because it was the same wrong path written
+  once and used twice.
+
+  Nothing catches that except following it. TypeScript is happy with any
+  string, the build is happy, the page renders. So the routes are read off the
+  filesystem and every literal internal path is checked against them.
+
+  Interpolated paths are skipped: `/projects/${id}` cannot be resolved without
+  running the app, and its first segment is covered by the literal cases.
+*/
+const routes = new Set<string>();
+for (const base of ["app", "app/(dashboard)"]) {
+  let entries: string[] = [];
+  try { entries = readdirSync(base); } catch { continue; }
+  for (const e of entries) {
+    if (e.startsWith("(") || e.startsWith("_") || e.startsWith(".")) continue;
+    try { if (statSync(join(base, e)).isDirectory()) routes.add(e); } catch { /* not a route */ }
+  }
+}
+
+const seen = new Set<string>();
+for (const [path, src] of sources) {
+  if (path.includes("check-deep-links")) continue;
+  for (const m of src.matchAll(/(?:href=|link:\s*)"(\/[a-z0-9-]+)(?:[/?"]|$)/gi)) {
+    const first = m[1].slice(1);
+    const key = `${first}|${path}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    check(
+      `/${first} exists  (linked from ${path.split("/").pop()})`,
+      routes.has(first),
+      `no app/${first} or app/(dashboard)/${first} directory`,
+    );
+  }
+}
+
 console.log(fails === 0 ? "\nAll deep-link checks passed." : `\n${fails} FAILED`);
 process.exit(fails === 0 ? 0 : 1);

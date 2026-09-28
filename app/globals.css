@@ -1072,6 +1072,50 @@ input[type="time"]::-webkit-calendar-picker-indicator:hover {
   --glo-accent-softer: rgba(255, 77, 29, 0.07);
   --glo-accent-border: rgba(255, 77, 29, 0.38);
 
+  /* ── The brand ramp ──────────────────────────────────────────
+     Every Tailwind v4 colour utility resolves var(--color-<hue>-<n>) rather
+     than a baked hex, so redefining the ramp here reaches ALL of them at
+     once: hover: and dark: variants, /20 opacity modifiers, gradient stops,
+     ring and border colours, and every shade nobody thought to list.
+
+     That is what the per-class rules below could not do. They matched
+     .bg-indigo-600 but not .dark\:bg-indigo-600 or .hover\:border-indigo-300,
+     which is why purple kept surfacing in dark mode - the sidebar's active
+     marker (bg-indigo-300), a card's hover border, the Retainer pill.
+
+     indigo is the app's brand colour, so it becomes the brand colour here,
+     with #ff4d1d landing on 600 where the primary button reads it. violet,
+     purple and fuchsia follow it: they are decorative rather than meaningful
+     - Retainer vs One-Time stays legible because One-Time is still sky - and
+     leaving them would have kept purple on screen, which is the whole
+     complaint.
+
+     Green, red, amber, sky and teal are untouched. Those carry meaning: paid,
+     overdue, pending, on track. A brand is not a reason to make them orange. */
+  --color-indigo-50:  #fff5f1;  --color-violet-50:  #fff5f1;
+  --color-indigo-100: #ffe6dd;  --color-violet-100: #ffe6dd;
+  --color-indigo-200: #ffcab6;  --color-violet-200: #ffcab6;
+  --color-indigo-300: #ffa586;  --color-violet-300: #ffa586;
+  --color-indigo-400: #ff7d55;  --color-violet-400: #ff7d55;
+  --color-indigo-500: #ff6234;  --color-violet-500: #ff6234;
+  --color-indigo-600: #ff4d1d;  --color-violet-600: #ff4d1d;
+  --color-indigo-700: #db3a0c;  --color-violet-700: #db3a0c;
+  --color-indigo-800: #ae2f0b;  --color-violet-800: #ae2f0b;
+  --color-indigo-900: #7c220a;  --color-violet-900: #7c220a;
+  --color-indigo-950: #451105;  --color-violet-950: #451105;
+
+  --color-purple-50:  #fff5f1;  --color-fuchsia-50:  #fff5f1;
+  --color-purple-100: #ffe6dd;  --color-fuchsia-100: #ffe6dd;
+  --color-purple-200: #ffcab6;  --color-fuchsia-200: #ffcab6;
+  --color-purple-300: #ffa586;  --color-fuchsia-300: #ffa586;
+  --color-purple-400: #ff7d55;  --color-fuchsia-400: #ff7d55;
+  --color-purple-500: #ff6234;  --color-fuchsia-500: #ff6234;
+  --color-purple-600: #ff4d1d;  --color-fuchsia-600: #ff4d1d;
+  --color-purple-700: #db3a0c;  --color-fuchsia-700: #db3a0c;
+  --color-purple-800: #ae2f0b;  --color-fuchsia-800: #ae2f0b;
+  --color-purple-900: #7c220a;  --color-fuchsia-900: #7c220a;
+  --color-purple-950: #451105;  --color-fuchsia-950: #451105;
+
   /* ── LIGHT: white page, black text ── */
   --glo-bg: #ffffff;
   --glo-surface: #ffffff;
@@ -1110,7 +1154,8 @@ input[type="time"]::-webkit-calendar-picker-indicator:hover {
   --glo-danger: #b91c1c;  --glo-danger-bg: rgba(220, 38, 38, 0.09); --glo-danger-line: rgba(220, 38, 38, 0.28);
   --glo-warn: #a16207;    --glo-warn-bg: rgba(202, 138, 4, 0.11);  --glo-warn-line: rgba(202, 138, 4, 0.30);
   --glo-info: #0369a1;    --glo-info-bg: rgba(2, 132, 199, 0.09);  --glo-info-line: rgba(2, 132, 199, 0.28);
-  --glo-violet: #6d28d9;  --glo-violet-bg: rgba(124, 58, 237, 0.09); --glo-violet-line: rgba(124, 58, 237, 0.28);
+  /* Follows the accent now - see the ramp note above. */
+  --glo-violet: var(--glo-accent-text); --glo-violet-bg: var(--glo-accent-softer); --glo-violet-line: var(--glo-accent-border);
   --glo-pink: #be185d;    --glo-pink-bg: rgba(219, 39, 119, 0.09);
   --glo-teal: #0f766e;    --glo-teal-bg: rgba(13, 148, 136, 0.09);  --glo-teal-line: rgba(13, 148, 136, 0.28);
 }
@@ -1151,7 +1196,7 @@ input[type="time"]::-webkit-calendar-picker-indicator:hover {
   --glo-danger: #fb7185;  --glo-danger-bg: rgba(244, 63, 94, 0.12); --glo-danger-line: rgba(244, 63, 94, 0.34);
   --glo-warn: #fbbf24;    --glo-warn-bg: rgba(250, 204, 21, 0.12); --glo-warn-line: rgba(250, 204, 21, 0.34);
   --glo-info: #38bdf8;    --glo-info-bg: rgba(56, 189, 248, 0.12); --glo-info-line: rgba(56, 189, 248, 0.34);
-  --glo-violet: #a78bfa;  --glo-violet-bg: rgba(167, 139, 250, 0.12); --glo-violet-line: rgba(167, 139, 250, 0.34);
+  --glo-violet: var(--glo-accent); --glo-violet-bg: var(--glo-accent-soft); --glo-violet-line: var(--glo-accent-border);
   --glo-pink: #f472b6;    --glo-pink-bg: rgba(244, 114, 182, 0.12);
   --glo-teal: #2dd4bf;    --glo-teal-bg: rgba(45, 212, 191, 0.12);  --glo-teal-line: rgba(45, 212, 191, 0.34);
 }
@@ -1404,3 +1449,27 @@ input[type="time"]::-webkit-calendar-picker-indicator:hover {
 
 /* The hairline around the logo tile, which was indigo to match it. */
 .theme-glo .ring-indigo-400\/20 { --tw-ring-color: rgba(255, 77, 29, 0.28); }
+
+/* ── The loading ring ─────────────────────────────────────────
+   Rotates the whole SVG, so the arc travels around a mark that stays put.
+   transform rather than the `rotate` property: this is hand-written CSS, not
+   Tailwind output, and transform is the form every target supports.
+
+   A linear curve on purpose. Easing a loop makes it appear to stall at the
+   ends, which reads as the thing having hung — the exact impression a
+   spinner exists to prevent. */
+@keyframes brand-loader-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.brand-loader-ring {
+  transform-origin: 50% 50%;
+  animation: brand-loader-spin 900ms linear infinite;
+}
+
+/* Still turning, because a still spinner says "stuck" rather than "calm" —
+   just slowly enough not to pull at the edge of someone's vision. */
+@media (prefers-reduced-motion: reduce) {
+  .brand-loader-ring { animation-duration: 2600ms; }
+}

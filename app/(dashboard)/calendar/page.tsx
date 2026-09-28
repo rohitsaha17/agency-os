@@ -741,7 +741,7 @@ function CalendarPageBody() {
                     <span
                       key={i.id}
                       className="w-[5px] h-[5px] rounded-full"
-                      style={{ backgroundColor: i.creativeType.color ?? "#6366f1" }}
+                      style={{ backgroundColor: i.creativeType.color ?? "var(--glo-accent, #6366f1)" }}
                     />
                   ))}
                   {dayItems.length === 0 && (evs.length > 0 || legacy.length > 0) && (

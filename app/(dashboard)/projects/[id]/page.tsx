@@ -128,7 +128,9 @@ function formatBudget(budget: number | null, currency: string) {
 function ProgressRing({ progress }: { progress: number }) {
   const r = 20, circ = 2 * Math.PI * r;
   const offset = circ - (progress / 100) * circ;
-  const color = progress >= 75 ? "#10b981" : progress >= 40 ? "#6366f1" : "#d1d5db";
+  const color = progress >= 75 ? "#10b981"
+    : progress >= 40 ? "var(--glo-accent, #6366f1)"
+    : "#d1d5db";
   return (
     <svg width="52" height="52" viewBox="0 0 52 52" className="-rotate-90">
       <circle cx="26" cy="26" r={r} fill="none" stroke="currentColor" strokeWidth="5" className="text-gray-100 dark:text-slate-800" />

@@ -33,10 +33,17 @@ export function CelebrationsCard() {
     return () => { alive = false; };
   }, []);
 
-  if (!data || (!data.today.length && !data.upcoming.length)) return null;
+  // Only while the first request is in flight.
+  //
+  // It used to hide itself whenever the week held no birthdays, which made an
+  // empty week indistinguishable from a feature that was not working — and
+  // the holidays card beside it now always shows, so an absent one next to a
+  // present one reads as broken rather than quiet.
+  if (!data) return null;
 
   const mine = data.today.filter((c) => c.personId === data.meId);
   const theirs = data.today.filter((c) => c.personId !== data.meId);
+  const nothing = !data.today.length && !data.upcoming.length;
 
   return (
     <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
@@ -86,6 +93,13 @@ export function CelebrationsCard() {
               </li>
             ))}
           </ul>
+        )}
+
+        {nothing && (
+          <p className="text-xs text-gray-500">
+            No birthdays or anniversaries in the next week. They appear here
+            once dates of birth and joining are filled in on People.
+          </p>
         )}
 
         {data.upcoming.length > 0 && (

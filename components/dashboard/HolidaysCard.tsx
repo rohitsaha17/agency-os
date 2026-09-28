@@ -57,10 +57,16 @@ export function HolidaysCard() {
 
   useEffect(load, [load]);
 
+  // Only while the first request is in flight. After that the card is always
+  // on the page.
+  //
+  // It used to hide itself when the list came back empty and the viewer could
+  // not add anything — which meant a workspace that had not listed its
+  // holidays yet was indistinguishable from a broken feature, and the only
+  // way to tell was to open the network tab. A reference list that is
+  // sometimes absent is worse than one that is briefly empty: the empty state
+  // lasts until somebody fills it in once, and then never again.
   if (!holidays) return null;
-  // Nothing coming, nothing that went wrong, and nothing you could do about
-  // it either way: show nothing rather than an empty box every day.
-  if (!holidays.length && !canManage && !failed) return null;
 
   const extra = holidays.length - ON_DASHBOARD;
 
@@ -96,7 +102,9 @@ export function HolidaysCard() {
           </div>
         ) : holidays.length === 0 ? (
           <p className="text-xs text-gray-500">
-            Nothing listed yet. Add the year&rsquo;s closures so everyone can see them.
+            {canManage
+              ? "Nothing listed yet. Add the year’s closures so everyone can see them."
+              : "No holidays listed yet."}
           </p>
         ) : (
           <ul className="divide-y divide-gray-100">

@@ -11,6 +11,7 @@
  * to values this build names — so the whitelist is asserted directly rather
  * than trusted.
  */
+import { readFileSync } from "fs";
 import {
   WORKSPACE_THEMES, resolveTheme, themeClass, ALL_THEME_CLASSES,
 } from "../lib/theme";
@@ -76,6 +77,29 @@ check("no empty entries", ALL_THEME_CLASSES.includes(""), false);
 check("one entry per non-default theme",
   ALL_THEME_CLASSES.length, WORKSPACE_THEMES.length - 1);
 check("glo is in it", ALL_THEME_CLASSES.includes("theme-glo"), true);
+
+console.log("");
+console.log("— the class lands on a soft navigation too —");
+/*
+  Signing in is router.push("/"), a CLIENT navigation. React creates the theme
+  <script> element rather than the browser parsing it, and a script inserted
+  that way NEVER executes — checked in a browser, not assumed. So the inline
+  script on its own left everyone who had just signed in looking at the
+  default theme until they happened to reload, which is the one thing nobody
+  does to a page that has just loaded.
+
+  Asserted against the source, because the failure is silent: nothing throws,
+  nothing 404s, the page renders perfectly in the wrong colours.
+*/
+const componentSource = readFileSync("components/layout/WorkspaceTheme.tsx", "utf8");
+check("the inline script is still there, for the hard load",
+  /dangerouslySetInnerHTML/.test(componentSource), true);
+check("and an effect applies it too, for every client navigation",
+  /classList\.add\(/.test(componentSource), true);
+check("that effect runs before paint, or the wrong theme flashes",
+  /useLayoutEffect/.test(componentSource), true);
+check("stale classes are cleared before the right one goes on",
+  /classList\.remove\(\.\.\.ALL_THEME_CLASSES\)/.test(componentSource), true);
 
 console.log(fails === 0 ? "\nAll theme checks passed." : `\n${fails} FAILED`);
 process.exit(fails === 0 ? 0 : 1);

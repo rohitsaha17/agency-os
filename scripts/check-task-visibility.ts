@@ -196,7 +196,7 @@ console.log("— a task made on a project belongs to it —");
 */
 const projectPageSource = readFileSync("app/(dashboard)/projects/[id]/page.tsx", "utf8");
 check("the project page hands the modal its project",
-  /<TaskModal[^>]*projectId=\{id\}/s.test(projectPageSource), true);
+  /<TaskModal[\s\S]*?projectId=\{id\}/.test(projectPageSource), true);
 
 const taskModalSource = readFileSync("components/tasks/TaskModal.tsx", "utf8");
 check("and the modal posts to the project's own route when it has one",

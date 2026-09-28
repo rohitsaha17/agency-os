@@ -6,7 +6,7 @@ import { requireCapability, taskVisibilityScope } from "@/lib/api-permissions";
 import { apiError, handleApiError, ApiError } from "@/lib/api-errors";
 import { logStatus } from "@/lib/audit";
 import { notify, notifyMany } from "@/lib/notify";
-import { can } from "@/lib/permissions";
+import { can, canAssignToUser } from "@/lib/permissions";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -157,11 +157,27 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       if (!manager) throw new ApiError("Manager not found", 404);
     }
     if (assigneeIds !== undefined && Array.isArray(assigneeIds) && assigneeIds.length > 0) {
-      const count = await prisma.user.count({
+      const targets = await prisma.user.findMany({
         where: { id: { in: assigneeIds }, organizationId: user.organizationId },
+        select: { id: true, name: true, role: true },
       });
-      if (count !== new Set(assigneeIds).size) {
+      if (targets.length !== new Set(assigneeIds).size) {
         throw new ApiError("One or more assignees not found", 404);
+      }
+      /*
+        Who you may hand work to, by role.
+
+        POST /api/tasks has always checked this; editing a task did not, so
+        the rule could be walked around by creating a task and then adding
+        the assignee in a second request. The list arrives from the client
+        either way, so it is checked on both doors or on neither.
+      */
+      const refused = targets.filter((t) => !canAssignToUser(user, t));
+      if (refused.length) {
+        throw new ApiError(
+          `You can't assign work to ${refused.map((t) => t.name).join(", ")}.`,
+          403,
+        );
       }
     }
 

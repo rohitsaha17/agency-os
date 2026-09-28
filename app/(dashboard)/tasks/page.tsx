@@ -67,6 +67,7 @@ import { SubmitWorkDialog, RequestChangesDialog, MarkPostedDialog } from "@/comp
 import { broadcastChange, useLiveRefresh } from "@/lib/live";
 import { toast } from "@/lib/toast";
 import type { Task, TaskStatus } from "@/types";
+import { belongsOnList } from "@/lib/task-list-scope";
 import { Select } from "@/components/ui/Select";
 
 // ── Types ────────────────────────────────────────────────────
@@ -295,24 +296,11 @@ function TasksBoardInner() {
     if (seesEveryone && viewUserId === "__all__") return allVisible;
     const target = viewUserId || currentUser?.id;
     if (!target) return [];
-    return allVisible.filter((t) => {
-      const theirs = t.assignees?.find((a) => a.userId === target || a.user?.id === target);
-      if (!theirs) return false;
-      /*
-        Work you have declined is not on YOUR list.
-
-        You said you can't take it, so leaving it there reads as still yours to
-        do — and the only thing you can do with it is decline it again. It
-        stays on the task itself and in its history.
-
-        Only hidden from your own view. A planner looking at that person's
-        list is looking precisely because something needs reassigning, so for
-        them it stays, badged "<name> declined" with the reason and a way to
-        hand it on.
-      */
-      const isOwnList = target === currentUser?.id;
-      return !(isOwnList && theirs.acceptance === "DECLINED");
-    });
+    // The rule itself lives in lib/task-list-scope, asserted for every role
+    // by scripts/check-task-visibility.ts. It has to agree with the server's
+    // taskVisibilityScope, and when it did not, work an SMM had delegated was
+    // fetched and then dropped here.
+    return allVisible.filter((t) => belongsOnList(t, target, currentUser?.id));
   }, [allVisible, viewUserId, currentUser?.id, seesEveryone]);
 
   /** Only fetched for people who can act on it. */

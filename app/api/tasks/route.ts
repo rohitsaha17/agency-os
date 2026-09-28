@@ -36,18 +36,27 @@ export async function GET(req: NextRequest) {
       ...(status     && { status: status as never }),
       ...(priority   && { priority: priority as never }),
       ...(!includeCompleted && !status && { status: { not: "DONE" as const } }),
-      ...(q && {
-        OR: [
-          { title:       { contains: q, mode: "insensitive" as const } },
-          { description: { contains: q, mode: "insensitive" as const } },
-        ],
-      }),
-      // v2: a task may be linked to a client directly OR through its project
-      ...(clientId && { OR: [{ clientId }, { project: { clientId } }] }),
       ...(assigneeId && { assignees: { some: { userId: assigneeId } } }),
-      // Nested under AND because the scope carries its own OR, and the
-      // clientId filter above may already have spent the top-level one.
-      AND: [taskVisibilityScope(user)],
+      /*
+        Every OR goes in AND, one entry each.
+
+        An object has one `OR` key. The search terms and the client filter
+        both wanted it, so searching inside a client silently dropped the
+        search — the later spread simply overwrote the earlier one and the
+        query still looked reasonable. Separate AND entries mean each
+        condition narrows the result instead of replacing its neighbour.
+      */
+      AND: [
+        taskVisibilityScope(user),
+        ...(q ? [{
+          OR: [
+            { title:       { contains: q, mode: "insensitive" as const } },
+            { description: { contains: q, mode: "insensitive" as const } },
+          ],
+        }] : []),
+        // A task may be linked to a client directly OR through its project.
+        ...(clientId ? [{ OR: [{ clientId }, { project: { clientId } }] }] : []),
+      ],
     };
 
     // Take cap: default page size when no pagination flag,

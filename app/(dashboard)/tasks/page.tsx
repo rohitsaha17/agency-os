@@ -68,6 +68,7 @@ import { broadcastChange, useLiveRefresh } from "@/lib/live";
 import { toast } from "@/lib/toast";
 import type { Task, TaskStatus } from "@/types";
 import { belongsOnList } from "@/lib/task-list-scope";
+import { isDesignHead } from "@/lib/design-head";
 import { Select } from "@/components/ui/Select";
 
 // ── Types ────────────────────────────────────────────────────
@@ -286,6 +287,16 @@ function TasksBoardInner() {
   /** Who may look at somebody else's list. Same capability the API scopes on. */
   // Who may look at somebody else's list, not only their own.
   const seesEveryone = can(currentUser, "tasks.viewAll");
+  /*
+    The Head of Design gets the same picker, holding only their designers.
+
+    They are a TEAM member, so tasks.viewAll is false for them and the picker
+    was not offered at all. The server already limits what they receive to
+    their own work plus their designers' (taskVisibilityScope), so "everyone"
+    here means everyone they can see — which is exactly the designers.
+  */
+  const isDesignLead = isDesignHead(currentUser);
+  const canSwitchViewer = seesEveryone || isDesignLead;
 
   /**
    * The list actually on screen.
@@ -296,7 +307,7 @@ function TasksBoardInner() {
    * of what they could see anyway.
    */
   const orgTasks = useMemo(() => {
-    if (seesEveryone && viewUserId === "__all__") return allVisible;
+    if (canSwitchViewer && viewUserId === "__all__") return allVisible;
     const target = viewUserId || currentUser?.id;
     if (!target) return [];
     // The rule itself lives in lib/task-list-scope, asserted for every role
@@ -304,16 +315,24 @@ function TasksBoardInner() {
     // taskVisibilityScope, and when it did not, work an SMM had delegated was
     // fetched and then dropped here.
     return allVisible.filter((t) => belongsOnList(t, target, currentUser?.id));
-  }, [allVisible, viewUserId, currentUser?.id, seesEveryone]);
+  }, [allVisible, viewUserId, currentUser?.id, canSwitchViewer]);
 
   /** Only fetched for people who can act on it. */
   useEffect(() => {
-    if (!seesEveryone) return;
+    if (!canSwitchViewer) return;
     fetch("/api/users")
       .then((r) => (r.ok ? r.json() : []))
-      .then((d) => setPeople(Array.isArray(d) ? d.map((u: { id: string; name: string }) => ({ id: u.id, name: u.name })) : []))
+      .then((d) => {
+        if (!Array.isArray(d)) return;
+        // A design lead is offered their designers and nobody else, so the
+        // picker cannot name somebody whose list they would then be refused.
+        const rows = isDesignLead && !seesEveryone
+          ? d.filter((u: { jobTitle?: { isDesign?: boolean } | null }) => u.jobTitle?.isDesign)
+          : d;
+        setPeople(rows.map((u: { id: string; name: string }) => ({ id: u.id, name: u.name })));
+      })
       .catch(() => {});
-  }, [seesEveryone]);
+  }, [canSwitchViewer, isDesignLead, seesEveryone]);
 
   const viewingLabel =
     viewUserId === "__all__" ? "Everyone"
@@ -1208,7 +1227,7 @@ function TasksBoardInner() {
             {/* Whose list. Only for people the API would answer for anyway —
                 a junior asking for a colleague would get an empty array, so
                 offering the control would just be a lie. */}
-            {seesEveryone && people.length > 0 && (
+            {canSwitchViewer && people.length > 0 && (
               <Select
                 value={viewUserId}
                 onChange={setViewUserId}
@@ -1216,7 +1235,7 @@ function TasksBoardInner() {
                 size="sm"
                 options={[
                   { value: "", label: "My tasks" },
-                  { value: "__all__", label: "Everyone" },
+                  { value: "__all__", label: isDesignLead && !seesEveryone ? "All designers" : "Everyone" },
                   ...people
                     .filter((p) => p.id !== currentUser?.id)
                     .map((p) => ({ value: p.id, label: p.name })),

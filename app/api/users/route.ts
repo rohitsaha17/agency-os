@@ -25,7 +25,9 @@ const USER_FIELDS = {
   id: true, name: true, email: true, avatarUrl: true,
   role: true, isActive: true, createdAt: true,
   // v3: the job label is a row now, not an enum
-  jobTitle: { select: { id: true, name: true, slug: true, canBeAssignedWork: true } },
+  // isDesign so the pickers can offer a Head of Design their designers,
+  // and offer nobody else to them.
+  jobTitle: { select: { id: true, name: true, slug: true, canBeAssignedWork: true, isDesign: true } },
 } as const;
 
 // GET /api/users

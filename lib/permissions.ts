@@ -11,6 +11,8 @@
  * a second layer and never the only one — see stripFinancials().
  */
 
+import { designHeadMayAssignTo, type WithJobTitle as DesignAware } from "./design-head";
+
 export type Role = "OWNER" | "ADMIN" | "MANAGER" | "SMM" | "TEAM" | "MEMBER";
 
 export interface HasRole {
@@ -467,11 +469,21 @@ export function canAssignTo(actor: HasRole | null | undefined, targetRole: strin
  * accidentally letting an SMM assign sideways to another SMM.
  */
 export function canAssignToUser(
-  actor: HasRole | null | undefined,
-  target: { id?: string | null; role?: string | null },
+  actor: (HasRole & DesignAware) | null | undefined,
+  target: { id?: string | null; role?: string | null } & DesignAware,
 ): boolean {
   if (!actor) return false;
   if (actor.id && target.id && actor.id === target.id) return true;
+  /*
+    The Head of Design reaches their designers, and nobody else.
+
+    Checked before the role scope rather than after: the head holds TEAM,
+    whose scope is self-only, so asking the role first would refuse every
+    designer before this ever ran. It only ever WIDENS — a role that could
+    already assign to somebody keeps that, and this grants nothing outside
+    design.
+  */
+  if (designHeadMayAssignTo(actor, target)) return true;
   return canAssignTo(actor, target.role ?? "TEAM");
 }
 

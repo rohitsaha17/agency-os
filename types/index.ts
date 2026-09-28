@@ -85,6 +85,8 @@ export interface DesignationRole {
   /** Photographers and videographers manage their own diary; everyone else
    *  takes time off through leave. */
   blocksOwnDays: boolean;
+  /** Whether the Head of Design leads people with this job title. */
+  isDesign: boolean;
   sortOrder: number;
   _count?: { users: number };
 }
@@ -953,7 +955,7 @@ export interface TeamUser {
   /** v2 enum, deprecated — read only for pre-v3 rows */
   designation?: Designation | null;
   /** v3: the job label row this person holds */
-  jobTitle?: Pick<DesignationRole, "id" | "name" | "slug" | "canBeAssignedWork"> | null;
+  jobTitle?: Pick<DesignationRole, "id" | "name" | "slug" | "canBeAssignedWork" | "isDesign"> | null;
   isActive: boolean;
   createdAt: string;
 }

@@ -192,7 +192,9 @@ export async function POST(req: NextRequest) {
        */
       const targets = await prisma.user.findMany({
         where: { id: { in: peopleIds }, organizationId: user.organizationId },
-        select: { id: true, name: true, role: true },
+        // jobTitle because canAssignToUser asks whether the target is a
+        // designer; without it the Head of Design rule silently never fires.
+        select: { id: true, name: true, role: true, jobTitle: { select: { slug: true, isDesign: true } } },
       });
       const refused = targets.filter((t) => !canAssignToUser(user, t));
       if (refused.length) {

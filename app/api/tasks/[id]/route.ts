@@ -159,7 +159,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     if (assigneeIds !== undefined && Array.isArray(assigneeIds) && assigneeIds.length > 0) {
       const targets = await prisma.user.findMany({
         where: { id: { in: assigneeIds }, organizationId: user.organizationId },
-        select: { id: true, name: true, role: true },
+        // jobTitle because canAssignToUser asks whether the target is a
+        // designer; without it the Head of Design rule silently never fires.
+        select: { id: true, name: true, role: true, jobTitle: { select: { slug: true, isDesign: true } } },
       });
       if (targets.length !== new Set(assigneeIds).size) {
         throw new ApiError("One or more assignees not found", 404);

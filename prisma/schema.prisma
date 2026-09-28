@@ -468,6 +468,19 @@ model DesignationRole {
   /// titles are rows an agency creates: one calls them DOP, another Camera,
   /// another Shoot Crew.
   blocksOwnDays     Boolean  @default(false)
+
+  /// Does this job title count as design work?
+  ///
+  /// The Head of Design may hand work to, and see the work of, everybody
+  /// whose title is ticked here — and nobody else. A flag rather than a
+  /// hardcoded "Designer", because job titles are rows an agency creates:
+  /// one has Designer, another has Graphic Designer and Motion Designer, and
+  /// all of them are the head's people.
+  ///
+  /// The HEAD's own title is matched by its slug (head-of-design); this flag
+  /// describes the people under them.
+  isDesign          Boolean  @default(false)
+
   sortOrder         Int      @default(0)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt

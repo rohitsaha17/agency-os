@@ -1357,6 +1357,7 @@ function DesignationsSection({
                   {(d._count?.users ?? 0)} {(d._count?.users ?? 0) === 1 ? "person" : "people"}
                   {!d.canBeAssignedWork && " · not assignable"}
                   {d.blocksOwnDays && " · blocks own days"}
+                  {d.isDesign && " · led by the Head of Design"}
                 </p>
               </div>
               <button
@@ -1378,6 +1379,22 @@ function DesignationsSection({
                     : "text-gray-500 border-gray-200 hover:bg-gray-100"
                 }`}>
                 {d.blocksOwnDays ? "Own diary" : "Leave only"}
+              </button>
+              {/*
+                Which titles the Head of Design leads. They may hand work to
+                these people and see their work, and to nobody else — so this
+                is the list that decides who that is, rather than a hardcoded
+                "Designer" that would miss Motion Designer the day it is added.
+              */}
+              <button
+                onClick={() => patch(d.id, { isDesign: !d.isDesign })}
+                title="Can the Head of Design assign to, and see the work of, people with this job title?"
+                className={`text-xs px-2.5 py-1 rounded-lg border transition-colors ${
+                  d.isDesign
+                    ? "text-indigo-600 border-indigo-200 bg-indigo-50 hover:bg-indigo-100"
+                    : "text-gray-500 border-gray-200 hover:bg-gray-100"
+                }`}>
+                {d.isDesign ? "Design" : "Not design"}
               </button>
               <button
                 onClick={() => patch(d.id, { isActive: !d.isActive })}

@@ -13,6 +13,7 @@
 import { NextResponse } from "next/server";
 import { ApiError } from "./api-errors";
 import { can, stripFinancials, type Capability, type HasRole } from "./permissions";
+import { isDesignHead, designHeadMayAssignTo, designTasksScope, type WithJobTitle } from "./design-head";
 
 /** Throws ApiError(403) unless the user holds the capability. */
 export function requireCapability(
@@ -53,16 +54,31 @@ export function jsonFor<T>(
  * Returns `{}` for the unrestricted case so it can be spread unconditionally.
  * Combine with AND, never by spreading into a `where` that already has an OR.
  */
-export function taskVisibilityScope(user: { id: string; role?: string | null }) {
+export function taskVisibilityScope(
+  user: { id: string; role?: string | null } & WithJobTitle,
+) {
   // Everybody's work, for the people whose job is knowing who is doing what.
   // Was projects.manage, which tied seeing the board to running a project and
   // so left an SMM briefing four people unable to see where any of it went.
   if (can(user, "tasks.viewAll")) return {};
 
-  const mine = [
+  // Typed loosely because the clauses are different shapes — an assignee
+  // filter, a manager id, a relation traversal — and they only ever meet
+  // again inside Prisma's OR.
+  const mine: object[] = [
     { assignees: { some: { userId: user.id } } },
     { managerId: user.id },
   ];
+
+  /*
+    The Head of Design also sees their designers' work.
+
+    Added to `mine` rather than given its own branch, because it widens what
+    is theirs rather than replacing it — the head still sees the task they
+    were assigned and the one they are managing, and now the ones their
+    designers hold as well. Nobody else's.
+  */
+  if (isDesignHead(user)) mine.push(designTasksScope());
 
   if (can(user, "content.plan")) {
     return {

@@ -23,6 +23,8 @@ export interface CurrentUser {
     id: string;
     name: string;
     logoUrl: string | null;
+    /** Chrome carries the workspace's own logo. Platform-admin decision. */
+    whiteLabel?: boolean;
     currency?: string;
     timezone?: string;
     dateFormat?: string;

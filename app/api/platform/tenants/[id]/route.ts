@@ -12,6 +12,7 @@ import { requirePlatformAdmin } from "@/lib/platform-admin";
  *   trialDays     number  → sets trialEndsAt = now + N days (and plan TRIAL)
  *   trialEndsAt   ISO date | null → set/clear the trial end explicitly
  *   uploadLimitMb number  → per-organization storage cap in MB
+ *   whiteLabel    boolean → chrome carries the workspace's own logo
  */
 export async function PATCH(
   req: NextRequest,
@@ -61,6 +62,13 @@ export async function PATCH(
       data.uploadLimitMb = mb;
     }
 
+    if (body.whiteLabel !== undefined) {
+      if (typeof body.whiteLabel !== "boolean") {
+        return apiError("whiteLabel must be a boolean", 400);
+      }
+      data.whiteLabel = body.whiteLabel;
+    }
+
     if (Object.keys(data).length === 0) {
       return apiError("Nothing to update", 400);
     }
@@ -68,7 +76,10 @@ export async function PATCH(
     const updated = await prisma.organization.update({
       where: { id },
       data,
-      select: { id: true, name: true, plan: true, trialEndsAt: true, uploadLimitMb: true },
+      select: {
+        id: true, name: true, plan: true, trialEndsAt: true,
+        uploadLimitMb: true, whiteLabel: true,
+      },
     });
 
     return NextResponse.json(updated);

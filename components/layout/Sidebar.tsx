@@ -390,10 +390,70 @@ function CollapseToggle({ collapsed, onToggle }: { collapsed?: boolean; onToggle
   );
 }
 
+/** The rail's square mark when collapsed — same two states as Logo. */
+function CollapsedMark() {
+  const own = useOwnLogo();
+
+  if (own) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return (
+      <img
+        src={own.url}
+        alt={own.name}
+        title={own.name}
+        draggable={false}
+        className="w-8 h-8 object-contain select-none"
+      />
+    );
+  }
+
+  return (
+    <div
+      className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-lg flex items-center justify-center shadow-sm ring-1 ring-indigo-400/20"
+      title="Vibrnd Studio Flow"
+    >
+      <BrandLogo className="w-5 h-5 text-white" />
+    </div>
+  );
+}
+
 /* ─────────────────────────────────────────────────────────────
    Logo mark
    ───────────────────────────────────────────────────────────── */
+/**
+ * The workspace's own logo, where we have granted them that.
+ *
+ * Two conditions, both required. whiteLabel is our decision, made in the
+ * platform admin panel; logoUrl is theirs, set in their own settings. A
+ * workspace that uploads a logo does not thereby rebrand the product, and a
+ * workspace we have granted the flag to shows nothing different until they
+ * actually have a logo — so neither side can produce a broken header alone.
+ */
+function useOwnLogo(): { url: string; name: string } | null {
+  const { user } = useCurrentUser();
+  const org = user?.organization;
+  if (!org?.whiteLabel || !org.logoUrl) return null;
+  return { url: org.logoUrl, name: org.name };
+}
+
 function Logo() {
+  const own = useOwnLogo();
+
+  if (own) {
+    // Their mark replaces the whole lockup, wordmark included — a logo next
+    // to somebody else's product name reads as a co-brand, which is not what
+    // this is. Height-bounded so a wide or a square logo both behave.
+    // eslint-disable-next-line @next/next/no-img-element
+    return (
+      <img
+        src={own.url}
+        alt={own.name}
+        draggable={false}
+        className="h-8 w-auto max-w-[170px] object-contain object-left select-none"
+      />
+    );
+  }
+
   return (
     <div className="flex items-center gap-2.5 text-white">
       <div className="w-7 h-7 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-lg flex items-center justify-center shadow-sm ring-1 ring-indigo-400/20">
@@ -511,9 +571,7 @@ export function Sidebar() {
           collapsed ? "flex-col justify-center gap-0 px-2" : "justify-between px-4"
         }`}>
           {collapsed ? (
-            <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-lg flex items-center justify-center shadow-sm ring-1 ring-indigo-400/20" title="Vibrnd Studio Flow">
-              <BrandLogo className="w-5 h-5 text-white" />
-            </div>
+            <CollapsedMark />
           ) : (
             <>
               <Logo />

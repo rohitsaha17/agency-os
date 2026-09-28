@@ -50,7 +50,7 @@ export async function getCurrentUser(_req?: Request) {
       },
       organization: {
         select: {
-          id: true, name: true, slug: true, logoUrl: true,
+          id: true, name: true, slug: true, logoUrl: true, whiteLabel: true,
           currency: true, timezone: true, dateFormat: true,
           onboardingCompleted: true,
           // Free, for the same reason the rest of this select is: a column on

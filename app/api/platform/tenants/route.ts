@@ -32,6 +32,8 @@ export async function GET(req: NextRequest) {
         plan: true,
         trialEndsAt: true,
         uploadLimitMb: true,
+        whiteLabel: true,
+        logoUrl: true,
         users: {
           where: { role: "OWNER" },
           select: { id: true, name: true, email: true },
@@ -53,6 +55,10 @@ export async function GET(req: NextRequest) {
         plan: o.plan,
         trialEndsAt: o.trialEndsAt,
         uploadLimitMb: o.uploadLimitMb,
+        whiteLabel: o.whiteLabel,
+        // The URL itself is not needed in the admin list - only whether
+        // turning the flag on would actually show anything.
+        hasLogo: !!o.logoUrl,
         storageUsedBytes: o.files.reduce((s, f) => s + (f.size ?? 0), 0),
         owner: o.users[0] ?? null,
         counts: o._count,

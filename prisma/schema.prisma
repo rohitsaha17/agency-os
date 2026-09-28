@@ -1550,6 +1550,16 @@ model Organization {
   /// updated — no organization id appears anywhere in the codebase.
   theme            String  @default("default")
 
+  /// Whether this workspace's chrome carries its OWN logo instead of the
+  /// Vibrnd lockup.
+  ///
+  /// Decided by us from the platform admin panel, never by the tenant. A
+  /// workspace cannot white-label itself by uploading a logo: logoUrl is
+  /// theirs to set and is used on their documents either way, and this flag
+  /// is the separate decision about whether it also replaces our mark in the
+  /// product. Default false, so every existing workspace is unchanged.
+  whiteLabel       Boolean @default(false)
+
   // Letterhead / PDF template
   letterheadLogoUrl  String?
   letterheadHeader   String?

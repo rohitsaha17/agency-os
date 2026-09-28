@@ -71,6 +71,7 @@ export default async function DashboardLayout({
         organization: {
           select: {
             id: true, name: true, slug: true, logoUrl: true, currency: true,
+            whiteLabel: true,
             timezone: true, dateFormat: true,
             onboardingCompleted: true, plan: true, trialEndsAt: true,
             // One more column on a row this query already reads.

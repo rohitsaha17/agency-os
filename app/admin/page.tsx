@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   Building2, Plus, Loader2, KeyRound, RefreshCw, CheckCircle2,
   Clock, Users, FolderKanban, Receipt, LogOut, Copy, Inbox, Mail, Gauge, Sparkles,
+  ImageIcon,
 } from "lucide-react";
 import { BrandLogo } from "@/components/ui/BrandLogo";
 
@@ -39,6 +40,10 @@ interface Tenant {
   plan: "TRIAL" | "FULL";
   trialEndsAt: string | null;
   uploadLimitMb: number;
+  /** Chrome carries this workspace's own logo instead of the Vibrnd mark. */
+  whiteLabel: boolean;
+  /** Whether they have actually uploaded one — the flag is moot without it. */
+  hasLogo: boolean;
   storageUsedBytes: number;
   owner: { id: string; name: string; email: string } | null;
   counts: { users: number; clients: number; projects: number; invoices: number };
@@ -128,9 +133,10 @@ export default function PlatformAdminPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error?.message || "Update failed");
-      setTenants((prev) => prev.map((t) => t.id === tenantId
-        ? { ...t, plan: data.plan, trialEndsAt: data.trialEndsAt, uploadLimitMb: data.uploadLimitMb }
-        : t));
+      // Spread the response rather than naming fields: the route returns the
+      // whole updated row, and listing three of them meant a PATCH of anything
+      // else blanked the other two in the table.
+      setTenants((prev) => prev.map((t) => t.id === tenantId ? { ...t, ...data } : t));
       setPlanMsg({ id: tenantId, text: okText });
     } catch (err) {
       setPlanMsg({ id: tenantId, text: err instanceof Error ? err.message : "Update failed", error: true });
@@ -484,6 +490,33 @@ export default function PlatformAdminPage() {
                         >
                           Set limit
                         </button>
+                      </div>
+                      {/* Branding — whose mark the product wears for them */}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs text-slate-500 w-20">Branding</span>
+                        <button
+                          onClick={() => patchTenant(
+                            t.id,
+                            { whiteLabel: !t.whiteLabel },
+                            t.whiteLabel
+                              ? "Back to the Vibrnd mark."
+                              : "Their own logo now shows in the sidebar.",
+                          )}
+                          disabled={planBusy === t.id || (!t.whiteLabel && !t.hasLogo)}
+                          className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                            t.whiteLabel
+                              ? "bg-indigo-600 hover:bg-indigo-500 text-white"
+                              : "border border-white/[0.08] text-slate-300 hover:bg-white/[0.05]"
+                          }`}
+                        >
+                          <ImageIcon className="w-3.5 h-3.5" />
+                          {t.whiteLabel ? "Their logo — on" : "Use their logo"}
+                        </button>
+                        <span className="text-xs text-slate-500">
+                          {t.hasLogo
+                            ? "Replaces the Vibrnd mark in their sidebar. It sits on dark chrome, so it needs to read on black."
+                            : "No logo uploaded yet — they add one in Settings before this can do anything."}
+                        </span>
                       </div>
                     </div>
                   )}

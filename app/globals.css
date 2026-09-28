@@ -1383,3 +1383,24 @@ input[type="time"]::-webkit-calendar-picker-indicator:hover {
 /* Follows --glo-surface, so it is right in light, in dark, and inside the
    dark chrome where that variable is redefined again. */
 .theme-glo .ring-surface { --tw-ring-color: var(--glo-surface); }
+
+/* -- Gradients ------------------------------------------------
+   A gradient's colour lives in --tw-gradient-from / --tw-gradient-to, never
+   in a background-color, so not one of the mappings above reaches it. These
+   are the indigo-to-indigo marks - the logo tile, the user avatar, the round
+   initials in the message list - that stayed purple while everything around
+   them went orange.
+
+   from takes the lighter orange and to the base, keeping the light-to-dark
+   direction the indigo pair had. */
+.theme-glo .from-indigo-400,
+.theme-glo .from-indigo-500 { --tw-gradient-from: var(--glo-accent-hover); }
+.theme-glo .to-indigo-600,
+.theme-glo .to-purple-400   { --tw-gradient-to: var(--glo-accent); }
+.theme-glo .via-indigo-500  { --tw-gradient-via: var(--glo-accent); }
+.theme-glo .from-indigo-50  { --tw-gradient-from: var(--glo-accent-softer); }
+.theme-glo .from-indigo-100 { --tw-gradient-from: var(--glo-accent-soft); }
+.theme-glo .to-purple-100   { --tw-gradient-to: var(--glo-accent-soft); }
+
+/* The hairline around the logo tile, which was indigo to match it. */
+.theme-glo .ring-indigo-400\/20 { --tw-ring-color: rgba(255, 77, 29, 0.28); }

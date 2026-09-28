@@ -700,10 +700,6 @@ export default function DashboardPage() {
             it renders nothing at all in a week when nobody is celebrating. */}
         <CelebrationsCard />
 
-        {/* The days the office is closed. Informational only — it is not
-            wired into deadlines, availability or attendance. */}
-        <HolidaysCard />
-
         {/* v3: the blocks THIS role needs — a junior lands on their work, an
             SMM on their review queue, a manager on the money. */}
         <RoleBlocks currency={data.currency} />
@@ -862,6 +858,15 @@ export default function DashboardPage() {
         </SectionCard>
 
         </>)}
+
+        {/*
+          The days the office is closed.
+
+          At the foot on purpose: it is reference material, not something to
+          act on, and it was pushing the day's actual work down the page.
+          Outside the seesOrgOverview block, because everybody gets it.
+        */}
+        <HolidaysCard />
 
       </div>
     </div>

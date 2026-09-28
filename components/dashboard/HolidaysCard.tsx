@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { CalendarDays, Plus, Trash2, Loader2 } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 
-type Holiday = { id: string; name: string; date: string };
+type Holiday = { id: string; name: string; date: string; endDate?: string | null };
 
 /** Shown on the dashboard. Long enough to be useful, short enough to ignore. */
 const ON_DASHBOARD = 4;
@@ -71,12 +71,12 @@ export function HolidaysCard() {
           <ul className="divide-y divide-gray-100">
             {holidays.slice(0, ON_DASHBOARD).map((h) => (
               <li key={h.id} className="flex items-baseline gap-3 py-1.5 first:pt-0 last:pb-0">
-                <span className="text-xs font-semibold text-gray-900 tabular-nums w-[4.5rem] flex-shrink-0">
-                  {dayLabel(h.date)}
+                <span className="text-xs font-semibold text-gray-900 tabular-nums w-[5.5rem] flex-shrink-0">
+                  {spanLabel(h)}
                 </span>
                 <span className="text-sm text-gray-700 min-w-0 truncate">{h.name}</span>
                 <span className="ml-auto text-[11px] text-gray-400 flex-shrink-0">
-                  {weekday(h.date)}
+                  {spanNote(h)}
                 </span>
               </li>
             ))}
@@ -112,6 +112,8 @@ function HolidayManager({ open, onClose }: { open: boolean; onClose: () => void 
   const [loading, setLoading] = useState(false);
   const [name, setName] = useState("");
   const [date, setDate] = useState("");
+  /** Optional. Empty means the closure is one day. */
+  const [endDate, setEndDate] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -135,13 +137,14 @@ function HolidayManager({ open, onClose }: { open: boolean; onClose: () => void 
       const res = await fetch("/api/holidays", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, date }),
+        body: JSON.stringify({ name, date, endDate: endDate || undefined }),
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d?.error?.message || "Could not add that");
       setRows((prev) => [...prev, d].sort((a, b) => a.date.localeCompare(b.date)));
       setName("");
       setDate("");
+      setEndDate("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not add that");
     } finally {
@@ -165,6 +168,15 @@ function HolidayManager({ open, onClose }: { open: boolean; onClose: () => void 
             value={date}
             onChange={(e) => setDate(e.target.value)}
             aria-label="Date"
+            className="px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+          <input
+            type="date"
+            value={endDate}
+            min={date || undefined}
+            onChange={(e) => setEndDate(e.target.value)}
+            aria-label="Last day, if it runs over several"
+            title="Last day — leave empty for a single day"
             className="px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
           <input
@@ -198,11 +210,11 @@ function HolidayManager({ open, onClose }: { open: boolean; onClose: () => void 
           <ul className="divide-y divide-gray-100 dark:divide-slate-800 max-h-80 overflow-y-auto">
             {rows.map((h) => (
               <li key={h.id} className="flex items-center gap-3 py-2">
-                <span className="text-xs font-semibold text-gray-900 dark:text-slate-100 tabular-nums w-[4.5rem] flex-shrink-0">
-                  {dayLabel(h.date)}
+                <span className="text-xs font-semibold text-gray-900 dark:text-slate-100 tabular-nums w-[5.5rem] flex-shrink-0">
+                  {spanLabel(h)}
                 </span>
                 <span className="text-sm text-gray-700 dark:text-slate-300 min-w-0 truncate">{h.name}</span>
-                <span className="ml-auto text-[11px] text-gray-400 flex-shrink-0">{weekday(h.date)}</span>
+                <span className="ml-auto text-[11px] text-gray-400 flex-shrink-0">{spanNote(h)}</span>
                 <button
                   onClick={() => remove(h.id)}
                   aria-label={`Remove ${h.name}`}
@@ -232,6 +244,34 @@ const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 function dayLabel(iso: string): string {
   const [, m, d] = iso.split("-").map(Number);
   return `${d} ${MONTHS[m - 1] ?? ""}`;
+}
+
+/** "2 Oct", or "20–22 Oct" when a closure runs over several days. */
+function spanLabel(h: Holiday): string {
+  if (!h.endDate || h.endDate === h.date) return dayLabel(h.date);
+  const [, m1, d1] = h.date.split("-").map(Number);
+  const [, m2, d2] = h.endDate.split("-").map(Number);
+  // Inside one month the month is said once: 20–22 Oct, not 20 Oct – 22 Oct.
+  return m1 === m2
+    ? `${d1}–${d2} ${MONTHS[m1 - 1] ?? ""}`
+    : `${dayLabel(h.date)}–${dayLabel(h.endDate)}`;
+}
+
+/**
+ * The weekday for one day; how many days for a range.
+ *
+ * A range's weekday is the less useful fact — "Mon" says nothing about a
+ * closure that also covers Tuesday and Wednesday, where the length is the
+ * thing being asked about.
+ */
+function spanNote(h: Holiday): string {
+  if (!h.endDate || h.endDate === h.date) return weekday(h.date);
+  const [y1, m1, d1] = h.date.split("-").map(Number);
+  const [y2, m2, d2] = h.endDate.split("-").map(Number);
+  const days = Math.round(
+    (Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)) / 86_400_000,
+  ) + 1;
+  return `${days} days`;
 }
 
 /** Which weekday it lands on — the first thing anybody wants to know. */

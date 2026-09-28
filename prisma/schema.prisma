@@ -2120,6 +2120,12 @@ model Holiday {
   /// conversion is ever applied to it. Storing midnight as an instant is how
   /// a holiday ends up displaying as the 1st for half the world.
   date           DateTime @db.Date
+
+  /// The last day, when the closure runs over several — Diwali, a shutdown
+  /// week. Null means the one day. Stored rather than derived so a two-day
+  /// holiday is one row with one name, not two rows somebody has to keep in
+  /// step with each other.
+  endDate        DateTime? @db.Date
   name           String
   createdAt      DateTime @default(now())
 

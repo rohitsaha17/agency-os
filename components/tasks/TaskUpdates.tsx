@@ -132,7 +132,7 @@ export function TaskUpdates({ taskId }: TaskUpdatesProps) {
                 return (
                   <div key={update.id} className="flex gap-3 group">
                     {/* Timeline dot */}
-                    <div className={`w-3.5 h-3.5 rounded-full flex-shrink-0 mt-1 z-10 ${meta.dot} ring-2 ring-white`} />
+                    <div className={`w-3.5 h-3.5 rounded-full flex-shrink-0 mt-1 z-10 ${meta.dot} ring-2 ring-surface`} />
                     <div className="flex-1 min-w-0 pb-1">
                       <div className={`rounded-lg border px-3 py-2.5 ${meta.bg}`}>
                         <div className="flex items-center gap-1.5 mb-1">

@@ -194,12 +194,12 @@ function AssigneeRow({ task, onOpen }: { task: Task; onOpen: (t: Task) => void }
         </div>
       )}
       {task.assignees.slice(0, 3).map((a) => (
-        <div key={a.userId} title={a.user.name} className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 text-[9px] font-semibold flex items-center justify-center ring-1 ring-white -ml-1 first:ml-0">
+        <div key={a.userId} title={a.user.name} className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 text-[9px] font-semibold flex items-center justify-center ring-1 ring-surface -ml-1 first:ml-0">
           {initials(a.user.name)}
         </div>
       ))}
       {task.assignees.length > 3 && (
-        <div className="w-5 h-5 rounded-full bg-gray-100 text-gray-500 text-[9px] font-semibold flex items-center justify-center ring-1 ring-white -ml-1">
+        <div className="w-5 h-5 rounded-full bg-gray-100 text-gray-500 text-[9px] font-semibold flex items-center justify-center ring-1 ring-surface -ml-1">
           +{task.assignees.length - 3}
         </div>
       )}

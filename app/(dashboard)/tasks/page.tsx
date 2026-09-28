@@ -808,12 +808,12 @@ function TasksBoardInner() {
       <div className="flex items-center -space-x-1.5" title={people.map((p) => p.name).join(", ")}>
         {people.slice(0, 2).map((p) => (
           <span key={p.id}
-            className="w-6 h-6 rounded-full bg-indigo-100 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 text-[10px] font-semibold flex items-center justify-center ring-2 ring-white dark:ring-slate-900">
+            className="w-6 h-6 rounded-full bg-indigo-100 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 text-[10px] font-semibold flex items-center justify-center ring-2 ring-surface">
             {p.name.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase()}
           </span>
         ))}
         {people.length > 2 && (
-          <span className="w-6 h-6 rounded-full bg-gray-100 dark:bg-white/[0.08] text-gray-500 dark:text-slate-400 text-[10px] font-semibold flex items-center justify-center ring-2 ring-white dark:ring-slate-900">
+          <span className="w-6 h-6 rounded-full bg-gray-100 dark:bg-white/[0.08] text-gray-500 dark:text-slate-400 text-[10px] font-semibold flex items-center justify-center ring-2 ring-surface">
             +{people.length - 2}
           </span>
         )}

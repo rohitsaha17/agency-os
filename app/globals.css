@@ -105,6 +105,17 @@
    →  slate-800 (tertiary/nested)  →  slate-700 (emphasis) */
 
 .dark .bg-white        { background-color: #0f172a; }  /* slate-900  */
+
+/* The gap in an avatar stack.
+
+   Stacked avatars overlap, and what separates them is a ring painted the
+   colour of the surface BEHIND them, so it reads as a gap rather than as a
+   ring. Written as ring-white it only read that way on a white page: on a
+   dark card each avatar got a bright halo, and at -space-x-1.5 the halos of
+   two avatars crossed and drew what looked like a broken figure of eight.
+   Hence a name for the surface instead of a colour. */
+.ring-surface      { --tw-ring-color: #ffffff; }
+.dark .ring-surface { --tw-ring-color: #0f172a; }
 .dark .bg-gray-50      { background-color: #080f1e; }  /* deep navy  */
 .dark .bg-gray-100     { background-color: #1e293b; }  /* slate-800  */
 .dark .bg-gray-200     { background-color: #334155; }  /* slate-700  */
@@ -1368,3 +1379,7 @@ input[type="time"]::-webkit-calendar-picker-indicator:hover {
   background-color: var(--glo-accent-soft);
   border-color: var(--glo-accent);
 }
+
+/* Follows --glo-surface, so it is right in light, in dark, and inside the
+   dark chrome where that variable is redefined again. */
+.theme-glo .ring-surface { --tw-ring-color: var(--glo-surface); }

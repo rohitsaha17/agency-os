@@ -95,12 +95,12 @@ export function ProjectCard({ project }: ProjectCardProps) {
               <div className="flex items-center -space-x-1.5" title={members.map((m) => m.name).join(", ")}>
                 {members.slice(0, 3).map((m) => (
                   <span key={m.id}
-                    className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 text-[9px] font-semibold flex items-center justify-center ring-2 ring-white">
+                    className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 text-[9px] font-semibold flex items-center justify-center ring-2 ring-surface">
                     {initials(m.name)}
                   </span>
                 ))}
                 {members.length > 3 && (
-                  <span className="w-5 h-5 rounded-full bg-gray-100 text-gray-500 text-[9px] font-semibold flex items-center justify-center ring-2 ring-white">
+                  <span className="w-5 h-5 rounded-full bg-gray-100 text-gray-500 text-[9px] font-semibold flex items-center justify-center ring-2 ring-surface">
                     +{members.length - 3}
                   </span>
                 )}

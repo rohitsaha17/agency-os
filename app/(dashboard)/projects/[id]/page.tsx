@@ -946,7 +946,7 @@ export default function ProjectDetailPage() {
                 <span className="flex -space-x-1.5">
                   {(project.members ?? []).filter((m) => m.role === "SMM").map((m) => (
                     <span key={m.userId} title={m.user.name}
-                      className="w-6 h-6 rounded-full bg-gradient-to-br from-indigo-400 to-indigo-600 text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-white">
+                      className="w-6 h-6 rounded-full bg-gradient-to-br from-indigo-400 to-indigo-600 text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-surface">
                       {m.user.name.split(" ").map((w) => w[0]).slice(0, 2).join("")}
                     </span>
                   ))}

@@ -143,13 +143,13 @@ function TaskCard({
             <div
               key={a.userId}
               title={a.user.name}
-              className={`w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 text-[9px] font-semibold flex items-center justify-center ring-1 ring-white ${i > 0 || hasManager ? "-ml-1.5" : ""}`}
+              className={`w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 text-[9px] font-semibold flex items-center justify-center ring-1 ring-surface ${i > 0 || hasManager ? "-ml-1.5" : ""}`}
             >
               {initials(a.user.name)}
             </div>
           ))}
           {task.assignees.length > 4 && (
-            <div className="w-6 h-6 rounded-full bg-gray-100 text-gray-500 text-[9px] font-semibold flex items-center justify-center ring-1 ring-white -ml-1.5">
+            <div className="w-6 h-6 rounded-full bg-gray-100 text-gray-500 text-[9px] font-semibold flex items-center justify-center ring-1 ring-surface -ml-1.5">
               +{task.assignees.length - 4}
             </div>
           )}

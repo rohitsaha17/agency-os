@@ -438,27 +438,40 @@ function TasksBoardInner() {
     const wanted = searchParams.get("task");
     if (!tab && !wanted) return;
 
-    // A task link can't resolve until the list has loaded; wait rather than
-    // burning the one shot on an empty array.
-    if (wanted && allVisible.length === 0) return;
+    /*
+      Wait for the first load, not for a non-empty list.
+
+      This used to return while allVisible was empty — which is a perfectly
+      normal state, not a loading one. Somebody whose list was empty got no
+      panel, no message and no consumed link: the page simply sat there
+      looking fine, which is exactly what a broken flow looks like.
+    */
+    if (wanted && loading) return;
 
     if (tab === "approvals" && isHead) { router.replace("/approvals"); return; }
     if (wanted) {
       /*
-        Looked up in allVisible, not in orgTasks.
+        The list first, then the server.
 
-        orgTasks is whose list is on screen; allVisible is everything the
-        server was willing to return. A notification points at a specific
-        task, and the question a link asks is "may I see this", not "is it on
-        my list" — so a manager following a link about work they delegated
-        used to land on the tasks page with nothing open and no explanation.
+        allVisible is everything the server returned for this page, which is
+        not the same as everything you may open: work you DECLINED is
+        deliberately off your own list, somebody else's task may not be on
+        this page at all. A link asks "may I see this", and only the server
+        can answer that — so when the list does not have it, we ask.
 
-        Still nothing found means the row is genuinely out of reach, and that
-        is said out loud rather than left as a page that looks broken.
+        GET /api/tasks/[id] applies the same visibility rule, so a 403 or 404
+        here is a real refusal and is reported as one rather than left as a
+        page that looks fine and simply is not about the thing you clicked.
       */
       const t = allVisible.find((x) => x.id === wanted);
-      if (t) setOpenTask(t);
-      else setDeepLinkMiss(true);
+      if (t) {
+        setOpenTask(t);
+      } else {
+        fetch(`/api/tasks/${wanted}`)
+          .then((r) => (r.ok ? r.json() : null))
+          .then((full) => { if (full?.id) setOpenTask(full); else setDeepLinkMiss(true); })
+          .catch(() => setDeepLinkMiss(true));
+      }
     }
 
     consumedDeepLink.current = true;
@@ -466,7 +479,7 @@ function TasksBoardInner() {
     url.searchParams.delete("tab");
     url.searchParams.delete("task");
     window.history.replaceState({}, "", url.pathname + url.search);
-  }, [searchParams, isHead, allVisible]);
+  }, [searchParams, isHead, allVisible, loading]);
 
   const fetchApprovals = useCallback(async () => {
     if (!isHead) return;

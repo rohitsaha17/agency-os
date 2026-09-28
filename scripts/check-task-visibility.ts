@@ -25,6 +25,7 @@
  * That exclusion is asserted below too, so it stays a decision rather than
  * quietly becoming a gap again.
  */
+import { readFileSync } from "fs";
 import { taskVisibilityScope } from "../lib/api-permissions";
 import { belongsOnList } from "../lib/task-list-scope";
 
@@ -154,6 +155,27 @@ check("somebody else's list is what THEY hold, not what they handed out",
   belongsOnList(delegated, OTHER, ME), true);
 check("...so my delegated task is not on their list twice over",
   belongsOnList({ ...delegated, assignees: [] }, OTHER, ME), false);
+
+console.log("");
+console.log("— the dashboard counts what the list shows —");
+/*
+  Two files answer "what is my work": the dashboard's own queries, and
+  belongsOnList. They disagreed about declined assignments — the list drops
+  them from your own view, the dashboard counted them — so the same person at
+  the same moment saw "1 open" on one page and "0 open" on the other, and the
+  row they clicked led to a page with nothing on it.
+
+  Asserted against the source, because the disagreement is between a Prisma
+  filter and an array predicate and no type can reconcile those two.
+*/
+const dashboardSource = readFileSync("app/api/dashboard/v3/route.ts", "utf8");
+const myWorkFilters = dashboardSource.match(/assignees: \{ some: \{ userId: user\.id[^}]*\}/g) ?? [];
+check("the dashboard asks about my own assignments at all",
+  myWorkFilters.length > 0, true);
+check("and every one of those excludes work I declined",
+  myWorkFilters.every((f) => f.includes("DECLINED")), true);
+check("which is the rule the list already applied",
+  belongsOnList({ assignees: [{ userId: ME, acceptance: "DECLINED" }] }, ME, ME), false);
 
 console.log(fails === 0 ? "\nAll task-visibility checks passed." : `\n${fails} FAILED`);
 process.exit(fails === 0 ? 0 : 1);

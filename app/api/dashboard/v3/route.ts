@@ -62,7 +62,11 @@ export async function GET(req: NextRequest) {
         where: {
           organizationId: orgId, deletedAt: null,
           status: { notIn: ["DONE"] },
-          assignees: { some: { userId: user.id } },
+          // Not work you declined. You said you could not take it, and the
+          // task list already drops it from your own list for that reason —
+          // counting it here put "1 open" on the dashboard beside "0 open" on
+          // the tasks page, for the same person at the same moment.
+          assignees: { some: { userId: user.id, acceptance: { not: "DECLINED" } } },
         },
       }),
       myOverdue: prisma.task.findMany({
@@ -70,7 +74,11 @@ export async function GET(req: NextRequest) {
           organizationId: orgId, deletedAt: null,
           status: { notIn: ["DONE"] },
           dueDate: { lt: today },
-          assignees: { some: { userId: user.id } },
+          // Not work you declined. You said you could not take it, and the
+          // task list already drops it from your own list for that reason —
+          // counting it here put "1 open" on the dashboard beside "0 open" on
+          // the tasks page, for the same person at the same moment.
+          assignees: { some: { userId: user.id, acceptance: { not: "DECLINED" } } },
         },
         select: {
           id: true, title: true, dueDate: true, kind: true,
@@ -83,7 +91,11 @@ export async function GET(req: NextRequest) {
         where: {
           organizationId: orgId, deletedAt: null,
           status: "CHANGES_REQUESTED",
-          assignees: { some: { userId: user.id } },
+          // Not work you declined. You said you could not take it, and the
+          // task list already drops it from your own list for that reason —
+          // counting it here put "1 open" on the dashboard beside "0 open" on
+          // the tasks page, for the same person at the same moment.
+          assignees: { some: { userId: user.id, acceptance: { not: "DECLINED" } } },
         },
         select: {
           id: true, title: true, revision: true,
@@ -97,7 +109,11 @@ export async function GET(req: NextRequest) {
           organizationId: orgId, deletedAt: null, kind: "POST",
           status: { not: "DONE" },
           dueDate: { lte: weekAhead },
-          assignees: { some: { userId: user.id } },
+          // Not work you declined. You said you could not take it, and the
+          // task list already drops it from your own list for that reason —
+          // counting it here put "1 open" on the dashboard beside "0 open" on
+          // the tasks page, for the same person at the same moment.
+          assignees: { some: { userId: user.id, acceptance: { not: "DECLINED" } } },
         },
         select: {
           id: true, title: true, dueDate: true,

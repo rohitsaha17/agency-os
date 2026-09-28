@@ -408,6 +408,7 @@ function TasksBoardInner() {
    * The param is consumed once and then stripped from the URL, so a reload or
    * a back-navigation doesn't re-trigger it either.
    */
+  const [deepLinkMiss, setDeepLinkMiss] = useState(false);
   const consumedDeepLink = useRef(false);
   useEffect(() => {
     if (consumedDeepLink.current) return;
@@ -418,12 +419,25 @@ function TasksBoardInner() {
 
     // A task link can't resolve until the list has loaded; wait rather than
     // burning the one shot on an empty array.
-    if (wanted && orgTasks.length === 0) return;
+    if (wanted && allVisible.length === 0) return;
 
     if (tab === "approvals" && isHead) { router.replace("/approvals"); return; }
     if (wanted) {
-      const t = orgTasks.find((x) => x.id === wanted);
+      /*
+        Looked up in allVisible, not in orgTasks.
+
+        orgTasks is whose list is on screen; allVisible is everything the
+        server was willing to return. A notification points at a specific
+        task, and the question a link asks is "may I see this", not "is it on
+        my list" — so a manager following a link about work they delegated
+        used to land on the tasks page with nothing open and no explanation.
+
+        Still nothing found means the row is genuinely out of reach, and that
+        is said out loud rather than left as a page that looks broken.
+      */
+      const t = allVisible.find((x) => x.id === wanted);
       if (t) setOpenTask(t);
+      else setDeepLinkMiss(true);
     }
 
     consumedDeepLink.current = true;
@@ -431,7 +445,7 @@ function TasksBoardInner() {
     url.searchParams.delete("tab");
     url.searchParams.delete("task");
     window.history.replaceState({}, "", url.pathname + url.search);
-  }, [searchParams, isHead, orgTasks]);
+  }, [searchParams, isHead, allVisible]);
 
   const fetchApprovals = useCallback(async () => {
     if (!isHead) return;
@@ -1102,6 +1116,28 @@ function TasksBoardInner() {
     <div className="flex flex-col h-screen-below-appbar min-h-0">
       {/* ── Page header ── */}
       <div className="bg-white border-b border-gray-200 px-4 sm:px-6 lg:px-8 py-4 flex-shrink-0">
+        {/*
+          A link pointed at a task that is not here.
+
+          Said plainly, because the alternative — which is what happened
+          before — is a page that opens on somebody's ordinary task list with
+          nothing selected, looking like the link worked and the task is
+          simply gone.
+        */}
+        {deepLinkMiss && (
+          <div className="mb-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+            <p className="text-xs text-amber-800 flex-1">
+              That task could not be opened — it may have been deleted, or it
+              belongs to work you do not have access to.
+            </p>
+            <button
+              onClick={() => setDeepLinkMiss(false)}
+              className="text-xs font-medium text-amber-700 hover:underline flex-shrink-0"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div>
             <h1 className="text-xl font-semibold text-gray-900">Tasks</h1>

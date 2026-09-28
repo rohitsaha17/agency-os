@@ -48,7 +48,8 @@ const FILTER_LABEL: Record<SummaryBucket, string> = {
   open: "open tasks",
 };
 
-type PageTab = "plan" | "tasks" | "files" | "expenses" | "contracts" | "chat" | "invoices" | "tax";
+const PAGE_TABS = ["plan", "tasks", "files", "expenses", "contracts", "chat", "invoices", "tax"] as const;
+type PageTab = (typeof PAGE_TABS)[number];
 type ViewMode = "kanban" | "list";
 
 function formatFileSize(bytes: number) {
@@ -190,6 +191,8 @@ export default function ProjectDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<ViewMode>("list");
   const [pageTab, setPageTab] = useState<PageTab>("plan");
+  /** A link pointed at a task that is not in this project. */
+  const [deepLinkMiss, setDeepLinkMiss] = useState(false);
   /**
    * Which summary tile is narrowing the task list, if any.
    *
@@ -216,8 +219,9 @@ export default function ProjectDetailPage() {
   // whichever tab the link names.
   useEffect(() => {
     const requested = new URLSearchParams(window.location.search).get("tab");
-    const valid: PageTab[] = ["plan", "tasks", "files", "expenses", "contracts", "chat", "invoices", "tax"];
-    if (requested && valid.includes(requested as PageTab)) setPageTab(requested as PageTab);
+    if (requested && (PAGE_TABS as readonly string[]).includes(requested)) {
+      setPageTab(requested as PageTab);
+    }
   }, []);
 
   // A tab that isn't theirs — whether from a stale deep-link or the default —
@@ -532,6 +536,44 @@ export default function ProjectDetailPage() {
     setTaskModal({ open: false });
     fetchTasks(); fetchProject();
   };
+
+  /*
+    Open the task a link was about.
+
+    Seven places in this app build /projects/<id>?task=<id> — the
+    notification sent when work is assigned, the one sent when it is
+    declined, the missed-deadline report, the client review link, the
+    approvals queue — and until now NOTHING on this page read that
+    parameter. Every one of those links landed on the project's default tab
+    with no task open, which reads as the link being broken or the work
+    having vanished.
+
+    Read from window.location rather than useSearchParams so this needs no
+    Suspense boundary around a page that already renders plenty.
+  */
+  const consumedDeepLink = useRef(false);
+  useEffect(() => {
+    if (consumedDeepLink.current) return;
+    // Nothing can be found in a list that has not arrived.
+    if (tasksLoading) return;
+
+    // ?tab= has an owner above; this resolves the task the link is about.
+    const wanted = new URLSearchParams(window.location.search).get("task");
+    if (!wanted) return;
+
+    const t = tasks.find((x) => x.id === wanted);
+    if (t) {
+      setPageTab("tasks");
+      setTaskPanel({ open: true, task: t });
+    } else {
+      setDeepLinkMiss(true);
+    }
+
+    consumedDeepLink.current = true;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("task");
+    window.history.replaceState({}, "", url.pathname + url.search);
+  }, [tasks, tasksLoading]);
 
   const handleTaskPanelUpdated = (updatedTask: Task) => {
     fetchTasks(); fetchProject();
@@ -998,6 +1040,30 @@ export default function ProjectDetailPage() {
           if (bucket) setPageTab("tasks");
         }}
       />
+
+      {/*
+        A link named a task that is not in this project.
+
+        Said out loud, because the alternative is what used to happen: the
+        page opened on its default tab with nothing selected, which reads as
+        the link having worked and the task having disappeared.
+      */}
+      {deepLinkMiss && (
+        <div className="px-4 sm:px-6 lg:px-8 pt-3">
+          <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+            <p className="text-xs text-amber-800 flex-1">
+              That task could not be opened here — it may have been deleted, or
+              it may belong to another project.
+            </p>
+            <button
+              onClick={() => setDeepLinkMiss(false)}
+              className="text-xs font-medium text-amber-700 hover:underline flex-shrink-0"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Page tabs */}
       <div className="bg-white border-b border-gray-200 px-4 sm:px-6 lg:px-8">

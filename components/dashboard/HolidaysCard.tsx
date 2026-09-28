@@ -31,23 +31,36 @@ export function HolidaysCard() {
   const [holidays, setHolidays] = useState<Holiday[] | null>(null);
   const [canManage, setCanManage] = useState(false);
   const [managing, setManaging] = useState(false);
+  /**
+   * The request did not come back.
+   *
+   * Tracked separately from "came back empty", because the card used to
+   * treat them the same and simply disappear — so a failing endpoint looked
+   * exactly like a workspace with no holidays, and the only way to tell them
+   * apart was to open the network tab.
+   */
+  const [failed, setFailed] = useState(false);
 
   const load = useCallback(() => {
     fetch("/api/holidays?upcoming=1")
-      .then((r) => (r.ok ? r.json() : null))
+      .then(async (r) => {
+        if (!r.ok) throw new Error(String(r.status));
+        return r.json();
+      })
       .then((d) => {
-        if (!d) return;
         setHolidays(d.holidays ?? []);
         setCanManage(!!d.canManage);
+        setFailed(false);
       })
-      .catch(() => { /* a quiet card beats an error where it was */ });
+      .catch(() => { setFailed(true); setHolidays([]); });
   }, []);
 
   useEffect(load, [load]);
 
   if (!holidays) return null;
-  // Nothing coming, and nothing you could do about it: show nothing.
-  if (!holidays.length && !canManage) return null;
+  // Nothing coming, nothing that went wrong, and nothing you could do about
+  // it either way: show nothing rather than an empty box every day.
+  if (!holidays.length && !canManage && !failed) return null;
 
   const extra = holidays.length - ON_DASHBOARD;
 
@@ -69,7 +82,19 @@ export function HolidaysCard() {
           )}
         </div>
 
-        {holidays.length === 0 ? (
+        {failed ? (
+          <div className="flex items-start gap-2">
+            <p className="text-xs text-amber-700 dark:text-amber-400 flex-1">
+              Holidays could not be loaded just now.
+            </p>
+            <button
+              onClick={load}
+              className="text-xs font-medium text-indigo-600 hover:underline flex-shrink-0"
+            >
+              Try again
+            </button>
+          </div>
+        ) : holidays.length === 0 ? (
           <p className="text-xs text-gray-500">
             Nothing listed yet. Add the year&rsquo;s closures so everyone can see them.
           </p>

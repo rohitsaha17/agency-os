@@ -1848,6 +1848,16 @@ model Notification {
   readAt         DateTime?
   createdAt      DateTime  @default(now())
 
+  /// Stops one notice being sent twice, where something other than a single
+  /// user action decides to send it.
+  ///
+  /// Birthday greetings are dispatched by whoever opens their dashboard
+  /// first that morning. Without a key the next four people to sign in would
+  /// each greet the whole team again. Null for everything raised by an
+  /// ordinary action - Postgres treats nulls as distinct, so the constraint
+  /// costs those nothing.
+  dedupeKey      String?   @unique
+
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 

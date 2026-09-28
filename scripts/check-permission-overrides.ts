@@ -117,6 +117,11 @@ check("a junior sees neither",
 check("and a workspace can take the notebook back off its managers",
   can(asUser("MANAGER", { MANAGER: { "tasks.viewPersonal": false } }), "tasks.viewPersonal"), false);
 
+check("the audit trail belongs to the people who would be asked about it",
+  ["OWNER", "ADMIN", "MANAGER"].every((r) => can(asUser(r), "projects.activity")), true);
+check("...and not to the people doing the work",
+  can(asUser("SMM"), "projects.activity") || can(asUser("TEAM"), "projects.activity"), false);
+
 console.log("");
 console.log("— the delta stays a delta —");
 const none: PermissionOverrides = {};

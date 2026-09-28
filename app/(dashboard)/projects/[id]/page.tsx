@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
-  ChevronLeft, ChevronRight, Plus, Calendar, Calendar as CalIcon, DollarSign, CheckSquare,
+  ChevronLeft, ChevronRight, Plus, Calendar, Calendar as CalIcon, DollarSign, CheckSquare, History,
   LayoutGrid, List, Edit3, FileText, Sparkles,
   TrendingDown, Scroll, Clock, CheckCircle2, XCircle, Paperclip,
   Upload, Download, Image, Film, File as FileIcon, Grid3X3,
@@ -24,6 +24,8 @@ import { StatusLegend } from "@/components/tasks/StatusLegend";
 import { QuickInvoiceDialog } from "@/components/projects/QuickInvoiceDialog";
 import { InvoiceDetailDialog } from "@/components/projects/InvoiceDetailDialog";
 import { TaskPanel } from "@/components/tasks/TaskPanel";
+import { ActivityTab } from "@/components/projects/ActivityTab";
+import { ProjectTeam } from "@/components/projects/ProjectTeam";
 import { DeliveryDialog } from "@/components/tasks/DeliveryDialog";
 import type {
   Project, ProjectDeliverable, ProjectCycle, Task, TaskStatus, ProjectFormData,
@@ -48,7 +50,7 @@ const FILTER_LABEL: Record<SummaryBucket, string> = {
   open: "open tasks",
 };
 
-const PAGE_TABS = ["plan", "tasks", "files", "expenses", "contracts", "chat", "invoices", "tax"] as const;
+const PAGE_TABS = ["plan", "tasks", "files", "expenses", "contracts", "chat", "invoices", "tax", "activity"] as const;
 type PageTab = (typeof PAGE_TABS)[number];
 type ViewMode = "kanban" | "list";
 
@@ -181,6 +183,8 @@ export default function ProjectDetailPage() {
   const canEditProject =
     can(currentUser, "projects.manage") ||
     (project?.members ?? []).some((m) => m.userId === currentUser?.id && m.role === "SMM");
+  /** Who may read the audit trail. Owner, admin and manager by default. */
+  const seesActivity = can(currentUser, "projects.activity");
   // v3: the project's billing periods, and which one the page is showing.
   // Defaults to the cycle containing today so the page opens on "now".
   const [cycles, setCycles] = useState<ProjectCycle[]>([]);
@@ -230,6 +234,7 @@ export default function ProjectDetailPage() {
     if (!currentUser) return;
     const denied =
       (!canPlanProject && pageTab === "plan") ||
+      (!seesActivity && pageTab === "activity") ||
       (!seesMoney && (pageTab === "contracts" || pageTab === "invoices" || pageTab === "tax"));
     if (denied) setPageTab("tasks");
   }, [currentUser, canPlanProject, seesMoney, pageTab]);
@@ -984,19 +989,6 @@ export default function ProjectDetailPage() {
                 {d.qtyPerCycle !== 1 ? "s" : ""}
               </span>
             ))}
-            {(project.members ?? []).filter((m) => m.role === "SMM").length > 0 && (
-              <span className="inline-flex items-center gap-1.5 text-xs text-gray-500">
-                <span className="text-gray-400">SMM</span>
-                <span className="flex -space-x-1.5">
-                  {(project.members ?? []).filter((m) => m.role === "SMM").map((m) => (
-                    <span key={m.userId} title={m.user.name}
-                      className="w-6 h-6 rounded-full bg-gradient-to-br from-indigo-400 to-indigo-600 text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-surface">
-                      {m.user.name.split(" ").map((w) => w[0]).slice(0, 2).join("")}
-                    </span>
-                  ))}
-                </span>
-              </span>
-            )}
 
             {/* v3: which cycle we're looking at. Phase 3's Plan tab reads
                 this selection, so switching here changes what's planned. */}
@@ -1065,6 +1057,20 @@ export default function ProjectDetailPage() {
         </div>
       )}
 
+      {/*
+        Who is on this, for everyone.
+
+        Not gated: "who is the SMM here" and "who else is working on this" are
+        the first two questions anybody asks about a project, and the header
+        used to answer the first with an unlabelled huddle of initials and the
+        second not at all.
+      */}
+      {(project.members?.length ?? 0) > 0 && (
+        <div className="bg-white border-b border-gray-200 px-4 sm:px-6 lg:px-8 py-2.5">
+          <ProjectTeam members={project.members ?? []} />
+        </div>
+      )}
+
       {/* Page tabs */}
       <div className="bg-white border-b border-gray-200 px-4 sm:px-6 lg:px-8">
         <div className="overflow-x-auto -mb-px">
@@ -1081,6 +1087,9 @@ export default function ProjectDetailPage() {
               { id: "invoices", label: `Invoices${invoices.length > 0 ? ` (${invoices.length})` : ""}`, icon: <Receipt className="w-3.5 h-3.5" /> },
               { id: "tax", label: "Tax & Billing", icon: <DollarSign className="w-3.5 h-3.5" /> },
             ] : []),
+            // Last, because it is a place you go when something needs
+            // explaining rather than somewhere work happens.
+            ...(seesActivity ? [{ id: "activity", label: "Activity", icon: <History className="w-3.5 h-3.5" /> }] : []),
           ] as { id: PageTab; label: string; icon: React.ReactNode }[]).map((tab) => (
             <button
               key={tab.id} onClick={() => setPageTab(tab.id)}
@@ -2127,6 +2136,11 @@ export default function ProjectDetailPage() {
               </div>
             )}
           </div>
+        )}
+
+        {/* Who changed what, and when. Gated on projects.activity. */}
+        {pageTab === "activity" && seesActivity && id && (
+          <ActivityTab projectId={id} />
         )}
       </div>
 

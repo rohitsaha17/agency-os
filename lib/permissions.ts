@@ -35,6 +35,16 @@ export type Capability =
   | "projects.manage"
   | "projects.pricing"
   | "projects.assignSmm"
+  /**
+   * Read a project's activity history — every status change on it and on its
+   * work, with who made it and when.
+   *
+   * An audit surface rather than a working one. It answers "what happened to
+   * this project and who did it", which is a question asked when something
+   * has gone wrong, so it belongs to the people who would be asked to answer
+   * it and not to everyone working on the thing.
+   */
+  | "projects.activity"
   | "content.plan"
   | "tasks.assign"
   | "tasks.review"
@@ -136,7 +146,8 @@ function normalizeRole(role: string | null | undefined): Exclude<Role, "MEMBER">
 const MATRIX: Record<Exclude<Role, "MEMBER">, Record<Capability, boolean>> = {
   OWNER: {
     "users.manage": true, "settings.manage": true, "clients.manage": true, "projects.manage": true,
-    "projects.pricing": true, "projects.assignSmm": true, "content.plan": true,
+    "projects.pricing": true, "projects.assignSmm": true, "projects.activity": true,
+    "content.plan": true,
     "tasks.assign": true, "tasks.review": true, "tasks.viewAll": true,
     "tasks.viewPersonal": true, "cycles.close": true,
     "billing.flag": true, "financials.view": true, "expenses.create": true,
@@ -147,7 +158,8 @@ const MATRIX: Record<Exclude<Role, "MEMBER">, Record<Capability, boolean>> = {
   },
   ADMIN: {
     "users.manage": true, "settings.manage": true, "clients.manage": true, "projects.manage": true,
-    "projects.pricing": true, "projects.assignSmm": true, "content.plan": true,
+    "projects.pricing": true, "projects.assignSmm": true, "projects.activity": true,
+    "content.plan": true,
     "tasks.assign": true, "tasks.review": true, "tasks.viewAll": true,
     "tasks.viewPersonal": true, "cycles.close": true,
     "billing.flag": true, "financials.view": true, "expenses.create": true,
@@ -162,7 +174,8 @@ const MATRIX: Record<Exclude<Role, "MEMBER">, Record<Capability, boolean>> = {
     // only granting access isn't.
     "settings.manage": true,
     "clients.manage": true, "projects.manage": true,
-    "projects.pricing": true, "projects.assignSmm": true, "content.plan": true,
+    "projects.pricing": true, "projects.assignSmm": true, "projects.activity": true,
+    "content.plan": true,
     "tasks.assign": true, "tasks.review": true, "tasks.viewAll": true,
     "tasks.viewPersonal": true, "cycles.close": true,
     "billing.flag": true, "financials.view": true, "expenses.create": true,
@@ -188,6 +201,9 @@ const MATRIX: Record<Exclude<Role, "MEMBER">, Record<Capability, boolean>> = {
   SMM: {
     "users.manage": false, "settings.manage": false, "clients.manage": false, "projects.manage": false,
     "projects.pricing": false, "projects.assignSmm": false,
+    // An SMM plans the work; the audit trail of who changed what is not
+    // theirs to read.
+    "projects.activity": false,
     "content.plan": true, // own projects — scope checked by the caller
     "tasks.assign": true, // juniors only — see assignScope()
     "tasks.review": true, "cycles.close": true,
@@ -240,7 +256,8 @@ const MATRIX: Record<Exclude<Role, "MEMBER">, Record<Capability, boolean>> = {
   },
   TEAM: {
     "users.manage": false, "settings.manage": false, "clients.manage": false, "projects.manage": false,
-    "projects.pricing": false, "projects.assignSmm": false, "content.plan": false,
+    "projects.pricing": false, "projects.assignSmm": false, "projects.activity": false,
+    "content.plan": false,
     "tasks.assign": false, // self-reminders only — see assignScope()
     "tasks.review": false, "cycles.close": false, "billing.flag": false,
     // Their own work, and whatever they are managing or reviewing on it.

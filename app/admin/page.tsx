@@ -114,12 +114,33 @@ export default function PlatformAdminPage() {
     }
   }, [adminKey, resetPw]);
 
-  // Per-tenant plan / trial / storage management
+  // Per-tenant plan / trial / storage / branding management
   const [manageFor, setManageFor] = useState<string | null>(null);
   const [trialDaysInput, setTrialDaysInput] = useState("14");
   const [storageInput, setStorageInput] = useState("");
   const [planBusy, setPlanBusy] = useState<string | null>(null);
   const [planMsg, setPlanMsg] = useState<{ id: string; text: string; error?: boolean } | null>(null);
+
+  // The open panel's logo, fetched lazily. Keyed by tenant so switching
+  // panels cannot show the previous workspace's mark for a frame.
+  const [logoFor, setLogoFor] = useState<{ id: string; url: string | null } | null>(null);
+  const [logoBusy, setLogoBusy] = useState(false);
+  const [logoError, setLogoError] = useState("");
+
+  const loadLogo = useCallback(async (tenantId: string) => {
+    if (!adminKey) return;
+    setLogoFor(null);
+    setLogoError("");
+    try {
+      const res = await fetch(`/api/platform/tenants/${tenantId}/logo`, {
+        headers: { "x-admin-key": adminKey },
+      });
+      const data = await res.json();
+      if (res.ok) setLogoFor({ id: tenantId, url: data.logoUrl ?? null });
+    } catch {
+      /* the panel simply shows no preview */
+    }
+  }, [adminKey]);
 
   const patchTenant = useCallback(async (tenantId: string, patch: Record<string, unknown>, okText: string) => {
     if (!adminKey) return;
@@ -144,6 +165,48 @@ export default function PlatformAdminPage() {
       setPlanBusy(null);
     }
   }, [adminKey]);
+
+  /**
+   * Put a logo on a workspace from here.
+   *
+   * Same rules as the tenant's own settings page - an image, under 1.5 MB,
+   * stored as a data URL - because it is the same column. A logo that would
+   * be refused at their door should not be accepted at ours.
+   */
+  const uploadLogo = useCallback((tenantId: string, file: File) => {
+    setLogoError("");
+    if (!file.type.startsWith("image/")) {
+      setLogoError("That is not an image. Use a PNG, JPG, SVG or WebP.");
+      return;
+    }
+    if (file.size > 1.5 * 1024 * 1024) {
+      setLogoError("Too large. Use an image under 1.5 MB.");
+      return;
+    }
+    setLogoBusy(true);
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const dataUrl = e.target?.result as string;
+      if (!dataUrl) { setLogoBusy(false); return; }
+      // Show it before the round trip; the PATCH corrects hasLogo after.
+      setLogoFor({ id: tenantId, url: dataUrl });
+      await patchTenant(tenantId, { logoUrl: dataUrl }, "Logo saved.");
+      setLogoBusy(false);
+    };
+    reader.onerror = () => {
+      setLogoError("Could not read that file.");
+      setLogoBusy(false);
+    };
+    reader.readAsDataURL(file);
+  }, [patchTenant]);
+
+  const removeLogo = useCallback(async (tenantId: string) => {
+    setLogoError("");
+    setLogoBusy(true);
+    setLogoFor({ id: tenantId, url: null });
+    await patchTenant(tenantId, { logoUrl: null }, "Logo removed.");
+    setLogoBusy(false);
+  }, [patchTenant]);
 
   // Restore key from sessionStorage
   useEffect(() => {
@@ -418,6 +481,10 @@ export default function PlatformAdminPage() {
                         if (opening) {
                           setTrialDaysInput("14");
                           setStorageInput(String(t.uploadLimitMb));
+                          setLogoError("");
+                          loadLogo(t.id);
+                        } else {
+                          setLogoFor(null);
                         }
                       }}
                       className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border border-white/[0.08] text-slate-300 hover:bg-white/[0.05] transition-colors"
@@ -492,31 +559,75 @@ export default function PlatformAdminPage() {
                         </button>
                       </div>
                       {/* Branding — whose mark the product wears for them */}
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-xs text-slate-500 w-20">Branding</span>
-                        <button
-                          onClick={() => patchTenant(
-                            t.id,
-                            { whiteLabel: !t.whiteLabel },
-                            t.whiteLabel
-                              ? "Back to the Vibrnd mark."
-                              : "Their own logo now shows in the sidebar.",
+                      <div className="flex flex-wrap items-start gap-2">
+                        <span className="text-xs text-slate-500 w-20 mt-2">Branding</span>
+                        <div className="flex-1 min-w-0 space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            {/* Previewed on black on purpose: the sidebar is dark
+                                in every theme, so that is the only background
+                                the answer to "does this logo work" depends on. */}
+                            <div className="w-24 h-10 rounded-lg bg-black border border-white/[0.10] flex items-center justify-center overflow-hidden flex-shrink-0">
+                              {logoFor?.id === t.id && logoFor.url ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={logoFor.url} alt="" className="max-w-full max-h-full object-contain p-1" />
+                              ) : (
+                                <span className="text-[10px] text-slate-600">no logo</span>
+                              )}
+                            </div>
+                            <label className={`inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border border-white/[0.08] text-slate-300 transition-colors ${
+                              logoBusy ? "opacity-60 cursor-wait" : "hover:bg-white/[0.05] cursor-pointer"
+                            }`}>
+                              <ImageIcon className="w-3.5 h-3.5" />
+                              {t.hasLogo ? "Replace logo" : "Upload logo"}
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                disabled={logoBusy}
+                                onChange={(e) => {
+                                  const f = e.target.files?.[0];
+                                  if (f) uploadLogo(t.id, f);
+                                  // so picking the same file twice still fires
+                                  e.target.value = "";
+                                }}
+                              />
+                            </label>
+                            {t.hasLogo && (
+                              <button
+                                onClick={() => removeLogo(t.id)}
+                                disabled={logoBusy}
+                                className="text-xs font-medium px-3 py-1.5 rounded-lg border border-white/[0.08] text-slate-400 hover:bg-white/[0.05] disabled:opacity-60 transition-colors"
+                              >
+                                Remove
+                              </button>
+                            )}
+                            <button
+                              onClick={() => patchTenant(
+                                t.id,
+                                { whiteLabel: !t.whiteLabel },
+                                t.whiteLabel
+                                  ? "Back to the Vibrnd mark."
+                                  : "Their own logo now shows in the sidebar.",
+                              )}
+                              disabled={planBusy === t.id || (!t.whiteLabel && !t.hasLogo)}
+                              className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                                t.whiteLabel
+                                  ? "bg-indigo-600 hover:bg-indigo-500 text-white"
+                                  : "border border-white/[0.08] text-slate-300 hover:bg-white/[0.05]"
+                              }`}
+                            >
+                              {t.whiteLabel ? "Their logo — on" : "Use their logo"}
+                            </button>
+                          </div>
+                          <p className="text-xs text-slate-500">
+                            {t.hasLogo
+                              ? "Replaces the Vibrnd mark in their sidebar. It sits on dark chrome, so check it reads against the black above."
+                              : "Upload one here, or they can add it themselves in Settings. Same logo either way."}
+                          </p>
+                          {logoError && (
+                            <p className="text-xs text-red-300">{logoError}</p>
                           )}
-                          disabled={planBusy === t.id || (!t.whiteLabel && !t.hasLogo)}
-                          className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-                            t.whiteLabel
-                              ? "bg-indigo-600 hover:bg-indigo-500 text-white"
-                              : "border border-white/[0.08] text-slate-300 hover:bg-white/[0.05]"
-                          }`}
-                        >
-                          <ImageIcon className="w-3.5 h-3.5" />
-                          {t.whiteLabel ? "Their logo — on" : "Use their logo"}
-                        </button>
-                        <span className="text-xs text-slate-500">
-                          {t.hasLogo
-                            ? "Replaces the Vibrnd mark in their sidebar. It sits on dark chrome, so it needs to read on black."
-                            : "No logo uploaded yet — they add one in Settings before this can do anything."}
-                        </span>
+                        </div>
                       </div>
                     </div>
                   )}

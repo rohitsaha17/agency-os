@@ -406,7 +406,7 @@ function QuickActions() {
       {actions.map((a) => (
         <Link key={a.label} href={a.href}>
           <div
-            className={`flex flex-col items-center gap-2 p-3 rounded-2xl border ${a.accent} transition-surface duration-150 cursor-pointer group hover:shadow-sm hover:scale-[1.02] active:scale-[0.98]`}
+            className={`quick-action flex flex-col items-center gap-2 p-3 rounded-2xl border ${a.accent} transition-surface duration-150 cursor-pointer group hover:shadow-sm hover:scale-[1.02] active:scale-[0.98]`}
           >
             <div className="w-9 h-9 flex items-center justify-center rounded-xl bg-white shadow-sm group-hover:shadow group-hover:bg-white dark:bg-slate-800 dark:group-hover:bg-slate-700 dark:ring-1 dark:ring-white/5 transition-surface duration-150">
               {a.icon}
@@ -788,7 +788,8 @@ export default function DashboardPage() {
                 <MetricRing
                   value={stats.monthCompletionRate}
                   label="Task Completion"
-                  color="#6366f1"
+                  // The brand accent where a workspace has one; indigo everywhere else.
+                  color="var(--glo-accent, #6366f1)"
                 />
                 <MetricRing
                   value={stats.completionRate}

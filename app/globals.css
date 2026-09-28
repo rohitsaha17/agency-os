@@ -1349,3 +1349,22 @@ input[type="time"]::-webkit-calendar-picker-indicator:hover {
 .theme-glo .bg-slate-900,
 .theme-glo .bg-slate-950 { background-color: #000000; }
 .theme-glo .bg-slate-800 { background-color: #161616; }
+
+/* -- Quick Actions: one family, not eight ---------------------
+   The tiles each carry a different hue - violet, sky, pink, teal
+   - so the grid reads as a palette rather than as a brand. Under
+   Gloo they all take the brand orange and the icons do the
+   distinguishing, which they were already doing anyway.
+
+   Scoped to .quick-action deliberately. Remapping violet and
+   teal globally would have reached the status colours too, and a
+   paid invoice has to stay green whatever the workspace is. */
+.theme-glo .quick-action {
+  background-color: var(--glo-accent-softer);
+  border-color: var(--glo-accent-border);
+  color: var(--glo-accent-text);
+}
+.theme-glo .quick-action:hover {
+  background-color: var(--glo-accent-soft);
+  border-color: var(--glo-accent);
+}

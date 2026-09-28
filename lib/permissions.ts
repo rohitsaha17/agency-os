@@ -38,6 +38,18 @@ export type Capability =
   | "content.plan"
   | "tasks.assign"
   | "tasks.review"
+  /**
+   * See everybody's work, not only your own.
+   *
+   * Separate from projects.manage, which is about running a project. This is
+   * about knowing who is doing what — a question an SMM has to answer every
+   * day while briefing people, and which used to require being a manager.
+   *
+   * It grants READING. What may be done with what is read is unchanged: money
+   * is still stripped by financials.view, staff records still sit behind
+   * hr.records, and assigning is still bounded by assignScope.
+   */
+  | "tasks.viewAll"
   | "cycles.close"
   | "billing.flag"
   | "financials.view"
@@ -112,7 +124,7 @@ const MATRIX: Record<Exclude<Role, "MEMBER">, Record<Capability, boolean>> = {
   OWNER: {
     "users.manage": true, "settings.manage": true, "clients.manage": true, "projects.manage": true,
     "projects.pricing": true, "projects.assignSmm": true, "content.plan": true,
-    "tasks.assign": true, "tasks.review": true, "cycles.close": true,
+    "tasks.assign": true, "tasks.review": true, "tasks.viewAll": true, "cycles.close": true,
     "billing.flag": true, "financials.view": true, "expenses.create": true,
     "invoices.manage": true, "reports.all": true, "reports.delivery": true,
     "attendance.mark": true, "hr.today": true, "hr.records": true,
@@ -122,7 +134,7 @@ const MATRIX: Record<Exclude<Role, "MEMBER">, Record<Capability, boolean>> = {
   ADMIN: {
     "users.manage": true, "settings.manage": true, "clients.manage": true, "projects.manage": true,
     "projects.pricing": true, "projects.assignSmm": true, "content.plan": true,
-    "tasks.assign": true, "tasks.review": true, "cycles.close": true,
+    "tasks.assign": true, "tasks.review": true, "tasks.viewAll": true, "cycles.close": true,
     "billing.flag": true, "financials.view": true, "expenses.create": true,
     "invoices.manage": true, "reports.all": true, "reports.delivery": true,
     "attendance.mark": true, "hr.today": true, "hr.records": true,
@@ -136,7 +148,7 @@ const MATRIX: Record<Exclude<Role, "MEMBER">, Record<Capability, boolean>> = {
     "settings.manage": true,
     "clients.manage": true, "projects.manage": true,
     "projects.pricing": true, "projects.assignSmm": true, "content.plan": true,
-    "tasks.assign": true, "tasks.review": true, "cycles.close": true,
+    "tasks.assign": true, "tasks.review": true, "tasks.viewAll": true, "cycles.close": true,
     "billing.flag": true, "financials.view": true, "expenses.create": true,
     "invoices.manage": true,
     "reports.all": false, // no org P&L / revenue / margin
@@ -163,6 +175,14 @@ const MATRIX: Record<Exclude<Role, "MEMBER">, Record<Capability, boolean>> = {
     "content.plan": true, // own projects — scope checked by the caller
     "tasks.assign": true, // juniors only — see assignScope()
     "tasks.review": true, "cycles.close": true,
+    /*
+      An SMM hands work out all day and has to see where it went.
+
+      Being unable to answer "who is doing what" was the one management-shaped
+      thing this role genuinely needed and did not have, and it is a reading
+      capability: it widens what is visible, not what can be changed.
+    */
+    "tasks.viewAll": true,
     /*
       Was true, and it was inconsistent with the row it sits in: deciding
       what a client is charged for is a money decision, and this role has
@@ -204,6 +224,9 @@ const MATRIX: Record<Exclude<Role, "MEMBER">, Record<Capability, boolean>> = {
     "projects.pricing": false, "projects.assignSmm": false, "content.plan": false,
     "tasks.assign": false, // self-reminders only — see assignScope()
     "tasks.review": false, "cycles.close": false, "billing.flag": false,
+    // Their own work, and whatever they are managing or reviewing on it.
+    // Everybody's board is a supervisor's view, not a junior's.
+    "tasks.viewAll": false,
     "financials.view": false,
     // They can file what they spent out of pocket — and see only their own.
     // Scoping lives in the expenses routes, not here.

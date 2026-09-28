@@ -29,8 +29,22 @@ for (const r of ROLES) {
 }
 
 console.log("\n— somebody else's sheet —");
+/*
+ * SMM was false here, and the reason it was false has gone.
+ *
+ * The rule this file guards is not "only managers export". It is that nobody
+ * receives a sheet headed with a colleague's name and filled with nothing,
+ * because they cannot see that colleague's work — a document that
+ * misrepresents itself rather than a leak.
+ *
+ * An SMM now holds tasks.viewAll, so the sheet they would get is the list
+ * they are already looking at on screen. Refusing the PDF of it would protect
+ * nothing and leave an export button that 403s.
+ *
+ * TEAM stays false, and that is the case the rule was written for.
+ */
 const canOthers: Record<string, boolean> = {
-  OWNER: true, ADMIN: true, MANAGER: true, SMM: false, TEAM: false,
+  OWNER: true, ADMIN: true, MANAGER: true, SMM: true, TEAM: false,
 };
 for (const r of ROLES) {
   check(`${r} · a colleague`, mayExportTasksFor(u(r), "someone-else"), canOthers[r]);

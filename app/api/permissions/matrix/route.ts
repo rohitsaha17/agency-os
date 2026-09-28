@@ -27,6 +27,7 @@ const LABELS: Record<string, { label: string; group: string }> = {
   "content.plan":       { label: "Plan the content calendar",      group: "Work" },
   "tasks.assign":       { label: "Assign tasks",                   group: "Work" },
   "tasks.review":       { label: "Review & approve submitted work", group: "Work" },
+  "tasks.viewAll":      { label: "See everyone's tasks",           group: "Work" },
   "cycles.close":       { label: "Close a cycle",                  group: "Work" },
   "billing.flag":       { label: "Flag extras as billable or free", group: "Money" },
   "financials.view":    { label: "See any money",                  group: "Money" },

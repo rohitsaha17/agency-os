@@ -282,7 +282,8 @@ function TasksBoardInner() {
   // capability rather than a job title (docs/V3_CONTEXT.md §2).
   const isHead = can(currentUser, "tasks.review");
   /** Who may look at somebody else's list. Same capability the API scopes on. */
-  const seesEveryone = can(currentUser, "projects.manage");
+  // Who may look at somebody else's list, not only their own.
+  const seesEveryone = can(currentUser, "tasks.viewAll");
 
   /**
    * The list actually on screen.

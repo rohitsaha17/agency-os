@@ -54,7 +54,10 @@ export function jsonFor<T>(
  * Combine with AND, never by spreading into a `where` that already has an OR.
  */
 export function taskVisibilityScope(user: { id: string; role?: string | null }) {
-  if (can(user, "projects.manage")) return {};
+  // Everybody's work, for the people whose job is knowing who is doing what.
+  // Was projects.manage, which tied seeing the board to running a project and
+  // so left an SMM briefing four people unable to see where any of it went.
+  if (can(user, "tasks.viewAll")) return {};
 
   const mine = [
     { assignees: { some: { userId: user.id } } },
@@ -93,7 +96,11 @@ export function mayExportTasksFor(
   requested: string,
 ): boolean {
   const wantsOthers = requested === "all" || (!!requested && requested !== user.id);
-  return !wantsOthers || can(user, "projects.manage");
+  // The same capability that shows the list on screen. Refusing a PDF of
+  // something somebody is already looking at protects nothing; what this
+  // still prevents is a sheet headed with a colleague's name for someone who
+  // cannot see that colleague's work at all.
+  return !wantsOthers || can(user, "tasks.viewAll");
 }
 
 /**

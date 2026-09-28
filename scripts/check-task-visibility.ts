@@ -109,6 +109,24 @@ for (const role of ROLES) {
 }
 
 console.log("");
+console.log("— who can see what everybody is doing —");
+/*
+  Reading everybody's work is its own capability now, rather than a side
+  effect of being able to run a project. An SMM hands work out all day and
+  could not see where any of it went; a junior still sees their own.
+
+  An empty scope means "no restriction" — the whole organization.
+*/
+const seesAll = (role: Role) =>
+  Object.keys(taskVisibilityScope({ id: ME, role })).length === 0;
+for (const role of ["OWNER", "ADMIN", "MANAGER", "SMM"] as Role[]) {
+  check(`${role.padEnd(7)} sees everybody's tasks`, seesAll(role), true);
+}
+check("TEAM    does not", seesAll("TEAM"), false);
+check("...and is still scoped to their own work",
+  serverWouldReturn({ id: ME, role: "TEAM" }, TASKS[4]), false);
+
+console.log("");
 console.log("— the regression that started this —");
 const delegated = TASKS[1];
 check("an SMM sees work they assigned to someone else",

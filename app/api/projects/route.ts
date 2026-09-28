@@ -124,7 +124,15 @@ export async function POST(req: NextRequest) {
     // at all, so anyone signed in could open one. The price on it is still
     // gated separately by projects.pricing below, so an SMM can set up the
     // work without setting what it costs.
-    requireCapability(user, "content.plan");
+    /*
+      Starting a project is not a planning act.
+
+      This was content.plan, which an SMM holds — so the role that plans a
+      project's content could also create the project, name a client and set
+      it going. Those are different decisions: one is about what gets posted
+      this month, the other about the agency taking on work.
+    */
+    requireCapability(user, "projects.manage");
 
     const rl = checkRateLimit(req, `projects:create:${user.id}`, WRITE_RATE_LIMITS.heavy);
     if (!rl.allowed) {

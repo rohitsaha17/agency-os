@@ -393,7 +393,7 @@ function QuickActions() {
 
   type Action = { label: string; href: string; icon: React.ReactNode; accent: string; need: Capability | null };
   const actions: Action[] = ([
-    { label: "New Project",    href: "/projects/new",   icon: <FolderKanban className="w-5 h-5" />, accent: "bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border-indigo-200 dark:border-indigo-500/30", need: "content.plan" },
+    { label: "New Project",    href: "/projects/new",   icon: <FolderKanban className="w-5 h-5" />, accent: "bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border-indigo-200 dark:border-indigo-500/30", need: "projects.manage" },
     { label: "Add Client",     href: "/clients",        icon: <UserPlus className="w-5 h-5" />,    accent: "bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border-emerald-200 dark:border-emerald-500/30", need: "clients.manage" },
     { label: "New Invoice",    href: "/invoices",       icon: <Receipt className="w-5 h-5" />,     accent: "bg-amber-50 text-amber-600 hover:bg-amber-100 border-amber-200 dark:border-amber-500/30", need: "invoices.manage" },
     { label: "My Tasks",       href: "/tasks",          icon: <CheckCircle2 className="w-5 h-5" />, accent: "bg-violet-50 text-violet-600 hover:bg-violet-100 border-violet-200 dark:border-violet-500/30", need: null },

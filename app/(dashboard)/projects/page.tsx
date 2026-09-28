@@ -28,7 +28,8 @@ type ProjectWithProgress = Project & { progress: number };
 
 export default function ProjectsPage() {
   const { user: currentUser } = useCurrentUser();
-  const canStartProject = can(currentUser, "content.plan");
+  /** Taking on work, not planning it. Owner, admin and manager. */
+  const canStartProject = can(currentUser, "projects.manage");
   const [projects, setProjects] = useState<ProjectWithProgress[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -93,8 +94,8 @@ export default function ProjectsPage() {
             <h1 className="text-xl font-semibold text-gray-900">Projects</h1>
             <p className="text-sm text-gray-500 mt-0.5">Track all your agency work in one place</p>
           </div>
-          {/* Starting a project is a planning act — SMM and above. Matches
-              the check on POST /api/projects. */}
+          {/* Starting a project is taking on work, not planning it.
+              Matches the check on POST /api/projects. */}
           {canStartProject && (
             <Link href="/projects/new">
               <Button icon={<Plus className="w-4 h-4" />}>New Project</Button>

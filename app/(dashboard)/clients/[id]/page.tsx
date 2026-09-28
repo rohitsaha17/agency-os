@@ -234,6 +234,10 @@ export default function ClientDetailPage() {
   // Opening a channel goes with running the work, not with owning the client
   // record — an SMM plans this client's content and needs somewhere to run it.
   const canManageChannels = can(currentUser, "content.plan");
+  /* Separate from the line above on purpose: an SMM runs a client's
+     channels and does not start the client's projects. One capability
+     covering both put a New Project button on this page for them. */
+  const canStartProject = can(currentUser, "projects.manage");
   // v3: capability-driven, not role-driven. The API strips the same fields.
   const seesMoney = can(currentUser, "financials.view");
   const seesContacts = canViewContacts(currentUser);
@@ -1205,7 +1209,7 @@ export default function ClientDetailPage() {
           <div className="w-full space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-y-2">
               <p className="text-sm text-gray-500">{client.projects.length} project{client.projects.length !== 1 ? "s" : ""}</p>
-              {canManageChannels && (
+              {canStartProject && (
                 <Button size="sm" icon={<Plus className="w-3.5 h-3.5" />} onClick={() => setProjectModalOpen(true)}>
                   New Project
                 </Button>

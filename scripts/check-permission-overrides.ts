@@ -15,6 +15,7 @@
  * Both are asserted below against deliberately hostile input, because the
  * column is data and data is not to be trusted with a question like this.
  */
+import { readFileSync } from "fs";
 import {
   can, capabilityMatrix, parsePermissionOverrides, isGranted, withOverride,
   OVERRIDABLE_ROLES, ALL_CAPABILITIES,
@@ -153,6 +154,36 @@ check("an override through isGranted",
   isGranted("TEAM", "hr.records" as Capability, { TEAM: { "hr.records": true } }), true);
 check("and an admin, whatever is passed",
   isGranted("ADMIN", "users.manage", { MANAGER: { "users.manage": false } }), true);
+
+console.log("");
+console.log("— starting a project is not planning one —");
+/*
+  Creating a project used to take content.plan, which an SMM holds. So the
+  role that plans a project's content could also create the project, pick the
+  client and set it going — two different decisions wearing one capability.
+
+  Every door is checked, not only the API. The page, the projects list, the
+  client page and the dashboard shortcut each decide whether to OFFER the
+  button, and a button that is offered and then refused is its own bug.
+*/
+check("an SMM cannot start a project", can(asUser("SMM"), "projects.manage"), false);
+check("nor can a junior", can(asUser("TEAM"), "projects.manage"), false);
+check("a manager can", can(asUser("MANAGER"), "projects.manage"), true);
+check("and an SMM still plans content", can(asUser("SMM"), "content.plan"), true);
+
+const CREATION_DOORS = [
+  "app/api/projects/route.ts",
+  "app/(dashboard)/projects/new/page.tsx",
+  "app/(dashboard)/projects/page.tsx",
+  "app/(dashboard)/clients/[id]/page.tsx",
+];
+for (const door of CREATION_DOORS) {
+  check(
+    `${door.split("/").pop()} gates creating on projects.manage`,
+    readFileSync(door, "utf8").includes("projects.manage"),
+    true,
+  );
+}
 
 console.log(fails === 0 ? "\nAll permission-override checks passed." : `\n${fails} FAILED`);
 process.exit(fails === 0 ? 0 : 1);

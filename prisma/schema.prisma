@@ -1597,6 +1597,7 @@ model Organization {
   // Reverse relations — every tenant-scoped entity points back here
   users         User[]
   designations  DesignationRole[]
+  holidays      Holiday[]
   clients       Client[]
   projects      Project[]
   tasks         Task[]
@@ -2088,4 +2089,32 @@ model TaskStar {
   /// "What have I pinned" is the only question asked of this table.
   @@index([userId])
   @@map("task_stars")
+}
+
+/// A day the office is closed.
+///
+/// Deliberately inert. It is a date and a name and nothing else: it does not
+/// move deadlines, exclude itself from availability, alter attendance or
+/// change what anybody is charged. Somebody looking at the dashboard wants to
+/// know the office is shut on the 2nd, and wiring that into scheduling would
+/// make a wall calendar into a system with opinions.
+model Holiday {
+  id             String   @id @default(cuid())
+  organizationId String
+
+  /// @db.Date, not a timestamp. A holiday is a DATE — 2 October is 2 October
+  /// in Mumbai and in London — so it is stored without a time and no timezone
+  /// conversion is ever applied to it. Storing midnight as an instant is how
+  /// a holiday ends up displaying as the 1st for half the world.
+  date           DateTime @db.Date
+  name           String
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  /// The same day may carry two names; the same name twice on one day is a
+  /// double submission rather than an intention.
+  @@unique([organizationId, date, name])
+  @@index([organizationId, date])
+  @@map("holidays")
 }

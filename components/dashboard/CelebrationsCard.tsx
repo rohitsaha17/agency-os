@@ -49,7 +49,10 @@ export function CelebrationsCard() {
           <Icon kind={c.kind} className="w-5 h-5 text-indigo-600 flex-shrink-0" />
           <div className="min-w-0">
             <p className="text-sm font-semibold text-indigo-900">{noticeForSelf(c)}</p>
-            <p className="text-xs text-indigo-700/80 mt-0.5">
+            {/* The dark shim lightens indigo-900 for the heading but leaves
+                indigo-700 where it is, so the second line came out dim
+                indigo on a dim indigo panel. Stated for dark directly. */}
+            <p className="text-xs text-indigo-700/80 dark:text-indigo-300/90 mt-0.5">
               {c.kind === "BIRTHDAY"
                 ? "From everyone at the studio."
                 : `${c.years} ${c.years === 1 ? "year" : "years"} with the team.`}

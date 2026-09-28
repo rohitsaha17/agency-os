@@ -7,7 +7,7 @@ just whether they're signed in. A mutating handler with no check is a hole:
 that is exactly how creating a channel, creating a project and editing org
 settings ended up available to everyone.
 
-Handlers: **216** · guarded: **141** · reviewed-open: **40** · unguarded writes: **0**
+Handlers: **220** · guarded: **144** · reviewed-open: **40** · unguarded writes: **0**
 
 ## Reads open to any signed-in user
 
@@ -18,6 +18,7 @@ are deliberately shared. Listed so the choice stays visible.
 |---|---|
 | `availability/route.ts` | GET |
 | `calendar/route.ts` | GET |
+| `celebrations/route.ts` | GET |
 | `channels/route.ts` | GET |
 | `channels/[id]/members/route.ts` | GET |
 | `channels/[id]/messages/route.ts` | GET |

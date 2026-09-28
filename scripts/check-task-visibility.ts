@@ -177,5 +177,34 @@ check("and every one of those excludes work I declined",
 check("which is the rule the list already applied",
   belongsOnList({ assignees: [{ userId: ME, acceptance: "DECLINED" }] }, ME, ME), false);
 
+console.log("");
+console.log("— a task made on a project belongs to it —");
+/*
+  The project page offers four ways to add a task: the header button, a Kanban
+  column, the list, and adding a subtask. All four open the same modal, and the
+  modal decides where to POST from whether it was handed a projectId:
+
+    given one  → /api/projects/<id>/tasks, which reads the project from the
+                 PATH and writes that, so a request body cannot override it
+    given none → /api/tasks, where the project is whatever the body says, and
+                 "nothing" is a valid answer there
+
+  So one missing prop would turn every task created on a project page into a
+  loose one. Nothing would throw, nothing would look wrong, and the task would
+  simply not be on the project — the kind of thing found weeks later by
+  somebody asking where their work went.
+*/
+const projectPageSource = readFileSync("app/(dashboard)/projects/[id]/page.tsx", "utf8");
+check("the project page hands the modal its project",
+  /<TaskModal[^>]*projectId=\{id\}/s.test(projectPageSource), true);
+
+const taskModalSource = readFileSync("components/tasks/TaskModal.tsx", "utf8");
+check("and the modal posts to the project's own route when it has one",
+  taskModalSource.includes("/api/projects/${projectId}/tasks"), true);
+
+const projectTasksRoute = readFileSync("app/api/projects/[id]/tasks/route.ts", "utf8");
+check("which takes the project from the path, not the body",
+  /const \{ id: projectId \} = await params;/.test(projectTasksRoute), true);
+
 console.log(fails === 0 ? "\nAll task-visibility checks passed." : `\n${fails} FAILED`);
 process.exit(fails === 0 ? 0 : 1);

@@ -73,7 +73,11 @@ const navItems: {
       // "Calendar" next to "My Calendar" gave no clue which was which, so a
       // manager looking for the reel somebody else was scheduling opened the
       // personal one, found nothing, and concluded the calendar was broken.
-      { href: "/calendar",     label: "Team Calendar", icon: Calendar,     need: "content.plan"      },
+      // Everybody's. The page and its endpoints were never gated — only this
+      // link was — so a junior could always open the team calendar by typing
+      // the URL and saw the whole schedule when they did. Hiding the way in
+      // while leaving the door open is not a permission, it is a secret.
+      { href: "/calendar",     label: "Team Calendar", icon: Calendar,     need: null                },
       { href: "/files",        label: "Files",        icon: HardDrive,     need: null                },
       { href: "/reports",      label: "Reports",      icon: BarChart3,     need: "reports.delivery"  },
       // Everyone lands here to check in and ask for leave; the staff record,

@@ -42,7 +42,16 @@ export async function GET(req: NextRequest) {
     const extraOnly = sp.get("extraOnly") === "1";
     const adHocOnly = sp.get("adHocOnly") === "1";
 
-    const isMember = user.role === "MEMBER";
+    /*
+      The MEMBER scoping that used to be here is gone with the role itself.
+
+      It narrowed the content calendar to items a MEMBER had a task on, and
+      restricted them to org-wide events. Nobody has been a MEMBER for a while,
+      so TEAM and SMM already received the whole thing — the rule had stopped
+      applying to anyone long before it was removed. The team calendar is the
+      team's, and it carries topics, dates and names rather than anything
+      confidential.
+    */
     const plans = can(user, "content.plan");
 
     const [items, events, away] = await Promise.all([
@@ -58,10 +67,6 @@ export async function GET(req: NextRequest) {
           ...(adHocOnly && { isAdHoc: true }),
           ...(assigneeId && {
             tasks: { some: { deletedAt: null, assignees: { some: { userId: assigneeId } } } },
-          }),
-          // Access rule: members only see items with a task assigned to them
-          ...(isMember && {
-            tasks: { some: { deletedAt: null, assignees: { some: { userId: user.id } } } },
           }),
         },
         select: {
@@ -91,13 +96,9 @@ export async function GET(req: NextRequest) {
             AND: [
               // In range (single-day or spanning)
               { OR: [{ date: { gte: from, lt: to } }, { endDate: { gte: from, lt: to } }] },
-              // Members: org-wide events only. Client filter: that client's
-              // events + org-wide ones (festivals stay as context).
-              ...(user.role === "MEMBER"
-                ? [{ clientId: null }]
-                : clientId
-                  ? [{ OR: [{ clientId }, { clientId: null }] }]
-                  : []),
+              // A client filter narrows to that client's events plus the
+              // org-wide ones, so festivals stay on the page as context.
+              ...(clientId ? [{ OR: [{ clientId }, { clientId: null }] }] : []),
             ],
           },
           include: { client: { select: { id: true, name: true } } },

@@ -22,15 +22,16 @@ export async function GET(req: NextRequest) {
     const rangeStart = new Date(year, month - 1, 1);
     const rangeEnd   = new Date(year, month, 0, 23, 59, 59);
 
-    const role = currentUser.role ?? "ADMIN";
-    const myId = currentUser.id;
+    /*
+      The last of the MEMBER checks went with the others.
 
-    // Members can't use the userId filter to peek at colleagues' calendars.
-    if (role === "MEMBER" && filterUserId && filterUserId !== myId) {
-      filterUserId = myId;
-    }
+      It stopped a MEMBER filtering the calendar by a colleague — a rule that
+      has protected nobody since the role was retired, and that now contradicts
+      a calendar everyone can read anyway. Filtering by a person is narrowing
+      a view, not widening one.
+    */
 
-    // ── Build task where clause with role scoping ──────────────
+    // ── Build task where clause ────────────────────────────────
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const taskWhere: any = {
       organizationId: orgId,
@@ -38,19 +39,23 @@ export async function GET(req: NextRequest) {
       dueDate: { gte: rangeStart, lte: rangeEnd },
     };
 
-    // Role scoping for tasks
-    if (role === "MEMBER" && myId && !filterUserId) {
-      // Members see only their assigned tasks
-      taskWhere.assignees = { some: { userId: myId } };
-    } else if (role === "MANAGER" && myId && !filterUserId) {
-      // Managers see tasks they manage, are assigned to, or in projects they created
-      taskWhere.OR = [
-        { managerId: myId },
-        { assignees: { some: { userId: myId } } },
-        { project: { createdById: myId } },
-      ];
-    }
-    // ADMIN or explicit userId filter override role scoping
+    /*
+      No role scoping. The team calendar shows the team's schedule.
+
+      What was here scoped on role === "MEMBER", a role this product retired:
+      nobody is a MEMBER any more, so TEAM and SMM matched neither branch and
+      already received everything. MANAGER matched the second branch and was
+      narrowed to their own work — so a manager saw LESS of the team calendar
+      than the junior sitting next to them, which is the opposite of the point
+      of it.
+
+      Everybody sees it now, deliberately rather than by accident. Nothing
+      confidential travels: the payload is titles, dates, statuses and names.
+      No amount, budget or rate is selected here, so there is nothing for
+      financials.view to protect.
+
+      The explicit filters below still work, for anybody narrowing the view.
+    */
 
     // Explicit filters
     if (filterUserId) {
@@ -75,21 +80,7 @@ export async function GET(req: NextRequest) {
     if (filterProjectId) projectWhere.id = filterProjectId;
     if (filterClientId) projectWhere.clientId = filterClientId;
 
-    // Role scoping for projects
-    if (role === "MEMBER" && myId && !filterProjectId) {
-      // Members only see projects where they have assigned tasks
-      projectWhere.tasks = { some: { assignees: { some: { userId: myId } }, deletedAt: null } };
-    } else if (role === "MANAGER" && myId && !filterProjectId) {
-      projectWhere.AND = [
-        ...(projectWhere.AND ?? []),
-        {
-          OR: [
-            { createdById: myId },
-            { tasks: { some: { OR: [{ managerId: myId }, { assignees: { some: { userId: myId } } }], deletedAt: null } } },
-          ],
-        },
-      ];
-    }
+    // Projects are scoped the same way, which is to say not at all — see above.
 
     const [tasks, projects] = await Promise.all([
       prisma.task.findMany({

@@ -82,6 +82,8 @@ interface PersonalRow {
   starred: boolean;
   done: boolean;
   createdBy?: { id: string; name: string } | null;
+  /** Whose reminder it is. Only worth showing when it is not yours. */
+  user?: { id: string; name: string } | null;
 }
 
 interface ListRow { id: string; name: string }
@@ -347,11 +349,26 @@ function TasksBoardInner() {
     }
   }, [viewUserId, currentUser?.id]);
 
+  /** Owner, admin and manager. An SMM sees the board but not the notebook. */
+  const seesPersonal = can(currentUser, "tasks.viewPersonal");
+  /** The reminders on screen belong to somebody else. */
+  const viewingOthersList =
+    seesPersonal && !!viewUserId && viewUserId !== currentUser?.id;
+
   const fetchAll = useCallback(async (opts?: { silent?: boolean }) => {
     if (!opts?.silent) setLoading(true);
     try {
+      /*
+        The reminders column follows the person picker, like everything else
+        on this page. Without tasks.viewPersonal the query is ignored by the
+        server and you get your own, which is what a junior should see.
+      */
+      const personalQuery =
+        seesPersonal && viewUserId === "__all__" ? "?scope=all"
+        : seesPersonal && viewUserId ? `?userId=${encodeURIComponent(viewUserId)}`
+        : "";
       const [itemsRes, tasksRes] = await Promise.all([
-        fetch("/api/personal-items"),
+        fetch(`/api/personal-items${personalQuery}`),
         fetch("/api/tasks?includeCompleted=true&all=1"),
       ]);
       /*
@@ -391,7 +408,10 @@ function TasksBoardInner() {
     } finally {
       setLoading(false);
     }
-  }, [currentUser?.id]);
+    // viewUserId is in here because the reminders column follows the picker:
+    // without it, switching to a colleague reloaded their tasks and left the
+    // previous person's reminders sitting beside them.
+  }, [currentUser?.id, seesPersonal, viewUserId]);
 
   useEffect(() => { if (currentUser) fetchAll(); }, [currentUser, fetchAll]);
   // Live: pick up calendar-side edits (and teammates' changes) instantly
@@ -836,8 +856,20 @@ function TasksBoardInner() {
       ? "flex flex-col h-full bg-white dark:bg-slate-900 border border-gray-200 dark:border-white/[0.08] rounded-2xl overflow-hidden"
       : "bg-white dark:bg-slate-900 border border-gray-200 dark:border-white/[0.08] rounded-2xl overflow-hidden mb-4"}>
       <header className="px-4 py-3 border-b border-gray-100 dark:border-white/[0.05] flex-shrink-0">
-        <h2 className="text-[13px] font-semibold text-gray-800 dark:text-slate-200">My List</h2>
-        <p className="text-[11px] text-gray-400 mt-0.5">Your own reminders</p>
+        <h2 className="text-[13px] font-semibold text-gray-800 dark:text-slate-200">
+          {viewingOthersList ? `${viewingLabel}’s list` : "My List"}
+        </h2>
+        {/*
+          It used to say "Your own reminders", and that stopped being true the
+          day owners, admins and managers could read them. A label that
+          promises privacy the product does not keep is worse than no label —
+          somebody writes differently when they believe nobody else is looking.
+        */}
+        <p className="text-[11px] text-gray-400 mt-0.5">
+          {viewingOthersList
+            ? "Their reminders"
+            : "Your reminders · visible to admins and managers"}
+        </p>
       </header>
       <div className={boxed ? "flex-1 overflow-y-auto p-2 min-h-0" : "p-2"}>
         <AddTaskComposer listId={null} onAdded={fetchAll} />
@@ -872,6 +904,11 @@ function TasksBoardInner() {
         <div className="flex-1 min-w-0">
           <p className={`text-sm leading-snug ${p.done ? "line-through text-gray-400" : "text-gray-800"}`}>{p.title}</p>
           {p.note && <p className="text-xs text-gray-400 mt-0.5 line-clamp-2">{p.note}</p>}
+          {/* Whose it is, but only on a list that holds more than one
+              person's — on your own list every row would say your name. */}
+          {p.user && p.user.id !== currentUser?.id && (
+            <p className="text-[10px] text-gray-400 mt-0.5">{p.user.name}</p>
+          )}
           <div className="flex items-center gap-1.5 mt-1 flex-wrap">
             {!p.done && (
               <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border ${

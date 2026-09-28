@@ -2,15 +2,46 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { handleApiError, ApiError } from "@/lib/api-errors";
+import { requireCapability } from "@/lib/api-permissions";
 import { notify } from "@/lib/notify";
 
-// GET /api/personal-items — all of MY items (board view; includes done)
+/**
+ * GET /api/personal-items — reminders, mine by default.
+ *
+ *   (no params)      mine
+ *   ?userId=<id>     that person's
+ *   ?scope=all       everybody's
+ *
+ * The last two need tasks.viewPersonal, which is owner, admin and manager.
+ * These rows are not work somebody was given; they are what a person wrote
+ * for themselves, so reading somebody else's is its own permission rather
+ * than a side effect of seeing the task board — an SMM holds tasks.viewAll
+ * and still does not get these.
+ *
+ * Whose each row is travels with it now, because a list of reminders with no
+ * owner on it is unreadable the moment it stops being your own.
+ */
 export async function GET(req: NextRequest) {
   try {
     const user = await requireAuth(req);
+    const sp = req.nextUrl.searchParams;
+    const wantedUser = sp.get("userId") ?? undefined;
+    const wantsAll = sp.get("scope") === "all";
+    const wantsOthers = wantsAll || (!!wantedUser && wantedUser !== user.id);
+
+    if (wantsOthers) requireCapability(user, "tasks.viewPersonal");
+
     const items = await prisma.personalItem.findMany({
-      where: { userId: user.id },
-      include: { createdBy: { select: { id: true, name: true } } },
+      where: {
+        // Always inside the tenant. A guessed id from another workspace
+        // matches nothing rather than somebody else's notebook.
+        user: { organizationId: user.organizationId },
+        ...(wantsAll ? {} : { userId: wantedUser ?? user.id }),
+      },
+      include: {
+        createdBy: { select: { id: true, name: true } },
+        user: { select: { id: true, name: true } },
+      },
       orderBy: [{ done: "asc" }, { date: "asc" }],
       take: 500,
     });

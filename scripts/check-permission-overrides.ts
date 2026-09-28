@@ -97,6 +97,27 @@ check("a valid grant beside an invalid one still lands",
   can(asUser("TEAM", { TEAM: { "nope.nope": true, "hr.today": true } }), "hr.today"), true);
 
 console.log("");
+console.log("— the board and the notebook are different permissions —");
+/*
+  tasks.viewAll is the task board: who is doing what. tasks.viewPersonal is
+  somebody's own reminders, which nobody assigned and which were written on
+  the understanding that they were private.
+
+  An SMM holds the first and not the second, and that gap is the whole point
+  of there being two capabilities rather than one.
+*/
+check("an SMM sees the board", can(asUser("SMM"), "tasks.viewAll"), true);
+check("...and not the notebook", can(asUser("SMM"), "tasks.viewPersonal"), false);
+check("a manager sees both",
+  can(asUser("MANAGER"), "tasks.viewAll") && can(asUser("MANAGER"), "tasks.viewPersonal"), true);
+check("an admin sees both",
+  can(asUser("ADMIN"), "tasks.viewAll") && can(asUser("ADMIN"), "tasks.viewPersonal"), true);
+check("a junior sees neither",
+  can(asUser("TEAM"), "tasks.viewAll") || can(asUser("TEAM"), "tasks.viewPersonal"), false);
+check("and a workspace can take the notebook back off its managers",
+  can(asUser("MANAGER", { MANAGER: { "tasks.viewPersonal": false } }), "tasks.viewPersonal"), false);
+
+console.log("");
 console.log("— the delta stays a delta —");
 const none: PermissionOverrides = {};
 const granted = withOverride(none, "SMM", "financials.view", true);

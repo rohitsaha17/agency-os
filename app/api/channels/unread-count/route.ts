@@ -25,16 +25,25 @@ export async function GET(req: NextRequest) {
       select: { channelId: true, lastReadAt: true },
     });
 
-    let totalUnread = 0;
-    for (const m of memberships) {
-      totalUnread += await prisma.chatMessage.count({
-        where: {
-          channelId: m.channelId,
-          ...(m.lastReadAt ? { createdAt: { gt: m.lastReadAt } } : {}),
-          NOT: { authorId: user.id },
-        },
-      });
-    }
+    // PERF-004/QA-011: one count, not one per channel. The old loop issued a
+    // `chatMessage.count` for every membership — an N+1 that grows with how many
+    // channels the caller belongs to. Each channel carries its own `lastReadAt`
+    // cutoff, so they can't share a single flat filter; instead each becomes one
+    // branch of an OR (channelId + that channel's cutoff), and a single count
+    // over the union returns the same total. `authorId != caller` stays an outer
+    // AND so it applies to every branch. Memberships are unique per
+    // (userId, channelId), so no message matches two branches — no double-count.
+    const totalUnread = memberships.length === 0
+      ? 0
+      : await prisma.chatMessage.count({
+          where: {
+            NOT: { authorId: user.id },
+            OR: memberships.map((m) => ({
+              channelId: m.channelId,
+              ...(m.lastReadAt ? { createdAt: { gt: m.lastReadAt } } : {}),
+            })),
+          },
+        });
 
     return NextResponse.json({ unreadCount: totalUnread });
   } catch (err) {

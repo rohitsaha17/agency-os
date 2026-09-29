@@ -52,7 +52,20 @@ export function useLiveRefresh(
     const onLocal = (e: Event) => {
       if (matches((e as CustomEvent).detail?.topic)) cb.current();
     };
-    const onWake = () => { if (document.visibilityState === "visible") cb.current(); };
+    // PERF-005: returning to a tab fires `focus` AND `visibilitychange`
+    // back-to-back, and both refetch — two full reloads for one user action.
+    // Collapse any wake within a second of the last into one. The interval
+    // (25s) is far outside this window, so its ticks are untouched; the
+    // mutation-driven paths (local event, BroadcastChannel) call cb directly
+    // and are unaffected.
+    let lastWake = 0;
+    const onWake = () => {
+      if (document.visibilityState !== "visible") return;
+      const now = Date.now();
+      if (now - lastWake < 1_000) return;
+      lastWake = now;
+      cb.current();
+    };
 
     window.addEventListener("vsf:live", onLocal);
     window.addEventListener("focus", onWake);

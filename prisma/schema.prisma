@@ -772,6 +772,14 @@ model Task {
   @@index([clientId])
   @@index([contentItemId])
   @@index([organizationId, assignmentStatus])
+  // PERF-007: the task list (GET /api/tasks) filters org + soft-delete + status;
+  // the dashboard's overdue/upcoming panels filter org + soft-delete + a dueDate
+  // range and order by dueDate. deletedAt (equality) precedes the range/order
+  // column in each. parentId had no index, so every subtask/children lookup
+  // (task detail, project board, next-sibling order) scanned by it.
+  @@index([organizationId, deletedAt, status])
+  @@index([organizationId, deletedAt, dueDate])
+  @@index([parentId])
   stars              TaskStar[]
   @@map("tasks")
 }
@@ -1863,6 +1871,9 @@ model StatusHistory {
 
   @@index([entityType, entityId])
   @@index([organizationId])
+  // PERF-007: the activity feed (GET /api/activity) filters by org and orders by
+  // changedAt desc; the plain org index leaves the sort to a scan.
+  @@index([organizationId, changedAt])
   @@map("status_history")
 }
 

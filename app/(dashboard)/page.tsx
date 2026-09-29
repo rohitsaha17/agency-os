@@ -485,9 +485,23 @@ export default function DashboardPage() {
 
   useEffect(() => {
     fetchDashboard();
-    // Auto-refresh every 2 minutes
-    const interval = setInterval(() => fetchDashboard(true), 120000);
-    return () => clearInterval(interval);
+    // Auto-refresh every 2 minutes — but only while the tab is actually being
+    // looked at. PERF-003: an idle background tab was re-hitting /api/dashboard
+    // (v1, ~31 queries) every two minutes regardless, for a screen nobody is
+    // watching. A hidden tab now skips the tick and refreshes once when the
+    // viewer returns to it. (RoleBlocks' /api/dashboard/v3 fetches once on
+    // mount and never polls, so it is unaffected either way.)
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") fetchDashboard(true);
+    }, 120000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") fetchDashboard(true);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [fetchDashboard]);
 
   const today = new Date().toLocaleDateString("en-US", {

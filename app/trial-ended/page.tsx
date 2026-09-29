@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Clock, Mail } from "lucide-react";
 import { BrandLogo } from "@/components/ui/BrandLogo";
 import { LogoutButton } from "@/components/auth/LogoutButton";
+import { verifySession, SESSION_COOKIE } from "@/lib/session";
 
 /**
  * Shown when a workspace's trial has ended. Server-gated: only reachable
@@ -12,8 +13,9 @@ import { LogoutButton } from "@/components/auth/LogoutButton";
  */
 export default async function TrialEndedPage() {
   const cookieStore = await cookies();
-  const userId = cookieStore.get("userId")?.value;
-  if (!userId) redirect("/login");
+  const session = verifySession(cookieStore.get(SESSION_COOKIE)?.value);
+  if (!session) redirect("/login");
+  const userId = session.uid;
 
   const user = await prisma.user.findUnique({
     where: { id: userId },

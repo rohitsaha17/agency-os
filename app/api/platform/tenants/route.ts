@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { apiError, handleApiError, ApiError } from "@/lib/api-errors";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { requirePlatformAdmin } from "@/lib/platform-admin";
+import { mintSetupToken } from "@/lib/setup-token";
 
 /**
  * Platform-admin tenant management — for the SaaS owner, NOT tenant users.
@@ -99,6 +100,12 @@ export async function POST(req: NextRequest) {
     // New workspaces start on a 14-day trial by default.
     const trialEndsAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
 
+    // QA-001: the owner starts without a password. Mint a single-use setup
+    // token so they set their first password by proving they hold this link,
+    // not by email alone (which anyone could do). The raw token is returned
+    // once, to the platform admin creating the tenant.
+    const setup = mintSetupToken();
+
     const result = await prisma.$transaction(async (tx) => {
       const org = await tx.organization.create({
         data: { name: orgName, onboardingCompleted: false, plan: "TRIAL", trialEndsAt },
@@ -110,6 +117,8 @@ export async function POST(req: NextRequest) {
           email: ownerEmail,
           role: "OWNER",
           isActive: true,
+          setupTokenHash: setup.hash,
+          setupTokenExpiresAt: setup.expiresAt,
         },
       });
       return { org, owner };
@@ -124,6 +133,10 @@ export async function POST(req: NextRequest) {
           name: result.owner.name,
           email: result.owner.email,
         },
+        // Hand this link to the new owner so they can set their first password.
+        setupToken: setup.token,
+        setupPath: `/set-password?token=${encodeURIComponent(setup.token)}`,
+        setupTokenExpiresAt: setup.expiresAt,
       },
       { status: 201 }
     );

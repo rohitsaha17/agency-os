@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { fileHref } from "@/lib/file-url";
 import {
   X, Trash2, ExternalLink,
   MessageSquare, Settings2,
@@ -723,7 +724,7 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
                         <> — <a href={d.url} target="_blank" rel="noreferrer" className="underline underline-offset-2 break-all">{d.url}</a></>
                       )}
                       {d.file && (
-                        <> — <a href={d.file.url ?? "#"} target="_blank" rel="noreferrer" className="underline underline-offset-2">{d.file.name}</a></>
+                        <> — <a href={fileHref(d.file.id)} target="_blank" rel="noreferrer" className="underline underline-offset-2">{d.file.name}</a></>
                       )}
                       {d.note && <p className="text-emerald-700 mt-0.5">{d.note}</p>}
                     </div>

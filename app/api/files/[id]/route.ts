@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { requireCapability } from "@/lib/api-permissions";
 import { handleApiError, ApiError } from "@/lib/api-errors";
+import { deleteFile } from "@/lib/storage";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -152,11 +153,22 @@ export async function DELETE(req: NextRequest, { params }: Params) {
 
     const existing = await prisma.file.findFirst({
       where: { id, organizationId: user.organizationId },
-      select: { id: true },
+      // s3Key of the file itself + every version, so the objects go with the
+      // row (QA-005). Collected BEFORE the delete, because FileVersion cascades.
+      select: { id: true, s3Key: true, versions: { select: { s3Key: true } } },
     });
     if (!existing) throw new ApiError("File not found", 404);
 
     await prisma.file.delete({ where: { id } });
+
+    // Remove the underlying storage objects too — deleting the row alone left
+    // them in the bucket, publicly fetchable forever (QA-005). Best-effort:
+    // deleteFile never throws, and an orphaned object must not fail the request.
+    const keys = new Set<string>();
+    if (existing.s3Key) keys.add(existing.s3Key);
+    for (const v of existing.versions) if (v.s3Key) keys.add(v.s3Key);
+    await Promise.all([...keys].map((k) => deleteFile(k)));
+
     return NextResponse.json({ success: true });
   } catch (err) {
     return handleApiError(err, "DELETE /api/files/[id]");

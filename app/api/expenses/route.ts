@@ -4,6 +4,7 @@ import { requireAuth } from "@/lib/auth";
 import { requireCapability } from "@/lib/api-permissions";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 import { canViewFinancials } from "@/lib/permissions";
+import { assertInOrg } from "@/lib/assert-in-org";
 
 const expenseInclude = {
   project:     { select: { id: true, name: true, clientId: true } },
@@ -96,6 +97,12 @@ export async function POST(req: NextRequest) {
         select: { id: true },
       });
       if (!c) throw new ApiError("Client not found", 404);
+    }
+    // QA-004: filing on someone else's behalf (admin/manager only) trusted the
+    // body userId without a tenant check — a foreign user id would be stored.
+    // Only relevant when the caller may set it; others are forced to self below.
+    if (canViewFinancials(user)) {
+      await assertInOrg("user", userId, user.organizationId, { label: "User" });
     }
 
     const expense = await prisma.expense.create({

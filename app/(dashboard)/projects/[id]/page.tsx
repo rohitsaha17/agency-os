@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { fileHref } from "@/lib/file-url";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -1299,7 +1300,7 @@ export default function ProjectDetailPage() {
                         }} />
                       </label>
                       {file.url && (
-                        <a href={file.url} download={file.name}
+                        <a href={fileHref(file.id, { download: true })} download={file.name}
                           className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
                           title="Download" onClick={(e) => e.stopPropagation()}>
                           <Download className="w-3.5 h-3.5" />

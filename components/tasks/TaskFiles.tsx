@@ -6,6 +6,7 @@ import {
   Download, History, X, Plus, ChevronDown, ChevronUp,
 } from "lucide-react";
 import type { AssetFile, FileVersion } from "@/types";
+import { fileHref } from "@/lib/file-url";
 
 function formatSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
@@ -259,7 +260,7 @@ export function TaskFiles({ taskId, projectId }: TaskFilesProps) {
                       {/* Download */}
                       {file.url && (
                         <a
-                          href={file.url}
+                          href={fileHref(file.id, { download: true })}
                           download={file.name}
                           className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
                           title="Download"
@@ -290,7 +291,7 @@ export function TaskFiles({ taskId, projectId }: TaskFilesProps) {
                               <span className="text-gray-400 flex-shrink-0">{formatSize(v.size)}</span>
                               <span className="text-gray-400 flex-shrink-0">{timeAgo(v.createdAt)}</span>
                               {v.url && (
-                                <a href={v.url} download className="text-gray-400 hover:text-gray-600">
+                                <a href={fileHref(file.id, { download: true, versionId: v.id })} download className="text-gray-400 hover:text-gray-600">
                                   <Download className="w-3 h-3" />
                                 </a>
                               )}

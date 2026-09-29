@@ -62,8 +62,10 @@ export default function LoginPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(errMsg(data) || "Login failed");
-      if (data.needsPasswordSetup) setPhase("setup");
-      else setPhase("password");
+      // First-password setup no longer happens from the login screen (QA-001):
+      // it requires the single-use token from an invite link, so every
+      // recognised account is prompted for a password here.
+      setPhase("password");
       setLoading(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");

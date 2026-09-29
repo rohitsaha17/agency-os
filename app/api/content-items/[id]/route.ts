@@ -6,6 +6,7 @@ import { handleApiError, ApiError } from "@/lib/api-errors";
 import { can } from "@/lib/permissions";
 import { isSettled, settledReason } from "@/lib/content-status";
 import { createContentWorkTask, syncPlanningTask } from "@/lib/auto-tasks";
+import { assertInOrg } from "@/lib/assert-in-org";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -90,6 +91,16 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       });
       if (!type) throw new ApiError("Creative type not found", 404);
     }
+
+    // Body foreign keys that were written through without a tenant check
+    // (QA-004: projectId, cycleId, referenceFileId, and the assigneeId used to
+    // route the junior's task). Foreign id -> 404; a null/empty clear is a
+    // no-op. A cycle carries no organizationId of its own, so it is scoped
+    // through its parent project.
+    await assertInOrg("project", projectId, user.organizationId, { label: "Project" });
+    await assertInOrg("projectCycle", cycleId, user.organizationId, { via: "project", label: "Cycle" });
+    await assertInOrg("file", referenceFileId, user.organizationId, { label: "Reference file" });
+    await assertInOrg("user", assigneeId, user.organizationId, { label: "Assignee" });
 
     const updated = await prisma.contentItem.update({
       where: { id },

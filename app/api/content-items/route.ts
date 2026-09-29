@@ -7,6 +7,7 @@ import { logStatus } from "@/lib/audit";
 import { cycleForDate } from "@/lib/cycles";
 import { quotaCheck } from "@/lib/cycle-quota";
 import { createContentWorkTask, syncPlanningTask } from "@/lib/auto-tasks";
+import { assertInOrg } from "@/lib/assert-in-org";
 
 const ITEM_INCLUDE = {
   // Only id/name/color/icon are read anywhere in the app; the full row
@@ -110,6 +111,12 @@ export async function POST(req: NextRequest) {
       });
       if (!project) throw new ApiError("Project not found for this client", 404);
     }
+
+    // QA-004: a cycleId or assigneeId from the body was trusted without a
+    // tenant check. Scope both to the caller's org (the cycle through its
+    // parent project, which carries the org). Foreign id -> 404; empty -> no-op.
+    await assertInOrg("projectCycle", cycleId, user.organizationId, { via: "project", label: "Cycle" });
+    await assertInOrg("user", assigneeId, user.organizationId, { label: "Assignee" });
 
     // v3: work out which cycle this date falls into, then check the quota.
     // Planning beyond the deal is allowed but must be acknowledged, and the

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { requireCapability } from "@/lib/api-permissions";
 import { handleApiError, ApiError } from "@/lib/api-errors";
+import { mintSetupToken } from "@/lib/setup-token";
 
 // Roles that can be granted to invited teammates. OWNER is never
 // assignable — it belongs to the account created at tenant setup.
@@ -85,6 +86,11 @@ export async function POST(req: NextRequest) {
     });
     if (existing) throw new ApiError("A user with this email already exists", 409);
 
+    // QA-001: mint a single-use setup token so the invitee can set their first
+    // password by proving they hold this link — not by email alone. Only the
+    // hash is stored; the raw token is returned to the admin ONCE below.
+    const setup = mintSetupToken();
+
     const created = await prisma.user.create({
       data: {
         organizationId: user.organizationId,
@@ -92,11 +98,25 @@ export async function POST(req: NextRequest) {
         email: normalizedEmail,
         role:  role ?? "TEAM",
         designationId: designationId ?? null,
+        setupTokenHash: setup.hash,
+        setupTokenExpiresAt: setup.expiresAt,
       },
       select: USER_FIELDS,
     });
 
-    return NextResponse.json(created, { status: 201 });
+    // The raw token leaves the server exactly here, to the admin who created
+    // the invite (they hold users.manage). It is never stored in plaintext,
+    // never logged, and has no read-back endpoint. The admin shares this link
+    // with the invitee out of band.
+    return NextResponse.json(
+      {
+        ...created,
+        setupToken: setup.token,
+        setupPath: `/set-password?token=${encodeURIComponent(setup.token)}`,
+        setupTokenExpiresAt: setup.expiresAt,
+      },
+      { status: 201 },
+    );
   } catch (error) {
     return handleApiError(error, "POST /api/users");
   }

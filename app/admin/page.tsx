@@ -74,7 +74,7 @@ export default function PlatformAdminPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
-  const [createdInfo, setCreatedInfo] = useState<{ org: string; email: string } | null>(null);
+  const [createdInfo, setCreatedInfo] = useState<{ org: string; email: string; setupUrl: string | null } | null>(null);
   const [form, setForm] = useState({ organizationName: "", ownerName: "", ownerEmail: "" });
 
   // Per-tenant owner-password reset
@@ -103,7 +103,7 @@ export default function PlatformAdminPage() {
         id: tenantId,
         text: data.mode === "set"
           ? `Password set for ${data.ownerEmail}. Share it with them securely.`
-          : `Cleared — ${data.ownerEmail} will set a new password on next sign-in.`,
+          : `Cleared. Send ${data.ownerEmail} this one-time setup link: ${window.location.origin}${data.setupPath}`,
       });
       setResetPw("");
       setResetFor(null);
@@ -272,7 +272,11 @@ export default function PlatformAdminPage() {
         const msg = typeof data?.error === "string" ? data.error : data?.error?.message;
         throw new Error(msg || "Failed to create tenant");
       }
-      setCreatedInfo({ org: data.name, email: data.owner.email });
+      setCreatedInfo({
+        org: data.name,
+        email: data.owner.email,
+        setupUrl: data.setupPath ? `${window.location.origin}${data.setupPath}` : null,
+      });
       setForm({ organizationName: "", ownerName: "", ownerEmail: "" });
       fetchTenants(adminKey);
     } catch (err) {
@@ -399,15 +403,20 @@ export default function PlatformAdminPage() {
               <CheckCircle2 className="w-4 h-4 text-emerald-400 mt-0.5 flex-shrink-0" />
               <div className="text-xs text-emerald-200 leading-relaxed">
                 <span className="font-semibold">{createdInfo.org}</span> is live.
-                Tell the owner to sign in at <span className="font-mono">/login</span> with{" "}
-                <span className="font-mono">{createdInfo.email}</span> — they&rsquo;ll be
-                walked through onboarding on first login.
-                <button
-                  onClick={() => navigator.clipboard?.writeText(`${window.location.origin}/login — sign in with ${createdInfo.email}`)}
-                  className="ml-2 inline-flex items-center gap-1 text-emerald-300 hover:text-emerald-100 underline"
-                >
-                  <Copy className="w-3 h-3" /> copy invite
-                </button>
+                Send the owner (<span className="font-mono">{createdInfo.email}</span>) their
+                one-time setup link so they can choose a password — it works once and expires,
+                then they&rsquo;re walked through onboarding.
+                {createdInfo.setupUrl && (
+                  <>
+                    <span className="block mt-1 font-mono break-all text-emerald-300">{createdInfo.setupUrl}</span>
+                    <button
+                      onClick={() => navigator.clipboard?.writeText(createdInfo.setupUrl!)}
+                      className="mt-1 inline-flex items-center gap-1 text-emerald-300 hover:text-emerald-100 underline"
+                    >
+                      <Copy className="w-3 h-3" /> copy setup link
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           )}

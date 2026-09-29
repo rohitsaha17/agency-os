@@ -7,6 +7,7 @@ import { apiError, handleApiError, ApiError } from "@/lib/api-errors";
 import { logStatus } from "@/lib/audit";
 import { notify, notifyMany } from "@/lib/notify";
 import { can, canAssignToUser } from "@/lib/permissions";
+import { assertInOrg } from "@/lib/assert-in-org";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -200,6 +201,14 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         throw new ApiError("Estimated hours must be a number", 400);
       }
     }
+
+    // Body foreign keys that were written through without a tenant check
+    // (QA-003 clientId; QA-004 preferredAssigneeId, referenceFileId). A foreign
+    // id is a 404; a null/empty clear is a no-op. parentId/managerId/assigneeIds
+    // keep their own org checks above — CONFIRMED-SAFE, not replaced here.
+    await assertInOrg("client", clientId, user.organizationId, { label: "Client" });
+    await assertInOrg("user", preferredAssigneeId, user.organizationId, { label: "Preferred assignee" });
+    await assertInOrg("file", referenceFileId, user.organizationId, { label: "Reference file" });
 
     const task = await prisma.task.update({
       where: { id },

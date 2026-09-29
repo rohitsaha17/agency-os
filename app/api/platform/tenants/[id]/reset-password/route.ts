@@ -3,14 +3,17 @@ import { prisma } from "@/lib/prisma";
 import { apiError, handleApiError, ApiError } from "@/lib/api-errors";
 import { requirePlatformAdmin } from "@/lib/platform-admin";
 import { hashPassword, validatePassword } from "@/lib/password";
+import { mintSetupToken } from "@/lib/setup-token";
 
 /**
  * POST /api/platform/tenants/[id]/reset-password — platform-admin only.
  *
  * Resets the workspace OWNER's login password.
  *   • body { newPassword } → sets that password (admin hands it over).
- *   • body {} / no password → clears the password so the owner sets a new
- *     one on their next sign-in (the normal first-login flow).
+ *   • body {} / no password → clears the password AND mints a single-use setup
+ *     token, returned as a link the owner uses to choose a new one (QA-001).
+ *     Email alone can no longer claim the account, so a bare clear would lock
+ *     the owner out — the token is what lets them back in.
  */
 export async function POST(
   req: NextRequest,
@@ -47,12 +50,20 @@ export async function POST(
       return NextResponse.json({ ok: true, mode: "set", ownerEmail: owner.email });
     }
 
-    // Clear → owner re-sets on next login.
+    // Clear → owner re-sets via a fresh single-use setup link.
+    const setup = mintSetupToken();
     await prisma.user.update({
       where: { id: owner.id },
-      data: { passwordHash: null, passwordSetAt: null },
+      data: {
+        passwordHash: null, passwordSetAt: null,
+        setupTokenHash: setup.hash, setupTokenExpiresAt: setup.expiresAt,
+      },
     });
-    return NextResponse.json({ ok: true, mode: "cleared", ownerEmail: owner.email });
+    return NextResponse.json({
+      ok: true, mode: "cleared", ownerEmail: owner.email,
+      setupToken: setup.token,
+      setupPath: `/set-password?token=${encodeURIComponent(setup.token)}`,
+    });
   } catch (error) {
     return handleApiError(error, "POST /api/platform/tenants/[id]/reset-password");
   }

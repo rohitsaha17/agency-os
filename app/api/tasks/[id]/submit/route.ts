@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 import { submit, roundHistory, type SubmissionMethod } from "@/lib/review-loop";
+import { assertInOrg } from "@/lib/assert-in-org";
 
 /**
  * POST /api/tasks/[id]/submit — the assignee hands work in with proof.
@@ -35,6 +36,9 @@ export async function POST(req: NextRequest, { params }: Params) {
 
     const { method, url, fileId, remarks } = await req.json();
     if (!METHODS.includes(method)) throw new ApiError("Pick how the work was delivered", 400);
+    // QA-004: the task is org-scoped above, but the attached proof fileId was
+    // trusted — a foreign file could be linked. Scope it; empty -> no-op.
+    await assertInOrg("file", fileId, user.organizationId, { label: "File" });
 
     const result = await submit({
       taskId: id,

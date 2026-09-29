@@ -4,6 +4,7 @@ import { requireAuth } from "@/lib/auth";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 import { logStatus } from "@/lib/audit";
 import { notify } from "@/lib/notify";
+import { assertInOrg } from "@/lib/assert-in-org";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -52,6 +53,10 @@ export async function POST(req: NextRequest, { params }: Params) {
     let delivery = null;
     if (!skipProof) {
       if (!METHODS.includes(method)) throw new ApiError("Invalid delivery method", 400);
+      // QA-004: the task lookup above is org-scoped (CONFIRMED-SAFE cross-tenant
+      // 404), but the attached fileId was trusted — a foreign file could be
+      // linked as proof. Scope it to the caller's org; empty -> no-op.
+      await assertInOrg("file", fileId, user.organizationId, { label: "File" });
       delivery = await prisma.taskDelivery.create({
         data: {
           taskId: id,

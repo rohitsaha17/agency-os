@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useMemo, useRef, Suspense } from "react";
+import { fileHref } from "@/lib/file-url";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -1524,7 +1525,7 @@ function TasksBoardInner() {
                               </a>
                             )}
                             {proof.file && (
-                              <a href={proof.file.url} target="_blank" rel="noreferrer"
+                              <a href={fileHref(proof.file.id)} target="_blank" rel="noreferrer"
                                 className="text-indigo-600 hover:underline inline-flex items-center gap-1">
                                 <Paperclip className="w-3 h-3" /> {proof.file.name}
                               </a>

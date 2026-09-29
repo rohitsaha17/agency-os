@@ -9,6 +9,7 @@
  */
 
 import { useEffect, useState } from "react";
+import { fileHref } from "@/lib/file-url";
 import { Link2, Paperclip, CheckCircle2, RotateCcw, Clock } from "lucide-react";
 
 interface Round {
@@ -87,7 +88,7 @@ export function RoundHistory({ taskId }: { taskId: string }) {
                     </a>
                   )}
                   {r.submission.file && (
-                    <a href={r.submission.file.url} target="_blank" rel="noreferrer"
+                    <a href={fileHref(r.submission.file.id)} target="_blank" rel="noreferrer"
                       className="text-indigo-600 hover:underline inline-flex items-center gap-1 mt-1">
                       <Paperclip className="w-3 h-3" /> {r.submission.file.name}
                     </a>

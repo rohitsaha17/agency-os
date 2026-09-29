@@ -1054,6 +1054,8 @@ function UsersTab() {
   const [designations, setDesignations] = useState<DesignationRole[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
+  // The invite's one-time setup link, shown to the admin so they can pass it on.
+  const [setupLink, setSetupLink] = useState<{ name: string; url: string } | null>(null);
   const [editId, setEditId]   = useState<string | null>(null);
   const [newForm, setNewForm] = useState({ name: "", email: "", role: "TEAM", designationId: "" });
   const [saving, setSaving]   = useState(false);
@@ -1083,10 +1085,16 @@ function UsersTab() {
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error?.message ?? "Failed"); return; }
-      setUsers((p) => [...p, data]);
+      // Keep the one-time setup token out of the persisted user list; surface
+      // its link separately for the admin to hand to the invitee (QA-001).
+      const { setupToken: _t, setupPath, setupTokenExpiresAt: _e, ...userRow } = data;
+      setUsers((p) => [...p, userRow]);
       setNewForm({ name: "", email: "", role: "TEAM", designationId: "" });
       setShowAdd(false);
-      toast.success(`${data.name} added to team`);
+      if (setupPath && typeof window !== "undefined") {
+        setSetupLink({ name: userRow.name, url: `${window.location.origin}${setupPath}` });
+      }
+      toast.success(`${userRow.name} added — share their setup link`);
     } finally { setSaving(false); }
   };
 
@@ -1209,6 +1217,39 @@ function UsersTab() {
                 className="px-3 py-1.5 text-xs text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
               >
                 Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* One-time setup link for a freshly-invited member (QA-001). Shown
+            once; the admin copies it and sends it to the person out of band. */}
+        {setupLink && (
+          <div className="mb-4 p-4 bg-emerald-50 border border-emerald-200 rounded-xl space-y-2">
+            <p className="text-xs font-semibold text-emerald-800">
+              Setup link for {setupLink.name}
+            </p>
+            <p className="text-[11px] text-emerald-700">
+              Send this to them so they can set their password. It works once and expires — it won&apos;t be shown again.
+            </p>
+            <div className="flex items-center gap-2">
+              <input
+                readOnly
+                value={setupLink.url}
+                onFocus={(e) => e.currentTarget.select()}
+                className="flex-1 px-3 py-1.5 text-xs bg-white border border-emerald-300 rounded-lg text-gray-700"
+              />
+              <button
+                onClick={() => { navigator.clipboard?.writeText(setupLink.url); toast.success("Setup link copied"); }}
+                className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-medium rounded-lg hover:bg-emerald-500 transition-colors"
+              >
+                Copy
+              </button>
+              <button
+                onClick={() => setSetupLink(null)}
+                className="px-3 py-1.5 text-xs text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Dismiss
               </button>
             </div>
           </div>

@@ -14,6 +14,7 @@
  */
 
 import { useEffect, useState, useCallback, useMemo } from "react";
+import { fileHref } from "@/lib/file-url";
 import Link from "next/link";
 import {
   ShieldCheck, ExternalLink, Link2, Paperclip, AlertCircle, ChevronLeft,
@@ -313,7 +314,7 @@ function ApprovalsInner() {
                         </a>
                       )}
                       {d.file && (
-                        <a href={d.file.url} target="_blank" rel="noreferrer"
+                        <a href={fileHref(d.file.id)} target="_blank" rel="noreferrer"
                           className="inline-flex items-center gap-1.5 text-sm text-indigo-600 hover:underline">
                           <Paperclip className="w-3.5 h-3.5" /> {d.file.name}
                         </a>

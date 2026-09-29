@@ -13,6 +13,7 @@ import { attendanceDay, dayString } from "@/lib/hr";
 import { can } from "@/lib/permissions";
 import { resolveTheme, type WorkspaceTheme } from "@/lib/theme";
 import { WorkspaceThemeClass } from "@/components/layout/WorkspaceTheme";
+import { verifySession, SESSION_COOKIE } from "@/lib/session";
 
 /*
   A window wide enough to contain whichever day "today" turns out to be once
@@ -35,8 +36,11 @@ export default async function DashboardLayout({
   children: React.ReactNode;
 }) {
   const cookieStore = await cookies();
-  const userId = cookieStore.get("userId")?.value;
-  if (!userId) redirect("/login");
+  // Verify the signed session before trusting the id (QA-002); a tampered,
+  // forged or expired cookie sends the visitor to /login.
+  const session = verifySession(cookieStore.get(SESSION_COOKIE)?.value);
+  if (!session) redirect("/login");
+  const userId = session.uid;
 
   let gate: "login" | "onboarding" | "set-password" | "trial-ended" | null = null;
   let seed: CurrentUser | null = null;
@@ -68,6 +72,7 @@ export default async function DashboardLayout({
         },
         isActive: true,
         passwordHash: true,
+        passwordSetAt: true,
         organization: {
           select: {
             id: true, name: true, slug: true, logoUrl: true, currency: true,
@@ -98,7 +103,12 @@ export default async function DashboardLayout({
       },
     });
     if (user?.organization) theme = resolveTheme(user.organization.theme);
-    if (!user || !user.isActive) gate = "login";
+    // Session bound to the credential: a password change/reset since the token
+    // was minted (passwordSetAt moved on), or a deactivated account, is a login.
+    const pwaOk = user
+      ? session.pwa === (user.passwordSetAt ? user.passwordSetAt.getTime() : 0)
+      : false;
+    if (!user || !user.isActive || !pwaOk) gate = "login";
     else if (!user.organization.onboardingCompleted) gate = "onboarding";
     else if (!user.passwordHash) gate = "set-password";
     else if (

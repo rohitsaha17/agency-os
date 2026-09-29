@@ -1,6 +1,7 @@
 "use client";
 
 import { clickable } from "@/lib/a11y";
+import { fileHref } from "@/lib/file-url";
 import {
   FileText,
   FileVideo,
@@ -142,7 +143,7 @@ export function FileCard({ file, onClick, view = "grid" }: FileCardProps) {
         {file.mimeCategory === "image" && file.url ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={file.url}
+            src={fileHref(file.id)}
             alt={file.name}
             loading="lazy"
             decoding="async"

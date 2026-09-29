@@ -27,6 +27,7 @@ import {
   Trash2,
 } from "lucide-react";
 import type { AssetFile, FileComment, FileStatus, FileVersion } from "@/types";
+import { fileHref } from "@/lib/file-url";
 
 // ── helpers ────────────────────────────────────────────────────
 
@@ -561,7 +562,7 @@ function PreviewArea({
           {file.url ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={file.url}
+              src={fileHref(file.id)}
               alt={file.name}
               className="max-w-full max-h-[calc(100vh-200px)] object-contain rounded-lg"
               draggable={false}
@@ -613,7 +614,7 @@ function PreviewArea({
           <div className="relative group">
             <video
               ref={videoRef}
-              src={file.url}
+              src={fileHref(file.id)}
               controls
               className="max-w-full max-h-[calc(100vh-200px)] rounded-lg"
             />
@@ -640,7 +641,7 @@ function PreviewArea({
       <div className="flex-1 overflow-hidden">
         {file.url ? (
           <iframe
-            src={file.url}
+            src={fileHref(file.id)}
             className="w-full h-full border-0"
             title={file.name}
           />
@@ -663,7 +664,7 @@ function PreviewArea({
       <p className="text-xs text-slate-600">{file.mimeType}</p>
       {file.url && (
         <a
-          href={file.url}
+          href={fileHref(file.id, { download: true })}
           download={file.name}
           className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition-colors"
         >
@@ -1152,7 +1153,7 @@ function VersionsPanel({
               <div className="flex items-center gap-1">
                 {v.url && (
                   <a
-                    href={v.url}
+                    href={fileHref(fileId, { download: true, versionId: v.id })}
                     download
                     className="p-1 text-slate-500 hover:text-slate-200 rounded transition-colors opacity-0 group-hover:opacity-100"
                     title="Download this version"

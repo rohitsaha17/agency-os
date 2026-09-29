@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import { fileHref } from "@/lib/file-url";
 import {
   Download, Paperclip, CheckSquare, RefreshCw, Image,
   Film, FileText, File as FileIcon,
@@ -38,8 +39,8 @@ function AttachmentItem({ att }: { att: NonNullable<ChatMessage["attachments"]>[
 
   if (isImage && file.url) {
     return (
-      <a href={file.url} target="_blank" rel="noopener noreferrer" className="block mt-1.5 max-w-[280px]">
-        <img src={file.url} alt={file.name} className="rounded-lg border border-white/[0.08] max-h-48 object-cover w-full hover:opacity-90 transition-opacity" />
+      <a href={fileHref(file.id)} target="_blank" rel="noopener noreferrer" className="block mt-1.5 max-w-[280px]">
+        <img src={fileHref(file.id)} alt={file.name} className="rounded-lg border border-white/[0.08] max-h-48 object-cover w-full hover:opacity-90 transition-opacity" />
         <p className="text-[10px] text-slate-500 mt-0.5 truncate">{file.name}</p>
       </a>
     );
@@ -61,7 +62,7 @@ function AttachmentItem({ att }: { att: NonNullable<ChatMessage["attachments"]>[
         </p>
       </div>
       {file.url && (
-        <a href={file.url} download={file.name} className="flex-shrink-0 text-slate-500 hover:text-slate-300 transition-colors">
+        <a href={fileHref(file.id, { download: true })} download={file.name} className="flex-shrink-0 text-slate-500 hover:text-slate-300 transition-colors">
           <Download className="w-3.5 h-3.5" />
         </a>
       )}

@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
+import { verifySession, SESSION_COOKIE } from "@/lib/session";
 
 /**
  * Lightweight current-user resolver for API routes (server-side).
@@ -20,18 +21,22 @@ import { cookies } from "next/headers";
  * that second lookup, and took twice as long as it needed to.
  */
 export async function getCurrentUser(_req?: Request) {
-  let userId: string | null = null;
+  let token: string | null = null;
 
   try {
     const cookieStore = await cookies();
-    userId = cookieStore.get("userId")?.value ?? null;
+    token = cookieStore.get(SESSION_COOKIE)?.value ?? null;
   } catch {
     // cookies() not available outside a request scope — ignore
   }
 
-  // No fallback: with multiple tenants, "first OWNER in the DB" would leak
-  // one org's identity to anonymous requests. No cookie/header → no user.
-  if (!userId) return null;
+  // Verify the signature and expiry before trusting anything (QA-002). A
+  // tampered, forged or expired cookie resolves to no user. No fallback:
+  // with multiple tenants, "first OWNER in the DB" would leak one org's
+  // identity to anonymous requests.
+  const session = verifySession(token);
+  if (!session) return null;
+  const userId = session.uid;
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -41,6 +46,9 @@ export async function getCurrentUser(_req?: Request) {
       // Presence only — the hash is turned into a boolean below and never
       // leaves this function.
       passwordHash: true,
+      // Binds the session to the current credential: a password change or admin
+      // reset re-stamps this, so a token minted before it no longer matches.
+      passwordSetAt: true,
       // Same reasoning as the organization below: a join inside a round trip
       // the request was already paying for. `blocksOwnDays` decides whether
       // this person may block their own diary, and it is asked on the
@@ -63,8 +71,16 @@ export async function getCurrentUser(_req?: Request) {
     },
   });
 
+  // Deactivation invalidates every live session (QA-002).
   if (!user || !user.isActive) return null;
-  const { isActive: _isActive, passwordHash, ...safe } = user;
+
+  // Credential binding: the token carries the passwordSetAt it was minted with.
+  // If the account's passwordSetAt has moved on (a password change or an admin
+  // reset), every token from before it is now stale — reject them.
+  const currentPwa = user.passwordSetAt ? user.passwordSetAt.getTime() : 0;
+  if (session.pwa !== currentPwa) return null;
+
+  const { isActive: _isActive, passwordHash, passwordSetAt: _pwa, ...safe } = user;
   return { ...safe, hasPassword: !!passwordHash };
 }
 

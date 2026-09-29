@@ -10,7 +10,7 @@ import { BrandLogo } from "@/components/ui/BrandLogo";
  * legacy account prompted on its next visit). Calls the session-based
  * /api/auth/set-password and continues into the app.
  */
-export function SetPasswordForm({ name }: { name?: string }) {
+export function SetPasswordForm({ name, token }: { name?: string; token?: string }) {
   const router = useRouter();
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -27,7 +27,9 @@ export function SetPasswordForm({ name }: { name?: string }) {
       const res = await fetch("/api/auth/set-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password }),
+        // When set from an invite link the token proves identity; when signed
+        // in it is omitted and the session is the proof.
+        body: JSON.stringify(token ? { password, token } : { password }),
       });
       const data = await res.json();
       if (!res.ok) {

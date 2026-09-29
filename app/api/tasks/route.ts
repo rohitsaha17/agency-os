@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { taskVisibilityScope } from "@/lib/api-permissions";
 import { canAssignToUser } from "@/lib/permissions";
+import { assertInOrg } from "@/lib/assert-in-org";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 import { parsePagination, paginationMeta, DEFAULT_PAGE_SIZE } from "@/lib/pagination";
 import { logStatus } from "@/lib/audit";
@@ -173,6 +174,10 @@ export async function POST(req: NextRequest) {
       });
       if (!client) throw new ApiError("Client not found", 404);
     }
+    // QA-004: the create door trusted these body FKs without a tenant check
+    // (the PATCH door already scopes them). Foreign id -> 404; empty -> no-op.
+    await assertInOrg("task", parentId, user.organizationId, { label: "Parent task" });
+    await assertInOrg("file", referenceFileId, user.organizationId, { label: "Reference file" });
     const peopleIds = [
       ...(assigneeIds ?? []),
       ...(managerId ? [managerId] : []),

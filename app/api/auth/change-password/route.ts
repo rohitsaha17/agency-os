@@ -4,6 +4,7 @@ import { requireAuth } from "@/lib/auth";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { apiError, handleApiError } from "@/lib/api-errors";
 import { hashPassword, verifyPassword, validatePassword } from "@/lib/password";
+import { signSession, sessionCookieOptions, SESSION_COOKIE } from "@/lib/session";
 
 /**
  * POST /api/auth/change-password — signed-in user changes their own password.
@@ -33,18 +34,25 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const passwordSetAt = new Date();
     await prisma.user.update({
       where: { id: user.id },
       data: {
         passwordHash: hashPassword(String(newPassword)),
-        passwordSetAt: new Date(),
+        passwordSetAt,
         // Whatever an admin handed over is now worthless, which is the point
         // of having handed over something temporary.
         mustChangePassword: false,
       },
     });
 
-    return NextResponse.json({ ok: true });
+    // Changing the password re-stamps passwordSetAt, which invalidates every
+    // session token minted before now (QA-002) — including OTHER devices this
+    // person is signed in on. Re-issue a fresh token for THIS session so the
+    // person who just changed it isn't logged out of the tab they're using.
+    const res = NextResponse.json({ ok: true });
+    res.cookies.set(SESSION_COOKIE, signSession(user.id, passwordSetAt), sessionCookieOptions());
+    return res;
   } catch (error) {
     return handleApiError(error, "POST /api/auth/change-password");
   }

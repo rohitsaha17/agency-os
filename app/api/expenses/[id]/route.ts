@@ -4,6 +4,7 @@ import { requireAuth } from "@/lib/auth";
 import { jsonFor, requireCapability } from "@/lib/api-permissions";
 import { canViewFinancials } from "@/lib/permissions";
 import { handleApiError, ApiError } from "@/lib/api-errors";
+import { assertInOrg } from "@/lib/assert-in-org";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -57,6 +58,11 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       date, status, projectId, userId,
       isReimbursable, receiptUrl, notes,
     } = body;
+
+    // QA-004: projectId/userId were written through without a tenant check.
+    // Foreign id -> 404; empty -> no-op (clearing stays supported).
+    await assertInOrg("project", projectId, user.organizationId, { label: "Project" });
+    await assertInOrg("user", userId, user.organizationId, { label: "User" });
 
     const expense = await prisma.expense.update({
       where: { id },

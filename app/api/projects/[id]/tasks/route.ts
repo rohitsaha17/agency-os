@@ -6,6 +6,7 @@ import { requireCapability, taskVisibilityScope } from "@/lib/api-permissions";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 import { notifyMany } from "@/lib/notify";
 import { logStatus } from "@/lib/audit";
+import { assertInOrg } from "@/lib/assert-in-org";
 import { resolveRouting, notifyHeads, assignmentRequiresApproval } from "@/lib/task-routing";
 import type { Task } from "@/types";
 
@@ -181,6 +182,14 @@ export async function POST(req: NextRequest, { params }: Params) {
       });
       if (!parent) throw new ApiError("Parent task not found", 404);
     }
+
+    // QA-004: these body FKs were written through without a tenant check on
+    // this create door. Foreign id -> 404; empty -> no-op. (parentId is scoped
+    // above against the project; assignee-permission scoping is QA-017/Phase 2.)
+    await assertInOrg("user", managerId, user.organizationId, { label: "Manager" });
+    await assertInOrg("user", preferredAssigneeId, user.organizationId, { label: "Preferred assignee" });
+    await assertInOrg("file", referenceFileId, user.organizationId, { label: "Reference file" });
+    await assertInOrg("contentItem", contentItemId, user.organizationId, { label: "Content item" });
 
     const lastSibling = await prisma.task.findFirst({
       where: { projectId, parentId: parentId ?? null, deletedAt: null },

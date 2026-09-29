@@ -15,7 +15,7 @@
  * two fetch calls, and this avoids adding a dependency and its bundle weight
  * to every serverless function.
  */
-import { writeFile, mkdir, unlink } from "fs/promises";
+import { writeFile, mkdir, unlink, readFile } from "fs/promises";
 import path from "path";
 
 const BUCKET = process.env.SUPABASE_STORAGE_BUCKET || "uploads";
@@ -77,6 +77,36 @@ export async function putFile(
   }
 
   return { key, url: `${cfg.url}/storage/v1/object/public/${BUCKET}/${key}` };
+}
+
+/**
+ * Read one stored object's bytes, for the authenticated download route.
+ *
+ * Goes through the service credential (or local disk), NOT the public URL, so
+ * the app can serve files whether the bucket is public or private — the auth
+ * and org checks happen in the route before we ever get here. Returns null when
+ * the object is missing, so the route can answer 404 rather than 500.
+ */
+export async function getFile(
+  key: string,
+): Promise<{ body: Buffer; contentType: string | null } | null> {
+  const cfg = remoteConfig();
+
+  if (!cfg) {
+    try {
+      const body = await readFile(path.join(process.cwd(), "public", key));
+      return { body, contentType: null };
+    } catch {
+      return null;
+    }
+  }
+
+  const res = await fetch(`${cfg.url}/storage/v1/object/${BUCKET}/${key}`, {
+    headers: { Authorization: `Bearer ${cfg.key}` },
+  });
+  if (!res.ok) return null;
+  const buf = Buffer.from(await res.arrayBuffer());
+  return { body: buf, contentType: res.headers.get("content-type") };
 }
 
 /** Best-effort removal. Never throws: a failed cleanup must not fail a request. */

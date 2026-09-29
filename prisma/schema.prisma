@@ -307,6 +307,12 @@ model User {
   /// them. This is what closes that window: the temporary password works
   /// exactly once, and the next screen after it is "choose a new one".
   mustChangePassword Boolean @default(false)
+  /// QA-001 first-password setup. A freshly-invited account has no password;
+  /// instead of letting anyone claim it by email, the invite mints a single-use
+  /// token. Only its SHA-256 hash is stored (never the token itself), it expires,
+  /// and it is cleared the moment a password is set — so it works exactly once.
+  setupTokenHash      String?
+  setupTokenExpiresAt DateTime?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 

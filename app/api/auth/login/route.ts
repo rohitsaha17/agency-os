@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { apiError, handleApiError } from "@/lib/api-errors";
 import { verifyPassword } from "@/lib/password";
+import { signSession, sessionCookieOptions, SESSION_COOKIE } from "@/lib/session";
 
 /**
  * POST /api/auth/login — email + password login (two-phase).
@@ -38,7 +39,7 @@ export async function POST(req: NextRequest) {
       where: { email: { equals: normalized, mode: "insensitive" }, isActive: true },
       select: {
         id: true, name: true, email: true, role: true, passwordHash: true,
-        mustChangePassword: true,
+        mustChangePassword: true, passwordSetAt: true,
         organization: { select: { id: true, name: true, onboardingCompleted: true } },
       },
     });
@@ -48,19 +49,21 @@ export async function POST(req: NextRequest) {
       return apiError("No account found for that email", 404);
     }
 
-    // Account has never set a password → send the client to the setup step.
-    if (!user.passwordHash) {
-      return NextResponse.json({ needsPasswordSetup: true, email: user.email });
-    }
+    // QA-001: never advertise that an account has no password ("needsPasswordSetup"
+    // let anyone enumerate which accounts were claimable by email). A password-less
+    // account behaves exactly like any other here — first-password setup happens
+    // only through the invite link's single-use token (POST /api/auth/set-password),
+    // never from the login screen.
 
     // Phase 1: email recognised, prompt for the password (no cookie yet).
     if (password === undefined || password === null || password === "") {
       return NextResponse.json({ needsPassword: true, email: user.email });
     }
 
-    // Phase 2: verify.
-    if (!verifyPassword(String(password), user.passwordHash)) {
-      return apiError("Incorrect password", 401);
+    // Phase 2: verify. A password-less account can't match, and says so with the
+    // same generic message as a wrong password — no "set your password" tell.
+    if (!user.passwordHash || !verifyPassword(String(password), user.passwordHash)) {
+      return apiError("Incorrect email or password", 401);
     }
 
     const res = NextResponse.json({
@@ -82,13 +85,9 @@ export async function POST(req: NextRequest) {
       mustChangePassword: user.mustChangePassword,
     });
 
-    res.cookies.set("userId", user.id, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      path: "/",
-      maxAge: 60 * 60 * 24 * 30, // 30 days
-    });
+    // Signed, tamper-proof session token bound to the current credential
+    // (QA-002), not a raw user id.
+    res.cookies.set(SESSION_COOKIE, signSession(user.id, user.passwordSetAt), sessionCookieOptions());
 
     return res;
   } catch (error) {

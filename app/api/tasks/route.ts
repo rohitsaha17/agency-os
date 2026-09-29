@@ -5,6 +5,7 @@ import { can } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { taskVisibilityScope } from "@/lib/api-permissions";
+import { isProjectSmm } from "@/lib/project-scope";
 import { assertInOrg } from "@/lib/assert-in-org";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 import { parsePagination, paginationMeta, DEFAULT_PAGE_SIZE } from "@/lib/pagination";
@@ -165,6 +166,12 @@ export async function POST(req: NextRequest) {
         select: { id: true, clientId: true },
       });
       if (!project) throw new ApiError("Project not found", 404);
+      // QA-016: an SMM may attach a task to a project only if they're on it
+      // (admin/manager unrestricted; TEAM self-tasks are unaffected — this only
+      // narrows the SMM case). Same own-project rule as the other doors.
+      if (user.role === "SMM" && !(await isProjectSmm(user.id, projectId))) {
+        throw new ApiError("You can only add tasks to projects you're on", 403);
+      }
     }
     if (clientId) {
       const client = await prisma.client.findFirst({

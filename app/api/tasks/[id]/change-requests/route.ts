@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { requireCapability } from "@/lib/api-permissions";
+import { requireProjectCapability } from "@/lib/project-scope";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 import { logStatus } from "@/lib/audit";
 import { notifyMany } from "@/lib/notify";
@@ -48,6 +49,9 @@ export async function POST(req: NextRequest, { params }: Params) {
       select: { id: true, title: true, status: true, projectId: true, assignees: { select: { userId: true } } },
     });
     if (!task) throw new ApiError("Task not found", 404);
+    // QA-016: reviewing (sending work back) is scoped for an SMM to projects
+    // they belong to, matching the sibling /review route.
+    await requireProjectCapability(user, "tasks.review", task.projectId);
 
     const [request] = await prisma.$transaction([
       prisma.changeRequest.create({

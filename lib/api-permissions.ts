@@ -30,6 +30,10 @@ export function requireCapability(
   }
 }
 
+// SMM own-project scope (QA-016) lives in lib/project-scope.ts so this module
+// stays free of a prisma import (build-time check scripts import it for its pure
+// functions). See requireProjectCapability / isProjectSmm there.
+
 /**
  * NextResponse.json, with every money field removed for users who lack
  * financials.view. Use this INSTEAD of NextResponse.json on any route whose

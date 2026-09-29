@@ -285,6 +285,17 @@ function TasksBoardInner() {
   // v3: the Approvals inbox belongs to anyone who reviews work, which is a
   // capability rather than a job title (docs/V3_CONTEXT.md §2).
   const isHead = can(currentUser, "tasks.review");
+  /**
+   * Who may act on the ASSIGNMENT-approval queue. Mirrors isHeadOfDesign() in
+   * lib/auth exactly — the rule the server's approve/reassign route enforces:
+   * the legacy Head-of-Design designation, or an admin/owner. NOT tasks.review —
+   * a manager/SMM holds that but the server refuses them here (QA-014). (This is
+   * the enum-based auth rule, distinct from lib/design-head's jobTitle check.)
+   */
+  const isAssignmentApprover =
+    currentUser?.role === "ADMIN" ||
+    currentUser?.role === "OWNER" ||
+    currentUser?.designation === "HEAD_OF_DESIGN";
   /** Who may look at somebody else's list. Same capability the API scopes on. */
   // Who may look at somebody else's list, not only their own.
   const seesEveryone = can(currentUser, "tasks.viewAll");
@@ -1547,13 +1558,17 @@ function TasksBoardInner() {
                     );
                   })}
 
-                  {/* Assignment approvals — only while the gate is on */}
-                  {approvals.assignments.length > 0 && (
+                  {/* Assignment approvals — only while the gate is on, and only
+                      for those the server lets act on them (QA-014): the
+                      approve/reassign endpoint requires Head-of-Design or admin,
+                      so managers/SMMs must not be shown buttons that 403. This
+                      mirrors isHeadOfDesign() server-side exactly. */}
+                  {isAssignmentApprover && approvals.assignments.length > 0 && (
                     <p className="pt-2 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
                       Assignment approvals
                     </p>
                   )}
-                  {approvals.assignments.map((t) => (
+                  {isAssignmentApprover && approvals.assignments.map((t) => (
                     <div key={t.id} className="border border-amber-200 rounded-xl p-3.5">
                       <p className="text-sm font-medium text-gray-900">{t.title}</p>
                       <p className="text-xs text-gray-400 mt-0.5">

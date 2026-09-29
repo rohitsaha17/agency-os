@@ -1,6 +1,5 @@
 "use client";
 
-import { RequireCapability } from "@/components/layout/RequireCapability";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 import {
@@ -1210,11 +1209,11 @@ function AddEventDialog({
   );
 }
 
-// Hiding the nav link was never a guard — the URL still worked.
+// QA-015: the team calendar is intentionally all-users — the nav entry is
+// need:null and GET /api/calendar is requireAuth (org-scoped), and the Sidebar
+// note records the decision that everyone may see the schedule. The page had a
+// stricter content.plan guard, which contradicted both and locked juniors out
+// of a page whose data they're allowed to read. Match the nav + API instead.
 export default function CalendarPage() {
-  return (
-    <RequireCapability capability="content.plan" what="The team calendar">
-      <CalendarPageBody />
-    </RequireCapability>
-  );
+  return <CalendarPageBody />;
 }

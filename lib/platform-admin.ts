@@ -1,4 +1,5 @@
 import { ApiError } from "@/lib/api-errors";
+import { secureEquals } from "@/lib/secure-compare";
 
 /**
  * Guard for platform-owner-only endpoints. Requires the `x-admin-key`
@@ -14,8 +15,9 @@ export function requirePlatformAdmin(req: Request): void {
       "ADMIN_DISABLED"
     );
   }
-  const provided = req.headers.get("x-admin-key");
-  if (provided !== configured) {
+  // QA-022: constant-time compare so the platform key can't be recovered by
+  // timing, and a missing header never matches.
+  if (!secureEquals(req.headers.get("x-admin-key"), configured)) {
     throw new ApiError("Invalid admin key", 401, "UNAUTHORIZED");
   }
 }

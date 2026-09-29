@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { requireCapability } from "@/lib/api-permissions";
+import { requireProjectCapability } from "@/lib/project-scope";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 import { logStatus } from "@/lib/audit";
 import { notify } from "@/lib/notify";
@@ -28,9 +29,11 @@ export async function POST(req: NextRequest, { params }: Params) {
 
     const item = await prisma.contentItem.findFirst({
       where: { id, organizationId: user.organizationId },
-      select: { id: true, status: true, topic: true, clientId: true, createdById: true },
+      select: { id: true, status: true, topic: true, clientId: true, createdById: true, projectId: true },
     });
     if (!item) throw new ApiError("Content item not found", 404);
+    // QA-016: SMM own-project scope.
+    await requireProjectCapability(user, "content.plan", item.projectId);
     if (item.status === status) return NextResponse.json({ success: true, unchanged: true });
 
     assertTransitionAllowed(user, status);

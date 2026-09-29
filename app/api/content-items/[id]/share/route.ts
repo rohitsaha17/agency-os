@@ -3,6 +3,7 @@ import { randomBytes } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { requireCapability } from "@/lib/api-permissions";
+import { requireProjectCapability } from "@/lib/project-scope";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 
 type Params = { params: Promise<{ id: string }> };
@@ -16,9 +17,11 @@ export async function POST(req: NextRequest, { params }: Params) {
     const { id } = await params;
     const item = await prisma.contentItem.findFirst({
       where: { id, organizationId: user.organizationId },
-      select: { id: true, status: true },
+      select: { id: true, status: true, projectId: true },
     });
     if (!item) throw new ApiError("Content item not found", 404);
+    // QA-016: SMM own-project scope.
+    await requireProjectCapability(user, "content.plan", item.projectId);
     if (item.status !== "TEAM_APPROVED") {
       throw new ApiError("Only team-approved items can be shared for client approval", 400);
     }
@@ -46,9 +49,11 @@ export async function DELETE(req: NextRequest, { params }: Params) {
     const { id } = await params;
     const item = await prisma.contentItem.findFirst({
       where: { id, organizationId: user.organizationId },
-      select: { id: true },
+      select: { id: true, projectId: true },
     });
     if (!item) throw new ApiError("Content item not found", 404);
+    // QA-016: SMM own-project scope.
+    await requireProjectCapability(user, "content.plan", item.projectId);
     await prisma.contentItem.update({
       where: { id },
       data: { reviewToken: null, reviewTokenExpiresAt: null },

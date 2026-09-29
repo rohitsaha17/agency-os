@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { requireCapability } from "@/lib/api-permissions";
+import { requireProjectCapability } from "@/lib/project-scope";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 import { logStatus } from "@/lib/audit";
 
@@ -22,6 +23,8 @@ export async function POST(req: NextRequest, { params }: Params) {
       where: { id, organizationId: user.organizationId },
     });
     if (!item) throw new ApiError("Content item not found", 404);
+    // QA-016: SMM own-project scope.
+    await requireProjectCapability(user, "content.plan", item.projectId);
     if (!["TEAM_APPROVED", "CLIENT_APPROVED"].includes(item.status)) {
       throw new ApiError("Only approved-but-unposted items can be carried forward", 400);
     }

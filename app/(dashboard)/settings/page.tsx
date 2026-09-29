@@ -2136,7 +2136,10 @@ export default function SettingsPage() {
             {tab === "company"    && (
               <>
                 <CompanyTab settings={settings} onSaved={setSettings} />
-                <RunScanCard />
+                {/* QA-014: POST /api/jobs/daily requires ADMIN, but this tab is
+                    visible to anyone with settings.manage (managers too). Only
+                    offer the button to admins/owners so it matches the server. */}
+                {(me?.role === "ADMIN" || me?.role === "OWNER") && <RunScanCard />}
               </>
             )}
             {tab === "letterhead" && <LetterheadTab settings={settings} onSaved={setSettings} />}

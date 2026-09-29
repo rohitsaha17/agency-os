@@ -19,16 +19,29 @@ function dayKey(d: Date) { return d.toISOString().slice(0, 10); }
  *
  * `force` bypasses the once-per-day guard (dev button).
  */
-export async function runDailyScan(now: Date, force = false): Promise<{ ran: boolean; summary?: Record<string, number> }> {
+/**
+ * @param organizationId when set, the scan runs for ONLY that org. The cron
+ *   path leaves it undefined to sweep every tenant; the admin-button path passes
+ *   the admin's own org so one tenant's admin can never run a job that touches
+ *   another tenant's data (QA-022).
+ */
+export async function runDailyScan(
+  now: Date,
+  force = false,
+  organizationId?: string,
+): Promise<{ ran: boolean; summary?: Record<string, number> }> {
   const runDate = dayKey(now);
+  // Per-org runs must not collide with (or be blocked by) the global cron's
+  // once-a-day JobRun claim, so they get their own scoped job name.
+  const jobName = organizationId ? `daily-scan:${organizationId}` : "daily-scan";
   if (!force) {
     const existing = await prisma.jobRun.findUnique({
-      where: { jobName_runDate: { jobName: "daily-scan", runDate } },
+      where: { jobName_runDate: { jobName, runDate } },
     });
     if (existing) return { ran: false };
   }
   try {
-    await prisma.jobRun.create({ data: { jobName: "daily-scan", runDate } });
+    await prisma.jobRun.create({ data: { jobName, runDate } });
   } catch {
     if (!force) return { ran: false }; // concurrent run claimed it
   }
@@ -40,7 +53,10 @@ export async function runDailyScan(now: Date, force = false): Promise<{ ran: boo
   // midnight, so compare follow-ups against tonight's boundary, not `now`.
   const endOfToday = new Date(today.getTime() + 86400000);
 
-  const orgs = await prisma.organization.findMany({ select: { id: true } });
+  const orgs = await prisma.organization.findMany({
+    where: organizationId ? { id: organizationId } : {},
+    select: { id: true },
+  });
   for (const org of orgs) {
     const organizationId = org.id;
 

@@ -3,6 +3,7 @@ import { newAssignment } from "@/lib/task-acceptance";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { requireCapability, taskVisibilityScope } from "@/lib/api-permissions";
+import { requireProjectCapability } from "@/lib/project-scope";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 import { notifyMany } from "@/lib/notify";
 import { logStatus } from "@/lib/audit";
@@ -157,6 +158,9 @@ export async function POST(req: NextRequest, { params }: Params) {
     const user = await requireAuth(req);
     requireCapability(user, "content.plan");
     await assertProjectInOrg(projectId, user.organizationId);
+    // QA-016: creating tasks on a project is planning — an SMM may only do it on
+    // projects they belong to (admin/manager unrestricted).
+    await requireProjectCapability(user, "content.plan", projectId);
 
     const body = await req.json();
     const {

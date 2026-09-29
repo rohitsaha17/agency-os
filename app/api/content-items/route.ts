@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { requireCapability } from "@/lib/api-permissions";
+import { requireProjectCapability } from "@/lib/project-scope";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 import { logStatus } from "@/lib/audit";
 import { cycleForDate } from "@/lib/cycles";
@@ -112,6 +113,10 @@ export async function POST(req: NextRequest) {
       });
       if (!project) throw new ApiError("Project not found for this client", 404);
     }
+
+    // QA-016: an SMM may only plan on projects they're a member of. Admin/
+    // Manager unrestricted; ad-hoc content with no project isn't project-scoped.
+    await requireProjectCapability(user, "content.plan", projectId);
 
     // QA-004: a body cycleId was trusted without a tenant check (scope through
     // the parent project, which carries the org). Foreign -> 404; empty -> no-op.

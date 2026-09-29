@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { requireCapability } from "@/lib/api-permissions";
+import { requireProjectCapability } from "@/lib/project-scope";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 import { can } from "@/lib/permissions";
 import { isSettled, settledReason } from "@/lib/content-status";
@@ -54,13 +55,13 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   try {
     const user = await requireAuth(req);
     // QA-007: editing the content plan (brief, dates, billing, and assigning
-    // work) is a planning action. This route was requireAuth-only, so any TEAM
-    // member could rewrite the plan and assign tasks. Gate it like the other
-    // content-item mutations (POST/DELETE/status already do). Object/own-project
-    // scoping (QA-016) is Phase 3 and deliberately not added here.
+    // work) is a planning action — gate it on content.plan like the other
+    // content-item mutations, so a TEAM member can't rewrite the plan.
     requireCapability(user, "content.plan");
     const { id } = await params;
     const existing = await findItem(id, user.organizationId);
+    // QA-016: and an SMM may only plan on projects they belong to.
+    await requireProjectCapability(user, "content.plan", existing.projectId);
     const body = await req.json();
     const {
       date, creativeTypeId, topic, description, referenceUrl, referenceFileId,
@@ -165,6 +166,8 @@ export async function DELETE(req: NextRequest, { params }: Params) {
     requireCapability(user, "content.plan");
     const { id } = await params;
     const doomed = await findItem(id, user.organizationId);
+    // QA-016: SMM own-project scope.
+    await requireProjectCapability(user, "content.plan", doomed.projectId);
     await prisma.contentItem.delete({ where: { id } });
     // Removing an item can take the plan back under quota, which should
     // reopen the planning task rather than leave it falsely closed.

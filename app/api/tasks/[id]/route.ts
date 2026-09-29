@@ -3,6 +3,7 @@ import { assertAssignable } from "@/lib/assignment-guard";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { requireCapability, taskVisibilityScope } from "@/lib/api-permissions";
+import { requireProjectCapability, isProjectSmm } from "@/lib/project-scope";
 import { apiError, handleApiError, ApiError } from "@/lib/api-errors";
 import { logStatus } from "@/lib/audit";
 import { notify, notifyMany } from "@/lib/notify";
@@ -104,7 +105,13 @@ export async function PATCH(req: NextRequest, { params }: Params) {
      */
     const isSystemTask = existing.kind === "PLANNING" || existing.kind === "POST";
     const isMine = existing.assignees.some((a) => a.userId === user.id);
-    const mayRewrite = can(user, "content.plan")
+    // QA-016: an SMM's content.plan only reaches projects they belong to, so
+    // rewriting a task on another project's board is refused (admin/manager
+    // unrestricted; a project-less task has no project to scope to).
+    const ownsProject = user.role === "SMM" && existing.projectId
+      ? await isProjectSmm(user.id, existing.projectId)
+      : true;
+    const mayRewrite = can(user, "content.plan", { ownsProject })
       && !(isSystemTask && isMine && !can(user, "clients.manage"));
 
     if (!mayRewrite) {
@@ -368,8 +375,10 @@ export async function DELETE(req: NextRequest, { params }: Params) {
     // or posting task is deleting the record that you were asked to do it.
     const doomed = await prisma.task.findFirst({
       where: { id, deletedAt: null, organizationId: user.organizationId },
-      select: { kind: true, assignees: { select: { userId: true } } },
+      select: { kind: true, projectId: true, assignees: { select: { userId: true } } },
     });
+    // QA-016: an SMM may only delete tasks on projects they belong to.
+    if (doomed) await requireProjectCapability(user, "content.plan", doomed.projectId);
     if (
       doomed
       && (doomed.kind === "PLANNING" || doomed.kind === "POST")

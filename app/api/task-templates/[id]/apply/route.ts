@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { requireCapability } from "@/lib/api-permissions";
+import { requireProjectCapability } from "@/lib/project-scope";
 import { handleApiError, apiError, ApiError } from "@/lib/api-errors";
 
 // Inline builtin templates (same data as the list route)
@@ -97,6 +98,9 @@ export async function POST(req: NextRequest, { params }: Params) {
       select: { id: true },
     });
     if (!project) throw new ApiError("Project not found", 404);
+    // QA-016: applying a template plans work on the project — an SMM may only do
+    // it on projects they belong to.
+    await requireProjectCapability(user, "content.plan", projectId);
 
     const baseDate = startDate ? new Date(startDate) : null;
     if (baseDate && isNaN(baseDate.getTime())) {

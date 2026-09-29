@@ -7,6 +7,7 @@ import { handleApiError, ApiError } from "@/lib/api-errors";
 import { notifyMany } from "@/lib/notify";
 import { logStatus } from "@/lib/audit";
 import { assertInOrg } from "@/lib/assert-in-org";
+import { assertCanAssign, assertAssignable } from "@/lib/assignment-guard";
 import { resolveRouting, notifyHeads, assignmentRequiresApproval } from "@/lib/task-routing";
 import type { Task } from "@/types";
 
@@ -183,13 +184,16 @@ export async function POST(req: NextRequest, { params }: Params) {
       if (!parent) throw new ApiError("Parent task not found", 404);
     }
 
-    // QA-004: these body FKs were written through without a tenant check on
-    // this create door. Foreign id -> 404; empty -> no-op. (parentId is scoped
-    // above against the project; assignee-permission scoping is QA-017/Phase 2.)
-    await assertInOrg("user", managerId, user.organizationId, { label: "Manager" });
-    await assertInOrg("user", preferredAssigneeId, user.organizationId, { label: "Preferred assignee" });
+    // QA-004: non-user body FKs scoped to the caller's org (foreign -> 404).
     await assertInOrg("file", referenceFileId, user.organizationId, { label: "Reference file" });
     await assertInOrg("contentItem", contentItemId, user.organizationId, { label: "Content item" });
+    // QA-017: the SHARED assignment guard — same "who you may assign to" rule as
+    // POST /api/tasks (org membership + role/Head-of-Design). Covers assignees,
+    // manager and preferred assignee.
+    await assertCanAssign(user, [...(assigneeIds ?? []), managerId, preferredAssigneeId], user.organizationId);
+    // And nobody is handed dated work on a day they've blocked (parity with the
+    // other doors).
+    await assertAssignable(user.organizationId, routing.assigneeIds, dueDate);
 
     const lastSibling = await prisma.task.findFirst({
       where: { projectId, parentId: parentId ?? null, deletedAt: null },

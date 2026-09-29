@@ -4,6 +4,7 @@ import path from "path";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { requireCapability } from "@/lib/api-permissions";
+import { can } from "@/lib/permissions";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 
 type Params = { params: Promise<{ id: string }> };
@@ -45,9 +46,17 @@ export async function POST(req: NextRequest, { params }: Params) {
     // Verify org ownership before creating a new version.
     const existingFile = await prisma.file.findFirst({
       where: { id, organizationId: user.organizationId },
-      select: { id: true },
+      select: { id: true, uploadedById: true },
     });
     if (!existingFile) throw new ApiError("File not found", 404);
+
+    // QA-013: replacing a file's bytes was requireAuth-only, so any org member
+    // could overwrite anyone's file. Restrict to the person who uploaded it, a
+    // planner who manages files, or an admin.
+    const isModerator = user.role === "OWNER" || user.role === "ADMIN";
+    if (existingFile.uploadedById !== user.id && !isModerator && !can(user, "content.plan")) {
+      throw new ApiError("You can only add versions to your own files", 403);
+    }
 
     const formData = await req.formData();
     const rawFile = formData.get("file");

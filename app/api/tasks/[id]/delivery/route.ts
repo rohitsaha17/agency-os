@@ -5,6 +5,7 @@ import { handleApiError, ApiError } from "@/lib/api-errors";
 import { logStatus } from "@/lib/audit";
 import { notify } from "@/lib/notify";
 import { assertInOrg } from "@/lib/assert-in-org";
+import { can } from "@/lib/permissions";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -46,9 +47,31 @@ export async function POST(req: NextRequest, { params }: Params) {
 
     const task = await prisma.task.findFirst({
       where: { id, deletedAt: null, organizationId: user.organizationId },
-      select: { id: true, title: true, status: true, projectId: true, managerId: true },
+      // approverId + assignees so we can check the caller's relationship to the
+      // task, not just that it's in their org (QA-006).
+      select: {
+        id: true, title: true, status: true, projectId: true,
+        managerId: true, approverId: true,
+        assignees: { select: { userId: true } },
+      },
     });
     if (!task) throw new ApiError("Task not found", 404);
+
+    // QA-006: the org scope above is confirmed safe, but any org member could
+    // force ANY task to DONE. Only the people with a real relationship to the
+    // task may complete it: an assignee, its manager/approver, or an admin.
+    const isAssignee = task.assignees.some((a) => a.userId === user.id);
+    const isManager = task.managerId === user.id;
+    const isApprover = task.approverId === user.id;
+    const isAdmin = user.role === "OWNER" || user.role === "ADMIN";
+    if (!isAssignee && !isManager && !isApprover && !isAdmin) {
+      throw new ApiError("You can only complete a task you're assigned to or manage", 403);
+    }
+    // Skipping proof is a reviewer/admin shortcut, not something an assignee may
+    // do to close their own work without evidence.
+    if (skipProof && !(isManager || isApprover || isAdmin || can(user, "tasks.review"))) {
+      throw new ApiError("Only a reviewer can complete this without proof", 403);
+    }
 
     let delivery = null;
     if (!skipProof) {

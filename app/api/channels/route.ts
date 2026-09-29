@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { requireCapability } from "@/lib/api-permissions";
 import { handleApiError, ApiError } from "@/lib/api-errors";
+import { accessibleChannelWhere } from "@/lib/channel-access";
 
 const CHANNEL_SELECT = {
   id: true, name: true, description: true, type: true,
@@ -38,7 +39,10 @@ export async function GET(req: NextRequest) {
 
     const channels = await prisma.channel.findMany({
       where: {
-        organizationId: user.organizationId,
+        // QA-012: only channels the caller may see — general, ones they're a
+        // member of, or their project's channels (overseers see all). This
+        // AND-combines with the org filter inside accessibleChannelWhere.
+        ...accessibleChannelWhere(user),
         isArchived: false,
         ...(projectId && { projectId }),
         ...(clientId  && { clientId  }),

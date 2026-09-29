@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { handleApiError } from "@/lib/api-errors";
+import { accessibleChannelWhere } from "@/lib/channel-access";
 
 // GET /api/search?q=term — global search across projects, clients, tasks, files, messages
 export async function GET(req: NextRequest) {
@@ -61,8 +62,11 @@ export async function GET(req: NextRequest) {
         where: {
           deletedAt: null,
           body: { contains: q, mode: "insensitive" },
-          // Scope through the parent channel — ChatMessage doesn't have organizationId.
-          channel: { organizationId: orgId },
+          // QA-012: scope through the parent channel AND to channels the caller
+          // may actually see — search must not leak messages from client/other
+          // channels the user isn't a member of. (Org filter is included by
+          // accessibleChannelWhere.)
+          channel: accessibleChannelWhere(user),
         },
         select: {
           id: true, body: true,

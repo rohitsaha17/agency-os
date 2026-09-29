@@ -7,6 +7,7 @@ import { can } from "@/lib/permissions";
 import { isSettled, settledReason } from "@/lib/content-status";
 import { createContentWorkTask, syncPlanningTask } from "@/lib/auto-tasks";
 import { assertInOrg } from "@/lib/assert-in-org";
+import { assertCanAssign, assertAssignable } from "@/lib/assignment-guard";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -52,6 +53,12 @@ export async function GET(req: NextRequest, { params }: Params) {
 export async function PATCH(req: NextRequest, { params }: Params) {
   try {
     const user = await requireAuth(req);
+    // QA-007: editing the content plan (brief, dates, billing, and assigning
+    // work) is a planning action. This route was requireAuth-only, so any TEAM
+    // member could rewrite the plan and assign tasks. Gate it like the other
+    // content-item mutations (POST/DELETE/status already do). Object/own-project
+    // scoping (QA-016) is Phase 3 and deliberately not added here.
+    requireCapability(user, "content.plan");
     const { id } = await params;
     const existing = await findItem(id, user.organizationId);
     const body = await req.json();
@@ -100,7 +107,13 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     await assertInOrg("project", projectId, user.organizationId, { label: "Project" });
     await assertInOrg("projectCycle", cycleId, user.organizationId, { via: "project", label: "Cycle" });
     await assertInOrg("file", referenceFileId, user.organizationId, { label: "Reference file" });
-    await assertInOrg("user", assigneeId, user.organizationId, { label: "Assignee" });
+    // QA-017: assigning from the plan runs the SHARED assignment guard (org
+    // membership + role/Head-of-Design), same rule as the other doors, plus the
+    // blocked-day check when a deadline is given.
+    await assertCanAssign(user, [assigneeId], user.organizationId);
+    if (assigneeId && taskDueAt) {
+      await assertAssignable(user.organizationId, [assigneeId], new Date(taskDueAt));
+    }
 
     const updated = await prisma.contentItem.update({
       where: { id },

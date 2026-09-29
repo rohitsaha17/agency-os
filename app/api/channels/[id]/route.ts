@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { requireCapability } from "@/lib/api-permissions";
 import { handleApiError, ApiError } from "@/lib/api-errors";
+import { assertChannelAccess } from "@/lib/channel-access";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -11,6 +12,9 @@ export async function GET(req: NextRequest, { params }: Params) {
   const { id } = await params;
   try {
     const user = await requireAuth(req);
+    // QA-012: reading a channel (and its member list) requires access to it,
+    // not just being in the org.
+    await assertChannelAccess(id, user);
     const channel = await prisma.channel.findFirst({
       where: { id, organizationId: user.organizationId },
       include: {

@@ -8,6 +8,7 @@ import { cycleForDate } from "@/lib/cycles";
 import { quotaCheck } from "@/lib/cycle-quota";
 import { createContentWorkTask, syncPlanningTask } from "@/lib/auto-tasks";
 import { assertInOrg } from "@/lib/assert-in-org";
+import { assertCanAssign, assertAssignable } from "@/lib/assignment-guard";
 
 const ITEM_INCLUDE = {
   // Only id/name/color/icon are read anywhere in the app; the full row
@@ -112,11 +113,16 @@ export async function POST(req: NextRequest) {
       if (!project) throw new ApiError("Project not found for this client", 404);
     }
 
-    // QA-004: a cycleId or assigneeId from the body was trusted without a
-    // tenant check. Scope both to the caller's org (the cycle through its
-    // parent project, which carries the org). Foreign id -> 404; empty -> no-op.
+    // QA-004: a body cycleId was trusted without a tenant check (scope through
+    // the parent project, which carries the org). Foreign -> 404; empty -> no-op.
     await assertInOrg("projectCycle", cycleId, user.organizationId, { via: "project", label: "Cycle" });
-    await assertInOrg("user", assigneeId, user.organizationId, { label: "Assignee" });
+    // QA-017: assigning from the plan is a task-creation door, so it runs the
+    // SHARED assignment guard (org membership + role/Head-of-Design) — the same
+    // rule as the other two doors — plus the blocked-day check.
+    await assertCanAssign(user, [assigneeId], user.organizationId);
+    if (assigneeId && taskDueAt) {
+      await assertAssignable(user.organizationId, [assigneeId], new Date(taskDueAt));
+    }
 
     // v3: work out which cycle this date falls into, then check the quota.
     // Planning beyond the deal is allowed but must be acknowledged, and the

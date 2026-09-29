@@ -6,16 +6,9 @@ import { requireAuth } from "@/lib/auth";
 import { handleApiError, apiError, ApiError } from "@/lib/api-errors";
 import { checkRateLimit, WRITE_RATE_LIMITS } from "@/lib/rate-limit";
 import { assertUploadWithinQuota } from "@/lib/upload-limits";
+import { assertChannelAccess } from "@/lib/channel-access";
 
 type Params = { params: Promise<{ id: string }> };
-
-async function assertChannelInOrg(channelId: string, organizationId: string) {
-  const channel = await prisma.channel.findFirst({
-    where: { id: channelId, organizationId },
-    select: { id: true },
-  });
-  if (!channel) throw new ApiError("Channel not found", 404);
-}
 
 const MSG_INCLUDE = {
   author: { select: { id: true, name: true, avatarUrl: true } },
@@ -43,7 +36,7 @@ export async function GET(req: NextRequest, { params }: Params) {
   const { id: channelId } = await params;
   try {
     const user = await requireAuth(req);
-    await assertChannelInOrg(channelId, user.organizationId);
+    await assertChannelAccess(channelId, user);
 
     const { searchParams } = new URL(req.url);
     const before = searchParams.get("before");
@@ -72,7 +65,7 @@ export async function POST(req: NextRequest, { params }: Params) {
   const { id: channelId } = await params;
   try {
     const user = await requireAuth(req);
-    await assertChannelInOrg(channelId, user.organizationId);
+    await assertChannelAccess(channelId, user);
 
     const contentType = req.headers.get("content-type") ?? "";
 

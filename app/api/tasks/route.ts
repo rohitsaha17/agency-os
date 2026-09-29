@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { newAssignment } from "@/lib/task-acceptance";
-import { assertAssignable } from "@/lib/assignment-guard";
+import { assertAssignable, assertCanAssign } from "@/lib/assignment-guard";
 import { can } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { taskVisibilityScope } from "@/lib/api-permissions";
-import { canAssignToUser } from "@/lib/permissions";
 import { assertInOrg } from "@/lib/assert-in-org";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 import { parsePagination, paginationMeta, DEFAULT_PAGE_SIZE } from "@/lib/pagination";
@@ -178,37 +177,14 @@ export async function POST(req: NextRequest) {
     // (the PATCH door already scopes them). Foreign id -> 404; empty -> no-op.
     await assertInOrg("task", parentId, user.organizationId, { label: "Parent task" });
     await assertInOrg("file", referenceFileId, user.organizationId, { label: "Reference file" });
-    const peopleIds = [
-      ...(assigneeIds ?? []),
-      ...(managerId ? [managerId] : []),
-      ...(preferredAssigneeId ? [preferredAssigneeId] : []),
-    ];
-    if (peopleIds.length) {
-      const count = await prisma.user.count({
-        where: { id: { in: peopleIds }, organizationId: user.organizationId },
-      });
-      if (count !== new Set(peopleIds).size) throw new ApiError("One or more users not found", 404);
-
-      /**
-       * Who you may hand work to, by role: an editor writes their own to-dos,
-       * an SMM briefs juniors, a manager reaches SMMs and juniors, an admin
-       * reaches anyone. The UI only offers the names you're allowed, but the
-       * list arrives from the client, so it's checked here.
-       */
-      const targets = await prisma.user.findMany({
-        where: { id: { in: peopleIds }, organizationId: user.organizationId },
-        // jobTitle because canAssignToUser asks whether the target is a
-        // designer; without it the Head of Design rule silently never fires.
-        select: { id: true, name: true, role: true, jobTitle: { select: { slug: true, isDesign: true } } },
-      });
-      const refused = targets.filter((t) => !canAssignToUser(user, t));
-      if (refused.length) {
-        throw new ApiError(
-          `You can't assign work to ${refused.map((t) => t.name).join(", ")}.`,
-          403,
-        );
-      }
-    }
+    /**
+     * Who you may hand work to, by role: an editor writes their own to-dos, an
+     * SMM briefs juniors, a manager reaches SMMs and juniors, an admin reaches
+     * anyone. The UI only offers the names you're allowed, but the list arrives
+     * from the client, so it's checked here — via the SHARED guard so every
+     * task-creation door enforces the same rule (QA-017).
+     */
+    await assertCanAssign(user, [...(assigneeIds ?? []), managerId, preferredAssigneeId], user.organizationId);
 
     const requireApproval = await assignmentRequiresApproval(user.organizationId);
     const routing = resolveRouting(user, preferredAssigneeId, assigneeIds, requireApproval);

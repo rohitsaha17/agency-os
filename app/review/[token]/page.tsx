@@ -19,6 +19,8 @@ interface ReviewData {
   clientName: string;
   clientLogoUrl: string | null;
   orgName: string;
+  /** QA-021: a white-label tenant's client must not see the product name. */
+  whiteLabel?: boolean;
   accent: string;
   items: ReviewItem[];
 }
@@ -204,7 +206,9 @@ export default function PublicReviewPage() {
         )}
 
         <p className="text-center text-[11px] text-gray-400 pt-4">
-          Powered by {data.orgName} · Studio Flow
+          {/* QA-021: white-label tenants see only their own name — the product
+              name is appended solely for non-white-label workspaces. */}
+          Powered by {data.orgName}{data.whiteLabel ? "" : " · Studio Flow"}
         </p>
       </div>
     </div>

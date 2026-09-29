@@ -21,7 +21,7 @@ const TIMEZONES = [
 
 export default function OnboardingPage() {
   const router = useRouter();
-  const [me, setMe] = useState<{ name: string; organization?: { name: string } | null } | null>(null);
+  const [me, setMe] = useState<{ name: string; organization?: { name: string; whiteLabel?: boolean } | null } | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({
@@ -105,8 +105,13 @@ export default function OnboardingPage() {
         <div className="flex items-center gap-3 text-white mb-10">
           <BrandLogo className="w-9 h-9" />
           <div className="leading-tight">
-            <p className="text-lg font-bold tracking-tight">Vibrnd</p>
-            <p className="text-[9px] font-medium tracking-[0.25em] uppercase text-slate-400">Studio Flow</p>
+            {/* QA-021: greet the viewer with THEIR workspace (server-provided
+                identity), never the product/company name. A white-label tenant
+                (e.g. Gloo) sees its own name and no product subtitle. */}
+            <p className="text-lg font-bold tracking-tight">{me?.organization?.name?.trim() || "Welcome"}</p>
+            {!me?.organization?.whiteLabel && (
+              <p className="text-[9px] font-medium tracking-[0.25em] uppercase text-slate-400">Studio Flow</p>
+            )}
           </div>
         </div>
 

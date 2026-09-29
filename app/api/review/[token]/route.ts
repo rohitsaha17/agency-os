@@ -26,7 +26,7 @@ async function resolveToken(token: string) {
       ...ITEM_SELECT,
       organizationId: true, clientId: true, reviewTokenExpiresAt: true,
       client: { select: { name: true, logoUrl: true } },
-      organization: { select: { name: true, letterheadColor: true, logoUrl: true } },
+      organization: { select: { name: true, letterheadColor: true, logoUrl: true, whiteLabel: true } },
     },
   });
   if (item) {
@@ -38,6 +38,8 @@ async function resolveToken(token: string) {
       clientName: item.client.name,
       clientLogoUrl: item.client.logoUrl,
       orgName: item.organization.name,
+      // QA-021: white-label tenants must not see the product name in the footer.
+      whiteLabel: item.organization.whiteLabel,
       accent: item.organization.letterheadColor,
       items: [item],
     };
@@ -47,7 +49,7 @@ async function resolveToken(token: string) {
     where: { token },
     include: {
       client: { select: { name: true, logoUrl: true } },
-      organization: { select: { name: true, letterheadColor: true } },
+      organization: { select: { name: true, letterheadColor: true, whiteLabel: true } },
     },
   });
   if (!batch) return null;
@@ -71,6 +73,8 @@ async function resolveToken(token: string) {
     clientName: batch.client.name,
     clientLogoUrl: batch.client.logoUrl,
     orgName: batch.organization.name,
+    // QA-021: white-label tenants must not see the product name in the footer.
+    whiteLabel: batch.organization.whiteLabel,
     accent: batch.organization.letterheadColor,
     items,
   };
@@ -90,6 +94,7 @@ export async function GET(req: NextRequest, { params }: Params) {
       clientName: resolved.clientName,
       clientLogoUrl: resolved.clientLogoUrl,
       orgName: resolved.orgName,
+      whiteLabel: !!resolved.whiteLabel,
       accent: resolved.accent ?? "#6366f1",
       items: resolved.items.map((i) => ({
         id: i.id,

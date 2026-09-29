@@ -12,6 +12,7 @@ import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { formatMoney } from "@/lib/format";
+import { RequireCapability } from "@/components/layout/RequireCapability";
 import type { Contract, ContractStatus, ContractType } from "@/types";
 
 const TYPE_LABELS: Record<ContractType, string> = {
@@ -48,7 +49,7 @@ function initials(name: string) {
   return name.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase();
 }
 
-export default function ContractDetailPage() {
+function ContractDetailContent() {
   const { id } = useParams<{ id: string }>();
   const toast   = useToast();
   const confirm = useConfirm();
@@ -422,5 +423,15 @@ export default function ContractDetailPage() {
         </Modal>
       )}
     </div>
+  );
+}
+
+export default function ContractDetailPage() {
+  // QA-023: defense-in-depth page guard, matching the API (every contract route
+  // enforces financials.view).
+  return (
+    <RequireCapability capability="financials.view" what="Contracts">
+      <ContractDetailContent />
+    </RequireCapability>
   );
 }

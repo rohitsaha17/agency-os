@@ -7,6 +7,7 @@ import { ChevronRight, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import type { ContractType, ContractPartyType, Client, Project, User } from "@/types";
 import { Select } from "@/components/ui/Select";
+import { RequireCapability } from "@/components/layout/RequireCapability";
 
 const TYPE_OPTIONS: { value: ContractType; label: string }[] = [
   { value: "NDA",               label: "NDA" },
@@ -31,7 +32,7 @@ const EMPTY_PARTY: PartyForm = {
   partyType: "CLIENT", clientId: "", userId: "", name: "", email: "",
 };
 
-export default function NewContractPage() {
+function NewContractContent() {
   const router = useRouter();
   const [saving, setSaving]           = useState(false);
   const [error, setError]             = useState<string | null>(null);
@@ -296,5 +297,15 @@ export default function NewContractPage() {
         </form>
       </div>
     </div>
+  );
+}
+
+export default function NewContractPage() {
+  // QA-023: defense-in-depth page guard, matching the contracts list and the
+  // API (which enforces financials.view on every contract route).
+  return (
+    <RequireCapability capability="financials.view" what="Creating a contract">
+      <NewContractContent />
+    </RequireCapability>
   );
 }

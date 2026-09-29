@@ -29,7 +29,10 @@ interface TourStep {
 const STEPS: TourStep[] = [
   {
     anchor: null,
-    title: "Welcome to Vibrnd Studio Flow",
+    // QA-021: the visible title is made workspace-aware at render (see below) so
+    // a white-label tenant sees their own name, never the product/company name.
+    // This literal is only a fallback and is deliberately brand-neutral.
+    title: "Welcome",
     body: "Your agency's clients, projects, money and files — all connected in one place. Here's a 60-second tour of where everything lives.",
   },
   {
@@ -189,7 +192,15 @@ export function AppTour() {
 
   if (!active) return null;
 
-  const current = STEPS[step];
+  // QA-021: the welcome step greets the viewer with THEIR workspace, resolved
+  // from the server-provided organization identity — so Gloo sees "Gloo", never
+  // "Vibrnd Studio Flow". Falls back to a neutral phrase when the org name isn't
+  // loaded yet, and never hardcodes any tenant.
+  const workspaceName = user?.organization?.name?.trim();
+  const current =
+    step === 0
+      ? { ...STEPS[0], title: workspaceName ? `Welcome to ${workspaceName}` : "Welcome" }
+      : STEPS[step];
   const isLast = step === STEPS.length - 1;
   const highlighted = current.anchor && anchorRect;
 

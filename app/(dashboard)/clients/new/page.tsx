@@ -1,9 +1,14 @@
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { ClientForm } from "@/components/clients/ClientForm";
+import { RequireCapability } from "@/components/layout/RequireCapability";
 
 export default function NewClientPage() {
+  // QA-023: defense-in-depth page guard. The URL is typeable even when the
+  // "New client" button is hidden; POST /api/clients already enforces
+  // clients.manage, and this stops a form that would only meet a 403 on save.
   return (
+    <RequireCapability capability="clients.manage" what="Creating a client">
     <div className="flex-1 flex flex-col min-h-0">
       {/* Header */}
       <div className="bg-white border-b border-gray-200 px-4 sm:px-6 lg:px-8 py-4 sm:py-5">
@@ -29,5 +34,6 @@ export default function NewClientPage() {
         </div>
       </div>
     </div>
+    </RequireCapability>
   );
 }

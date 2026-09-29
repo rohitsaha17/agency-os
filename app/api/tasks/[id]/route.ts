@@ -293,7 +293,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           type: "TASK_IN_REVIEW",
           title: `"${task.title}" is ready for review`,
           body: `${user.name} moved the task to In Review.`,
-          link: `/projects/${task.projectId}?task=${id}`,
+          // QA-009: a loose (project-less) task has no project to link to —
+          // without this guard the manager got a dead `/projects/null?task=…`.
+          link: task.projectId ? `/projects/${task.projectId}?task=${id}` : `/tasks?task=${id}`,
         });
       }
     }
@@ -490,9 +492,20 @@ function serializeTask(task: any) {
     updatedAt: task?.updatedAt?.toISOString?.() ?? null,
     managerName: task?.manager?.name ?? null,
     primaryAssigneeName: assignees?.[0]?.user?.name ?? null,
-    assignees: assignees.map((a: { userId: string; user: unknown }) => ({
+    assignees: assignees.map((a: {
+      userId: string; user: unknown;
+      acceptance?: unknown; respondedAt?: Date | null; declineReason?: string | null;
+    }) => ({
       userId: a?.userId ?? null,
       user: a?.user ?? null,
+      // QA-008: carry the accept/decline state through. TASK_INCLUDE fetches it
+      // (via `include` on assignees), but this serializer used to drop it — so
+      // the NotificationBell "Accept first" prompt (which reads it off this
+      // response) was dead, and a task opened from a project page never showed
+      // the Accept banner.
+      acceptance: a?.acceptance ?? undefined,
+      respondedAt: a?.respondedAt ? a.respondedAt.toISOString?.() ?? null : null,
+      declineReason: a?.declineReason ?? null,
     })),
   };
 }

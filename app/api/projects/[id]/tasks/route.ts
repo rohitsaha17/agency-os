@@ -36,7 +36,12 @@ type PrismaTask = {
   approverId: string | null;
   approver: { id: string; name: string } | null;
   revision: number;
-  assignees: { userId: string; user: { id: string; organizationId: string; name: string; email: string; avatarUrl: string | null; role: string } }[];
+  assignees: {
+    userId: string;
+    // QA-008: the accept/decline state, so the project page can show the banner.
+    acceptance?: string | null; respondedAt?: Date | null; declineReason?: string | null;
+    user: { id: string; organizationId: string; name: string; email: string; avatarUrl: string | null; role: string };
+  }[];
   // v2 fields. topic/content/extraNote are deliberately absent: this list
   // omits them, and a type that claimed otherwise would only be true until
   // somebody read one.
@@ -78,7 +83,15 @@ function buildTree(flat: PrismaTask[]): Task[] {
       approver: t.approver,
       // Which round this is — the panel says "Start again (round 2)".
       revision: t.revision,
-      assignees: t.assignees.map((a) => ({ userId: a.userId, user: { ...a.user, isActive: true, organizationId: a.user.organizationId, role: a.user.role as import("@/types").UserRole } })),
+      assignees: t.assignees.map((a) => ({
+        userId: a.userId,
+        // QA-008: previously dropped here, which meant a task opened from the
+        // project board never showed its Accept banner even while it was PENDING.
+        acceptance: (a.acceptance ?? undefined) as import("@/types").AssignmentAcceptance | undefined,
+        respondedAt: a.respondedAt ? a.respondedAt.toISOString() : null,
+        declineReason: a.declineReason ?? null,
+        user: { ...a.user, isActive: true, organizationId: a.user.organizationId, role: a.user.role as import("@/types").UserRole },
+      })),
       children: [],
       createdAt: t.createdAt.toISOString(),
       updatedAt: t.updatedAt.toISOString(),

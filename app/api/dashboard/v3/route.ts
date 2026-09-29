@@ -62,11 +62,22 @@ export async function GET(req: NextRequest) {
         where: {
           organizationId: orgId, deletedAt: null,
           status: { notIn: ["DONE"] },
-          // Not work you declined. You said you could not take it, and the
-          // task list already drops it from your own list for that reason —
-          // counting it here put "1 open" on the dashboard beside "0 open" on
-          // the tasks page, for the same person at the same moment.
-          assignees: { some: { userId: user.id, acceptance: { not: "DECLINED" } } },
+          // QA-020: count exactly what the tasks page shows on your OWN list
+          // (lib/task-list-scope belongsOnList): work assigned to you that you
+          // haven't declined, PLUS work you manage or approve but aren't
+          // assigned. Counting assignee rows only made "N open" here disagree
+          // with the list a manager/SMM/approver actually sees on /tasks.
+          //
+          // Deliberately NOT taskVisibilityScope: that returns {} for
+          // admins/managers (tasks.viewAll), which would count the whole org's
+          // backlog as "my work" and, worse, make the count disagree with this
+          // card's own assignee-scoped lists. The declined-work exclusion the
+          // earlier fix added is preserved in the first branch.
+          OR: [
+            { assignees: { some: { userId: user.id, acceptance: { not: "DECLINED" } } } },
+            { managerId: user.id, assignees: { none: { userId: user.id } } },
+            { approverId: user.id, assignees: { none: { userId: user.id } } },
+          ],
         },
       }),
       myOverdue: prisma.task.findMany({

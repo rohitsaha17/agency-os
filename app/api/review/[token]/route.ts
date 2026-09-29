@@ -4,6 +4,7 @@ import { handleApiError, ApiError, apiError } from "@/lib/api-errors";
 import { logStatus } from "@/lib/audit";
 import { notifyMany } from "@/lib/notify";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { designationBranches } from "@/lib/designation-scope";
 
 type Params = { params: Promise<{ token: string }> };
 
@@ -134,7 +135,9 @@ export async function POST(req: NextRequest, { params }: Params) {
 
     // Notify SMM/POC + the item creator.
     const smm = await prisma.user.findMany({
-      where: { organizationId: resolved.organizationId, isActive: true, designation: { in: ["SMM", "POC"] } },
+      // QA-018: SMM/POC across v2 (enum) and v3 (role / job-title slug), so a
+      // client's approve/reject on the public review link still reaches someone.
+      where: { organizationId: resolved.organizationId, isActive: true, OR: designationBranches(["SMM", "POC"]) },
       select: { id: true },
     });
     const notifyIds = [...smm.map((u) => u.id), full.createdById].filter(Boolean) as string[];

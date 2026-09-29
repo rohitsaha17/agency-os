@@ -1471,7 +1471,12 @@ function TasksBoardInner() {
           allTasks={orgTasks}
           projectId={openTask.projectId ?? undefined}
           onClose={() => setOpenTask(null)}
-          onUpdated={() => { fetchAll(); broadcastChange("all"); }}
+          // QA-019: apply the row the panel hands back, not just refetch. The
+          // panel renders from this `openTask`; dropping the payload left the
+          // drawer showing a frozen pre-mutation snapshot (e.g. the Accept
+          // banner still up after accepting) until it was closed and reopened.
+          // Mirrors the project page's handleTaskPanelUpdated.
+          onUpdated={(t) => { setOpenTask(t); fetchAll(); broadcastChange("all"); }}
           onDeleted={() => { setOpenTask(null); fetchAll(); broadcastChange("all"); }}
         />
       )}

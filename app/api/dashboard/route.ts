@@ -282,7 +282,9 @@ export async function GET(req: NextRequest) {
         id: task.id,
         title: task.title,
         subtitle: `${task.project?.name ?? "No project"} · ${daysOverdue}d overdue`,
-        link: `/projects/${task.project?.id}`,
+        // QA-009: a loose task has no project — fall back to the task itself
+        // rather than linking to /projects/undefined.
+        link: task.project?.id ? `/projects/${task.project.id}` : `/tasks?task=${task.id}`,
         severity: daysOverdue > 3 ? "high" : "medium",
         daysOverdue,
       });
@@ -315,7 +317,8 @@ export async function GET(req: NextRequest) {
         id: task.id,
         title: task.title,
         subtitle: `Blocked in ${task.project?.name ?? "unknown project"}`,
-        link: `/projects/${task.project?.id}`,
+        // QA-009: loose task → link to the task, not /projects/undefined.
+        link: task.project?.id ? `/projects/${task.project.id}` : `/tasks?task=${task.id}`,
         severity: "high",
       });
     }
@@ -350,7 +353,8 @@ export async function GET(req: NextRequest) {
         title: `Completed: ${t.title}`,
         subtitle: t.project?.name ?? "No project",
         time: t.updatedAt.toISOString(),
-        link: `/projects/${t.project?.id}`,
+        // QA-009: loose task → link to the task, not /projects/undefined.
+        link: t.project?.id ? `/projects/${t.project.id}` : `/tasks?task=${t.id}`,
       })),
       ...recentFiles.map((f) => ({
         type: "file_uploaded",

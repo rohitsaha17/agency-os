@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { requireCapability } from "@/lib/api-permissions";
 import { handleApiError, ApiError } from "@/lib/api-errors";
+import { designationBranches } from "@/lib/designation-scope";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -42,7 +43,9 @@ export async function POST(req: NextRequest, { params }: Params) {
     let finalAssignee = assignedToId;
     if (!finalAssignee) {
       const poc = await prisma.user.findFirst({
-        where: { organizationId: user.organizationId, isActive: true, designation: "POC" },
+        // QA-018: the default POC assignee, resolved across v2 (enum) and v3
+        // (job-title slug) so a v3 org auto-assigns to a real person, not nobody.
+        where: { organizationId: user.organizationId, isActive: true, OR: designationBranches(["POC"]) },
         select: { id: true },
       });
       finalAssignee = poc?.id ?? user.id;

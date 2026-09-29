@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { notify } from "@/lib/notify";
+import { designationBranches } from "@/lib/designation-scope";
 
 /** Indian festival pack (docs/V2_CONTEXT.md Phase 5) — 2026 + 2027. */
 export const FESTIVAL_PACK: { title: string; dates: string[] }[] = [
@@ -65,7 +66,9 @@ export async function scanUpcomingEvents(now: Date, organizationId: string): Pro
     where: {
       organizationId,
       isActive: true,
-      designation: { in: ["SMM", "POC"] },
+      // QA-018: SMM/POC across v2 (enum) and v3 (role / job-title slug), so
+      // festival & event reminders still reach someone in a v3-created org.
+      OR: designationBranches(["SMM", "POC"]),
     },
     select: { id: true },
   });

@@ -15,6 +15,7 @@ import { TaskFiles } from "./TaskFiles";
 import { DeliveryDialog } from "./DeliveryDialog";
 import { SubmitWorkDialog } from "./ReviewDialogs";
 import { Select } from "@/components/ui/Select";
+import { useToast } from "@/components/ui/Toast";
 import { useCurrentUser } from "@/lib/useCurrentUser";
 import { can, canAssignToUser } from "@/lib/permissions";
 import { toggleable } from "@/lib/a11y";
@@ -173,6 +174,7 @@ function ReadOnlyField({ label, value }: { label: string; value: string }) {
 
 export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDeleted }: TaskPanelProps) {
   const { user: me } = useCurrentUser();
+  const toast = useToast();
   // Details is the left column now, so the tabs start on the conversation.
   const [tab, setTab] = useState<Tab>("comments");
   const [users, setUsers] = useState<User[]>([]);
@@ -404,14 +406,31 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
       setShowDelivery(true);
       return;
     }
+    const prevStatus = status;
     setStatus(newStatus);
     setShowCascade(false);
     setPendingStatus(null);
-    await fetch(`/api/tasks/${task.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: newStatus, ...(cascade && { cascadeToChildren: true }) }),
-    });
+    // QA-019: an optimistic status write that the server then rejects used to
+    // leave the drawer (and, via onUpdated, the list) showing a status the
+    // server never accepted. Confirm res.ok; on failure revert and say so.
+    let res: Response;
+    try {
+      res = await fetch(`/api/tasks/${task.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus, ...(cascade && { cascadeToChildren: true }) }),
+      });
+    } catch {
+      setStatus(prevStatus);
+      toast.error("Couldn't reach the server — status not changed.");
+      return;
+    }
+    if (!res.ok) {
+      setStatus(prevStatus);
+      const d = await res.json().catch(() => null);
+      toast.error(d?.error?.message ?? "Couldn't update the status.");
+      return;
+    }
     onUpdated({ ...task, status: newStatus });
   };
 

@@ -3,6 +3,7 @@ import { notify, notifyMany } from "@/lib/notify";
 import { logStatus } from "@/lib/audit";
 import { scanUpcomingEvents } from "@/lib/reminders";
 import { runV3Reminders } from "@/lib/v3-reminders";
+import { designationBranches } from "@/lib/designation-scope";
 
 function dayKey(d: Date) { return d.toISOString().slice(0, 10); }
 
@@ -96,7 +97,8 @@ export async function runDailyScan(
       const managers = await prisma.user.findMany({
         where: {
           organizationId, isActive: true,
-          OR: [{ role: { in: ["MANAGER", "ADMIN", "OWNER"] } }, { designation: "HEAD_OF_DESIGN" }],
+          // QA-018: resolve the head across v2 (enum) and v3 (job-title slug).
+          OR: [{ role: { in: ["MANAGER", "ADMIN", "OWNER"] } }, ...designationBranches(["HEAD_OF_DESIGN"])],
         },
         select: { id: true },
       });
@@ -127,7 +129,8 @@ export async function runDailyScan(
     });
     if (lapsed.length) {
       const smmPoc = await prisma.user.findMany({
-        where: { organizationId, isActive: true, designation: { in: ["SMM", "POC"] } },
+        // QA-018: SMM/POC across v2 (enum) and v3 (role / job-title slug).
+        where: { organizationId, isActive: true, OR: designationBranches(["SMM", "POC"]) },
         select: { id: true },
       });
       for (const item of lapsed) {
@@ -216,7 +219,8 @@ export async function runDailyScan(
         const heads = await prisma.user.findMany({
           where: {
             organizationId, isActive: true,
-            OR: [{ role: { in: ["MANAGER", "ADMIN", "OWNER"] } }, { designation: "HEAD_OF_DESIGN" }],
+            // QA-018: head via enum (v2) or job-title slug (v3).
+            OR: [{ role: { in: ["MANAGER", "ADMIN", "OWNER"] } }, ...designationBranches(["HEAD_OF_DESIGN"])],
           },
           select: { id: true },
         });
@@ -254,7 +258,8 @@ export async function runDailyScan(
         const admins = await prisma.user.findMany({
           where: {
             organizationId, isActive: true,
-            OR: [{ role: { in: ["ADMIN", "OWNER"] } }, { designation: "POC" }],
+            // QA-018: POC via enum (v2) or job-title slug (v3).
+            OR: [{ role: { in: ["ADMIN", "OWNER"] } }, ...designationBranches(["POC"])],
           },
           select: { id: true },
         });

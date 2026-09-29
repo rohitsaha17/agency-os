@@ -16,9 +16,23 @@
  * to every serverless function.
  */
 import { writeFile, mkdir, unlink, readFile } from "fs/promises";
+import { randomUUID } from "crypto";
 import path from "path";
 
 const BUCKET = process.env.SUPABASE_STORAGE_BUCKET || "uploads";
+
+/**
+ * QA-005: a non-guessable object key. The old format was
+ * `uploads/<millisecond-timestamp>_<original-filename>`, which is a small,
+ * enumerable search space — so a public bucket's objects were guessable-adjacent.
+ * A random UUID prefix removes that; the sanitized original name is kept only as
+ * a readable suffix (the real display name lives on the DB row). Existing files
+ * keep their stored keys — this only shapes NEW uploads.
+ */
+export function storageKey(originalName: string): string {
+  const safe = (originalName || "file").replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 80);
+  return `uploads/${randomUUID()}_${safe}`;
+}
 
 function remoteConfig() {
   const url = (process.env.SUPABASE_URL || "").replace(/\/+$/, "");
@@ -32,9 +46,16 @@ export function usingRemoteStorage(): boolean {
 }
 
 export interface StoredFile {
-  /** Key we can delete by later. */
+  /** Key we can delete by later, and the ONLY handle the download route uses. */
   key: string;
-  /** URL the browser can load. */
+  /**
+   * A non-public reference for the DB `url` column. QA-005: this is deliberately
+   * NOT the Supabase public object URL any more — nothing in the app fetches it
+   * (every render/download goes through the authenticated /api/files/[id]/
+   * download route via fileHref), so persisting a public URL only leaked a
+   * guessable path. It is the app-relative key path, which is truthy (the UI
+   * uses it only as a "has a file" flag) but resolves to nothing public.
+   */
   url: string;
 }
 
@@ -72,11 +93,16 @@ export async function putFile(
     const detail = await res.text().catch(() => "");
     throw new Error(
       `Upload failed (${res.status}). ${detail.slice(0, 200)} `
-      + `Check that the "${BUCKET}" bucket exists in Supabase Storage and is public.`,
+      + `Check that the "${BUCKET}" bucket exists in Supabase Storage.`,
     );
   }
 
-  return { key, url: `${cfg.url}/storage/v1/object/public/${BUCKET}/${key}` };
+  // QA-005: do NOT hand back the public object URL. The bytes are served only
+  // through the authenticated, org-scoped download route (getFile reads via the
+  // service credential, so a PRIVATE bucket works unchanged). We store the
+  // app-relative key path — truthy for the UI's "has a file" checks, but not a
+  // public, guessable link.
+  return { key, url: `/${key}` };
 }
 
 /**

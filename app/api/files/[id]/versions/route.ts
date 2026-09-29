@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { putFile, deleteFile } from "@/lib/storage";
+import { putFile, deleteFile, storageKey } from "@/lib/storage";
 import path from "path";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
@@ -71,11 +71,9 @@ export async function POST(req: NextRequest, { params }: Params) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    const timestamp = Date.now();
-    const safeOriginalName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-    const filename = `${timestamp}_${safeOriginalName}`;
     // See lib/storage — the filesystem is read-only on Vercel.
-    const stored = await putFile(`uploads/${filename}`, buffer, file.type);
+    // QA-005: non-guessable key (was uploads/<timestamp>_<name>).
+    const stored = await putFile(storageKey(file.name), buffer, file.type);
 
     const s3Key = stored.key;
     const url = stored.url;

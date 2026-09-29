@@ -10,6 +10,7 @@ import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useDebounce } from "@/lib/hooks";
+import { fileHref } from "@/lib/file-url";
 import { formatMoney } from "@/lib/money";
 import { useCurrentUser } from "@/lib/useCurrentUser";
 import type { Expense, ExpenseCategory, ExpenseStatus, Project, ClientSummary } from "@/types";
@@ -143,7 +144,9 @@ function ExpensesPageInner() {
         const uploadRes = await fetch("/api/files", { method: "POST", body: fd });
         if (uploadRes.ok) {
           const uploaded = await uploadRes.json();
-          receiptUrl = uploaded.url || uploaded.fileUrl || "";
+          // QA-005: store the authenticated, org-scoped download path — not the
+          // raw storage URL. Older rows keep whatever URL they already have.
+          receiptUrl = uploaded.id ? fileHref(uploaded.id) : (uploaded.url || uploaded.fileUrl || "");
         } else {
           setReceiptFile(null);
           toast.error("Receipt upload failed. Please try again.");

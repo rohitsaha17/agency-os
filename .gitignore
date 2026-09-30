@@ -36,3 +36,8 @@ supabase/.temp/
 # Local DB snapshots (kept on disk, never in git)
 backups/*.zip
 backups/*.sql
+
+# Agent skills (vendored via `npx skills add`) — kept local, not in git
+.agents/
+.claude/skills/
+skills-lock.json

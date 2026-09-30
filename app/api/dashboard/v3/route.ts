@@ -46,6 +46,14 @@ export async function GET(req: NextRequest) {
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const weekAhead = new Date(today.getTime() + 7 * 86400000);
+    const tomorrow = new Date(today.getTime() + 86400000);
+    const weekAgo = new Date(today.getTime() - 7 * 86400000);
+    // The one where-fragment every personal stat shares: work that is mine and
+    // that I have not declined. Kept in one place so the count card and the
+    // lists below can never drift apart on what "my work" means.
+    const mineNotDeclined = {
+      assignees: { some: { userId: user.id, acceptance: { not: "DECLINED" as const } } },
+    };
 
     const seesMoney = can(user, "financials.view");
     const plans = can(user, "content.plan");
@@ -54,6 +62,7 @@ export async function GET(req: NextRequest) {
 
     const {
       myOpen, myOverdue, myChangesRequested, myPostDue,
+      overdueCount, dueTodayCount, dueThisWeekCount, changesCount, completedThisWeek,
       awaitingMyReview, myProjects, closingSoon,
       invoices, receipts, expenses, needsPricing, overdueOrg, workload,
     } = await resolveAll({
@@ -132,6 +141,26 @@ export async function GET(req: NextRequest) {
         },
         orderBy: { dueDate: "asc" },
         take: 8,
+      }),
+
+      // ── Everyone: true counts for the at-a-glance card ──
+      // These are counts, not lists, so they stay honest past 8 rows (the
+      // arrays above cap at 8 for rendering; a stat that read "8" when 20 were
+      // overdue would be worse than no stat).
+      overdueCount: prisma.task.count({
+        where: { organizationId: orgId, deletedAt: null, status: { notIn: ["DONE"] }, dueDate: { lt: today }, ...mineNotDeclined },
+      }),
+      dueTodayCount: prisma.task.count({
+        where: { organizationId: orgId, deletedAt: null, status: { notIn: ["DONE"] }, dueDate: { gte: today, lt: tomorrow }, ...mineNotDeclined },
+      }),
+      dueThisWeekCount: prisma.task.count({
+        where: { organizationId: orgId, deletedAt: null, status: { notIn: ["DONE"] }, dueDate: { gte: today, lte: weekAhead }, ...mineNotDeclined },
+      }),
+      changesCount: prisma.task.count({
+        where: { organizationId: orgId, deletedAt: null, status: "CHANGES_REQUESTED", ...mineNotDeclined },
+      }),
+      completedThisWeek: prisma.task.count({
+        where: { organizationId: orgId, deletedAt: null, status: "DONE", updatedAt: { gte: weekAgo }, ...mineNotDeclined },
       }),
 
       // ── Reviewers: what's waiting on them ──
@@ -301,6 +330,16 @@ export async function GET(req: NextRequest) {
         overdue: myOverdue.map((t) => ({ ...t, dueDate: t.dueDate?.toISOString() ?? null })),
         changesRequested: myChangesRequested,
         postDue: myPostDue.map((t) => ({ ...t, dueDate: t.dueDate?.toISOString() ?? null })),
+        // True counts for the at-a-glance card (not derived from the capped
+        // arrays above).
+        stats: {
+          open: myOpen,
+          overdue: overdueCount,
+          dueToday: dueTodayCount,
+          dueThisWeek: dueThisWeekCount,
+          changesRequested: changesCount,
+          completedThisWeek,
+        },
       },
       review: { awaiting: awaitingMyReview },
       planning: {

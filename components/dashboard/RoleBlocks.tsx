@@ -13,7 +13,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   Bell,
-  AlertTriangle, RotateCcw, Send, ClipboardCheck, CalendarClock,
+  ClipboardCheck, CalendarClock,
   IndianRupee, Users, ChevronRight,
 } from "lucide-react";
 import { formatMoney } from "@/lib/money";
@@ -25,6 +25,15 @@ interface Payload {
     overdue: { id: string; title: string; dueDate: string | null; kind: string; client: { name: string } | null }[];
     changesRequested: { id: string; title: string; revision: number; client: { name: string } | null }[];
     postDue: { id: string; title: string; dueDate: string | null; client: { name: string } | null }[];
+    /** True counts (not derived from the capped arrays above) for the stat card. */
+    stats: {
+      open: number;
+      overdue: number;
+      dueToday: number;
+      dueThisWeek: number;
+      changesRequested: number;
+      completedThisWeek: number;
+    };
   };
   review: { awaiting: number };
   planning: {
@@ -102,6 +111,26 @@ function days(iso: string) {
   return Math.ceil((new Date(iso).getTime() - Date.now()) / 86400000);
 }
 
+/** Stat-tile tones. Neutral by default; a tile only takes colour when its
+ *  number is worth reacting to (overdue, changes) or celebrating (done). */
+const TONE: Record<string, string> = {
+  neutral: "bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100 dark:bg-white/[0.04] dark:border-white/[0.08] dark:text-slate-200 dark:hover:bg-white/[0.08]",
+  red:     "bg-red-50 border-red-200 text-red-700 hover:bg-red-100 dark:bg-red-500/10 dark:border-red-500/30 dark:text-red-300",
+  amber:   "bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100 dark:bg-amber-500/10 dark:border-amber-500/30 dark:text-amber-300",
+  indigo:  "bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-500/10 dark:border-indigo-500/30 dark:text-indigo-200",
+  emerald: "bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:border-emerald-500/30 dark:text-emerald-300",
+};
+
+/** One number in the at-a-glance card. The whole tile is the link. */
+function Stat({ label, value, tone, href }: { label: string; value: number; tone: string; href: string }) {
+  return (
+    <Link href={href} className={`rounded-lg border px-2.5 py-2 transition-colors ${TONE[tone] ?? TONE.neutral}`}>
+      <p className="text-lg font-bold tabular-nums leading-none">{value}</p>
+      <p className="text-[10px] font-medium mt-1 opacity-70 truncate">{label}</p>
+    </Link>
+  );
+}
+
 export function RoleBlocks({ currency = "USD" }: { currency?: string }) {
   const [d, setD] = useState<Payload | null>(null);
 
@@ -121,60 +150,36 @@ export function RoleBlocks({ currency = "USD" }: { currency?: string }) {
   }
 
   const { myWork, planning, money, team } = d;
-  const nothingUrgent =
-    myWork.overdue.length === 0 &&
-    myWork.changesRequested.length === 0 &&
-    myWork.postDue.length === 0;
+  const s = myWork.stats;
+  // The things that actually want reacting to — the count badge and the warm
+  // border track these, not the plain "open" total.
+  const attention = s.overdue + s.changesRequested;
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
 
-      {/* ── Everyone: what needs me ── */}
+      {/* ── Everyone: your work at a glance ──
+          Numbers, not another copy of the task list. The full list is the
+          "My Tasks" card below; this one is the summary you scan first. */}
       <Card
         title="Needs your attention"
         icon={<Bell className="w-4 h-4" />}
-        urgent={!nothingUrgent}
-        count={nothingUrgent ? 0 : myWork.changesRequested.length + myWork.overdue.length}
-        action={<span className="text-xs text-gray-400">{myWork.open} open</span>}
+        urgent={attention > 0}
+        count={attention}
       >
-        {nothingUrgent ? (
-          <p className="text-sm text-gray-400 py-4 text-center">
-            Nothing overdue or waiting. Good place to be.
-          </p>
-        ) : (
-          <div className="space-y-2">
-            {myWork.changesRequested.map((t) => (
-              <Link key={t.id} href={`/tasks?task=${t.id}`}
-                className="flex items-center gap-2 px-2.5 py-2 rounded-lg bg-amber-50 border border-amber-200 hover:bg-amber-100 transition-colors">
-                <RotateCcw className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
-                <span className="text-xs text-amber-900 flex-1 truncate">{t.title}</span>
-                <span className="text-[10px] font-semibold text-amber-700 flex-shrink-0">
-                  Round {t.revision}
-                </span>
-              </Link>
-            ))}
-            {myWork.overdue.slice(0, 4).map((t) => (
-              <Link key={t.id} href={`/tasks?task=${t.id}`}
-                className="flex items-center gap-2 px-2.5 py-2 rounded-lg bg-red-50 border border-red-200 hover:bg-red-100 transition-colors">
-                <AlertTriangle className="w-3.5 h-3.5 text-red-500 flex-shrink-0" />
-                <span className="text-xs text-red-900 flex-1 truncate">{t.title}</span>
-                <span className="text-[10px] text-red-600 flex-shrink-0">
-                  {t.dueDate ? `${Math.abs(days(t.dueDate))}d late` : "overdue"}
-                </span>
-              </Link>
-            ))}
-            {myWork.postDue.map((t) => (
-              <Link key={t.id} href={`/tasks?task=${t.id}`}
-                className="flex items-center gap-2 px-2.5 py-2 rounded-lg bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 transition-colors">
-                <Send className="w-3.5 h-3.5 text-indigo-600 flex-shrink-0" />
-                <span className="text-xs text-indigo-900 flex-1 truncate">{t.title}</span>
-                <span className="text-[10px] text-indigo-600 flex-shrink-0">
-                  {t.dueDate ? (days(t.dueDate) <= 0 ? "today" : `in ${days(t.dueDate)}d`) : ""}
-                </span>
-              </Link>
-            ))}
-          </div>
-        )}
+        <div className="grid grid-cols-3 gap-2">
+          <Stat label="Open"       value={s.open}             tone="neutral"                                   href="/tasks" />
+          <Stat label="Overdue"    value={s.overdue}          tone={s.overdue > 0 ? "red" : "neutral"}         href="/tasks" />
+          <Stat label="Due today"  value={s.dueToday}         tone={s.dueToday > 0 ? "indigo" : "neutral"}     href="/my-calendar" />
+          <Stat label="This week"  value={s.dueThisWeek}      tone="neutral"                                   href="/my-calendar" />
+          <Stat label="Changes"    value={s.changesRequested} tone={s.changesRequested > 0 ? "amber" : "neutral"} href="/tasks" />
+          <Stat label="Done · 7d"  value={s.completedThisWeek} tone={s.completedThisWeek > 0 ? "emerald" : "neutral"} href="/tasks" />
+        </div>
+        <p className="text-[11px] text-gray-400 dark:text-slate-500 mt-3">
+          {attention > 0
+            ? `${attention} ${attention === 1 ? "thing needs" : "things need"} attention`
+            : "All caught up — nothing overdue or waiting."}
+        </p>
       </Card>
 
       {/* ── Reviewers: the approvals queue ── */}

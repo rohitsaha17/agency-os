@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useCurrentUser } from "@/lib/useCurrentUser";
 import { can, type Capability } from "@/lib/permissions";
 import { RoleBlocks } from "@/components/dashboard/RoleBlocks";
+import { MyTasksCard } from "@/components/dashboard/MyTasksCard";
 import { CheckInCard } from "@/components/hr/CheckInCard";
 import { CelebrationsCard } from "@/components/dashboard/CelebrationsCard";
 import { HolidaysCard } from "@/components/dashboard/HolidaysCard";
@@ -716,6 +717,10 @@ export default function DashboardPage() {
         {/* v3: the blocks THIS role needs — a junior lands on their work, an
             SMM on their review queue, a manager on the money. */}
         <RoleBlocks currency={data.currency} />
+
+        {/* Your own assigned work, listed in full — so nothing sits waiting to
+            be accepted on a task you never thought to open. Everybody gets it. */}
+        <MyTasksCard />
 
         {/*
           The two reference panels, side by side and below the work.

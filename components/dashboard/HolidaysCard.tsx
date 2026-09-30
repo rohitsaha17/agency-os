@@ -1,14 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { CalendarDays, Plus, Trash2, Pencil, Loader2 } from "lucide-react";
+import { CalendarDays, Plus, Trash2, Pencil, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
+import { MonthGrid, MONTH_NAMES } from "@/components/calendar/MonthGrid";
 import { Panel, DayBlock, Row, Empty, Pill } from "./kit";
 
 type Holiday = { id: string; name: string; date: string; endDate?: string | null };
-
-/** Shown on the dashboard. Long enough to be useful, short enough to ignore. */
-const ON_DASHBOARD = 4;
 
 /** One field, one spelling. The dialog had four copies of this string. */
 const FIELD =
@@ -28,79 +26,91 @@ const FIELD =
  * owner, admin and manager, and the server checks that again on every write
  * rather than trusting that the button was hidden.
  */
+/** First-of-month for a given Date, so month maths never trips on the 31st. */
+function firstOf(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), 1);
+}
+
+/** Does a holiday (single day or a span) touch the given month? */
+function touchesMonth(h: Holiday, year: number, month0: number): boolean {
+  const mm = String(month0 + 1).padStart(2, "0");
+  const start = `${year}-${mm}-01`;
+  const lastDate = new Date(year, month0 + 1, 0).getDate();
+  const end = `${year}-${mm}-${String(lastDate).padStart(2, "0")}`;
+  // ISO strings compare correctly as text — no Date, no timezone.
+  return h.date <= end && (h.endDate ?? h.date) >= start;
+}
+
+function monthLabel(d: Date): string {
+  return `${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`;
+}
+
 export function HolidaysCard() {
-  const [holidays, setHolidays] = useState<Holiday[] | null>(null);
+  /**
+   * Holidays are kept per year, filled in as the viewer walks across the
+   * boundary — flipping from December into January fetches next year once and
+   * remembers it. A full list of the year would overflow the card the moment a
+   * workspace lists all its closures, so the card shows one month at a time
+   * (the user's ask) and "View all" opens the whole year as a calendar.
+   */
+  const [byYear, setByYear] = useState<Record<number, Holiday[]>>({});
   const [canManage, setCanManage] = useState(false);
   const [managing, setManaging] = useState(false);
+  const [showAll, setShowAll] = useState(false);
   /**
-   * The request did not come back.
-   *
-   * Tracked separately from "came back empty", because the card used to
-   * treat them the same and simply disappear — so a failing endpoint looked
-   * exactly like a workspace with no holidays, and the only way to tell them
-   * apart was to open the network tab.
+   * The request did not come back. Tracked apart from "came back empty" so a
+   * failing endpoint doesn't read as a workspace with no holidays.
    */
   const [failed, setFailed] = useState(false);
+  /** True once the first request settles — until then the card is absent, not empty. */
+  const [ready, setReady] = useState(false);
+  const [viewMonth, setViewMonth] = useState(() => firstOf(new Date()));
 
-  const load = useCallback(() => {
-    // Source the SAME set the Manage panel shows (this year), not a
-    // future-only slice. The two used to diverge: a holiday whose date had
-    // already passed this year — or one caught by a timezone/date boundary —
-    // appeared in Manage (?year=) but was filtered out of the widget
-    // (?upcoming=1), so a just-added holiday could be invisible here. We fetch
-    // the year and order upcoming-first below, keeping the "what's ahead"
-    // framing while guaranteeing anything added for this year is visible.
-    fetch(`/api/holidays?year=${new Date().getFullYear()}`)
+  const viewYear = viewMonth.getFullYear();
+
+  const loadYear = useCallback((year: number) => {
+    fetch(`/api/holidays?year=${year}`)
       .then(async (r) => {
         if (!r.ok) throw new Error(String(r.status));
         return r.json();
       })
       .then((d) => {
-        setHolidays(d.holidays ?? []);
+        setByYear((prev) => ({ ...prev, [year]: d.holidays ?? [] }));
         setCanManage(!!d.canManage);
         setFailed(false);
       })
-      .catch(() => { setFailed(true); setHolidays([]); });
+      .catch(() => setFailed(true))
+      .finally(() => setReady(true));
   }, []);
 
-  useEffect(load, [load]);
+  useEffect(() => {
+    if (byYear[viewYear] === undefined) loadYear(viewYear);
+  }, [viewYear, byYear, loadYear]);
 
-  // Only while the first request is in flight. After that the card is always
-  // on the page.
-  //
-  // It used to hide itself when the list came back empty and the viewer could
-  // not add anything — which meant a workspace that had not listed its
-  // holidays yet was indistinguishable from a broken feature, and the only
-  // way to tell was to open the network tab. A reference list that is
-  // sometimes absent is worse than one that is briefly empty: the empty state
-  // lasts until somebody fills it in once, and then never again.
-  if (!holidays) return null;
+  // After Manage closes, the edited year may need re-reading.
+  const reloadCurrent = useCallback(() => loadYear(viewYear), [loadYear, viewYear]);
 
-  // Upcoming-first ordering. A holiday is still "ahead" until its last day is
-  // over (a range that started yesterday and ends Friday has not passed).
-  // ISO date strings compare correctly as text, which sidesteps any timezone
-  // drift from parsing them into Date objects.
-  const todayISO = new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD, local
-  const lastDay = (h: Holiday) => h.endDate ?? h.date;
-  const upcoming = holidays
-    .filter((h) => lastDay(h) >= todayISO)
+  // Only while the very first request is in flight.
+  if (!ready) return null;
+
+  const step = (delta: number) =>
+    setViewMonth((m) => new Date(m.getFullYear(), m.getMonth() + delta, 1));
+
+  const yearHolidays = byYear[viewYear];
+  const loadingThisYear = yearHolidays === undefined && !failed;
+  const monthHolidays = (yearHolidays ?? [])
+    .filter((h) => touchesMonth(h, viewYear, viewMonth.getMonth()))
     .sort((a, b) => a.date.localeCompare(b.date));
-  const past = holidays
-    .filter((h) => lastDay(h) < todayISO)
-    .sort((a, b) => b.date.localeCompare(a.date));
-  // Upcoming ones lead; recently-passed ones follow so a holiday added for an
-  // earlier date this year is still visible rather than silently dropped.
-  const ordered = [...upcoming, ...past];
+  const yearCount = (yearHolidays ?? []).length;
+  const onThisMonth = viewMonth.getTime() === firstOf(new Date()).getTime();
 
   return (
     <>
       <Panel
         icon={<CalendarDays className="w-4.5 h-4.5" />}
-        title="Upcoming Holidays"
-        subtitle="This year"
+        title="Holidays"
       >
-        {/* The Manage affordance is a button, not a link — it opens a dialog.
-            Rendered here so the panel header keeps one shape for everyone. */}
+        {/* The Manage affordance is a button, not a link — it opens a dialog. */}
         {canManage && (
           <button
             onClick={() => setManaging(true)}
@@ -110,54 +120,213 @@ export function HolidaysCard() {
           </button>
         )}
 
-        {failed ? (
+        {/* Month stepper — the card's whole point is that one month never
+            overflows however many holidays a year has. */}
+        <div className="flex items-center gap-1 px-4 sm:px-5 pb-2">
+          <button
+            onClick={() => step(-1)}
+            aria-label="Previous month"
+            className="p-1 rounded-md text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:hover:text-slate-200 dark:hover:bg-white/[0.06] transition-colors"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <span className="text-xs font-semibold text-gray-700 dark:text-slate-200 text-center min-w-[8.5rem] tabular-nums">
+            {monthLabel(viewMonth)}
+          </span>
+          <button
+            onClick={() => step(1)}
+            aria-label="Next month"
+            className="p-1 rounded-md text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:hover:text-slate-200 dark:hover:bg-white/[0.06] transition-colors"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+          {!onThisMonth && (
+            <button
+              onClick={() => setViewMonth(firstOf(new Date()))}
+              className="ml-1 text-[11px] font-medium text-indigo-600 hover:underline"
+            >
+              Today
+            </button>
+          )}
+        </div>
+
+        {failed && !yearHolidays ? (
           <div className="px-4 sm:px-5 pb-4 flex items-start gap-2">
             <p className="text-xs text-amber-700 dark:text-amber-400 flex-1">
               Holidays could not be loaded just now.
             </p>
-            <button onClick={load} className="text-xs font-medium text-indigo-600 hover:underline flex-shrink-0">
+            <button onClick={reloadCurrent} className="text-xs font-medium text-indigo-600 hover:underline flex-shrink-0">
               Try again
             </button>
           </div>
-        ) : holidays.length === 0 ? (
-          <Empty>
-            {canManage
-              ? "Nothing listed yet. Add the year’s closures so everyone can see them."
-              : "No holidays listed yet."}
-          </Empty>
+        ) : loadingThisYear ? (
+          <p className="px-4 sm:px-5 pb-4 text-xs text-gray-400">Loading…</p>
+        ) : monthHolidays.length === 0 ? (
+          <Empty>No holidays in {monthLabel(viewMonth)}.</Empty>
         ) : (
-          <>
-            <ul className="pb-1">
-              {ordered.slice(0, ON_DASHBOARD).map((h) => (
-                <Row key={h.id}>
-                  <DayBlock iso={h.date} />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[13px] font-medium text-gray-900 truncate">{h.name}</p>
-                    <p className="text-[11px] text-gray-400 truncate">{spanRange(h)}</p>
-                  </div>
-                  <Pill>{spanNote(h)}</Pill>
-                </Row>
-              ))}
-            </ul>
-            <footer className="px-4 sm:px-5 py-2.5 border-t border-gray-100 dark:border-white/[0.05] flex items-center gap-2">
-              <CalendarDays className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" aria-hidden="true" />
-              <p className="text-[11px] text-gray-400">
-                {upcoming.length > 0
-                  ? `${upcoming.length} ${upcoming.length === 1 ? "holiday" : "holidays"} ahead`
-                  : `${holidays.length} this year`}
-              </p>
-            </footer>
-          </>
+          <ul className="pb-1">
+            {monthHolidays.map((h) => (
+              <Row key={h.id}>
+                <DayBlock iso={h.date} />
+                <div className="min-w-0 flex-1">
+                  <p className="text-[13px] font-medium text-gray-900 dark:text-slate-100 truncate">{h.name}</p>
+                  <p className="text-[11px] text-gray-400 truncate">{spanRange(h)}</p>
+                </div>
+                <Pill>{spanNote(h)}</Pill>
+              </Row>
+            ))}
+          </ul>
         )}
+
+        <footer className="px-4 sm:px-5 py-2.5 border-t border-gray-100 dark:border-white/[0.05] flex items-center justify-between gap-2">
+          <span className="flex items-center gap-2 text-[11px] text-gray-400 min-w-0">
+            <CalendarDays className="w-3.5 h-3.5 flex-shrink-0" aria-hidden="true" />
+            <span className="truncate">
+              {yearCount} {yearCount === 1 ? "holiday" : "holidays"} in {viewYear}
+            </span>
+          </span>
+          <button
+            onClick={() => setShowAll(true)}
+            className="text-xs font-medium text-indigo-600 hover:underline flex-shrink-0"
+          >
+            View all
+          </button>
+        </footer>
       </Panel>
 
       {canManage && (
         <HolidayManager
           open={managing}
-          onClose={() => { setManaging(false); load(); }}
+          onClose={() => { setManaging(false); reloadCurrent(); }}
         />
       )}
+
+      <HolidayCalendarModal
+        open={showAll}
+        onClose={() => setShowAll(false)}
+        initialMonth={viewMonth}
+      />
     </>
+  );
+}
+
+/**
+ * "View all" — the whole year as a calendar plus a list, so a busy year is
+ * readable instead of a scroll of forty rows squeezed into a card.
+ *
+ * Reads holidays itself (by year, cached as you page across a boundary) so it
+ * doesn't have to be handed the parent's state. The grid is the shared
+ * MonthGrid every calendar in the app uses; holidays ride its event-strip lane,
+ * the closure's name shown once on its first day.
+ */
+function HolidayCalendarModal({
+  open, onClose, initialMonth,
+}: { open: boolean; onClose: () => void; initialMonth: Date }) {
+  const [month, setMonth] = useState(initialMonth);
+  const [byYear, setByYear] = useState<Record<number, Holiday[]>>({});
+  const [failed, setFailed] = useState(false);
+
+  const year = month.getFullYear();
+
+  // Re-centre on the month the card was showing each time it opens.
+  useEffect(() => { if (open) setMonth(initialMonth); }, [open, initialMonth]);
+
+  useEffect(() => {
+    if (!open || byYear[year] !== undefined) return;
+    let alive = true;
+    fetch(`/api/holidays?year=${year}`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((d) => { if (alive) { setByYear((p) => ({ ...p, [year]: d.holidays ?? [] })); setFailed(false); } })
+      .catch(() => { if (alive) setFailed(true); });
+    return () => { alive = false; };
+  }, [open, year, byYear]);
+
+  const holidays = byYear[year] ?? [];
+  const monthHolidays = holidays
+    .filter((h) => touchesMonth(h, year, month.getMonth()))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  const step = (delta: number) =>
+    setMonth((m) => new Date(m.getFullYear(), m.getMonth() + delta, 1));
+
+  return (
+    <Modal open={open} onClose={onClose} title="Holidays" width="max-w-2xl">
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => step(-1)}
+              aria-label="Previous month"
+              className="p-1.5 rounded-md text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:hover:text-slate-200 dark:hover:bg-white/[0.06] transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="text-sm font-semibold text-gray-800 dark:text-slate-100 text-center min-w-[9.5rem] tabular-nums">
+              {monthLabel(month)}
+            </span>
+            <button
+              onClick={() => step(1)}
+              aria-label="Next month"
+              className="p-1.5 rounded-md text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:hover:text-slate-200 dark:hover:bg-white/[0.06] transition-colors"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+          <button
+            onClick={() => setMonth(firstOf(new Date()))}
+            className="text-xs font-medium text-indigo-600 hover:underline"
+          >
+            Today
+          </button>
+        </div>
+
+        <div className="rounded-xl border border-gray-200 dark:border-slate-700 overflow-hidden">
+          <MonthGrid
+            view="month"
+            year={year}
+            month={month.getMonth()}
+            renderCell={() => null}
+            renderStrip={(day, { inMonth }) => {
+              if (!inMonth) return null;
+              const iso = day.toLocaleDateString("en-CA"); // local YYYY-MM-DD
+              const h = holidays.find((x) => iso >= x.date && iso <= (x.endDate ?? x.date));
+              if (!h) return null;
+              const isStart = iso === h.date;
+              return (
+                <div
+                  title={h.name}
+                  className="mx-0.5 mb-0.5 h-4 rounded px-1 text-[10px] leading-4 truncate bg-indigo-100 text-indigo-700 dark:bg-indigo-500/25 dark:text-indigo-100"
+                >
+                  {isStart ? h.name : " "}
+                </div>
+              );
+            }}
+          />
+        </div>
+
+        {failed && holidays.length === 0 ? (
+          <p className="text-xs text-amber-700 dark:text-amber-400 text-center py-2">
+            Holidays could not be loaded just now.
+          </p>
+        ) : monthHolidays.length === 0 ? (
+          <p className="text-xs text-gray-500 text-center py-2">
+            No holidays in {monthLabel(month)}.
+          </p>
+        ) : (
+          <ul className="divide-y divide-gray-100 dark:divide-slate-800 max-h-56 overflow-y-auto">
+            {monthHolidays.map((h) => (
+              <li key={h.id} className="flex items-center gap-3 py-2">
+                <DayBlock iso={h.date} />
+                <span className="flex-1 min-w-0 text-sm text-gray-800 dark:text-slate-200 truncate">{h.name}</span>
+                <span className="text-[11px] text-gray-400 flex-shrink-0 tabular-nums">
+                  {spanRange(h)} · {spanNote(h)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </Modal>
   );
 }
 

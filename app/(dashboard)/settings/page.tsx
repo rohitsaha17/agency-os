@@ -387,6 +387,7 @@ interface LetterheadConfig {
   showFooterDate:  boolean;
   showFooterPageNum: boolean;
   font:            "sans" | "serif";
+  theme:           "light" | "dark";
 }
 
 type LHTemplate = "CLASSIC" | "MODERN" | "MINIMAL" | "BOLD" | "ELEGANT" | "SPLIT" | "EXECUTIVE";
@@ -405,6 +406,7 @@ const DEFAULT_LH_CFG: LetterheadConfig = {
   showFooterDate:  true,
   showFooterPageNum: true,
   font:            "sans",
+  theme:           "light",
 };
 
 function parseLHConfig(raw: string | null | undefined): LetterheadConfig {
@@ -975,6 +977,24 @@ function LetterheadTab({
                       className={`flex-1 p-3 rounded-xl border-2 text-left transition-colors ${cfg.font === f.value ? "border-indigo-500 bg-indigo-50/50" : "border-gray-200 hover:border-gray-300"}`}>
                       <p className={`text-xs font-semibold ${cfg.font === f.value ? "text-indigo-700" : "text-gray-700"}`} style={{ fontFamily: f.value === "serif" ? "Georgia, serif" : undefined }}>{f.label}</p>
                       <p className="text-[10px] text-gray-400 mt-0.5">{f.sub}</p>
+                    </button>
+                  ))}
+                </div>
+              </Field>
+
+              <Field label="Document Theme" hint="Light paper, or a dark high-contrast document. The accent colour stays the same in both.">
+                <div className="flex gap-2">
+                  {([
+                    { value: "light" as const, label: "Light", sub: "Black text on white" },
+                    { value: "dark" as const, label: "Dark", sub: "White text on black" },
+                  ]).map(t => (
+                    <button key={t.value} onClick={() => setCfgK("theme", t.value)}
+                      className={`flex-1 p-3 rounded-xl border-2 text-left transition-colors ${(cfg.theme ?? "light") === t.value ? "border-indigo-500 bg-indigo-50/50" : "border-gray-200 hover:border-gray-300"}`}>
+                      <div className="flex items-center gap-2">
+                        <span className="w-4 h-4 rounded border" style={{ background: t.value === "dark" ? "#0b0b0d" : "#ffffff", borderColor: t.value === "dark" ? "#3a3a41" : "#e5e7eb" }} />
+                        <p className={`text-xs font-semibold ${(cfg.theme ?? "light") === t.value ? "text-indigo-700" : "text-gray-700"}`}>{t.label}</p>
+                      </div>
+                      <p className="text-[10px] text-gray-400 mt-0.5">{t.sub}</p>
                     </button>
                   ))}
                 </div>

@@ -23,6 +23,8 @@ export interface LetterheadConfig {
   showFooterDate:  boolean;
   showFooterPageNum: boolean;
   font:            "sans" | "serif";
+  /** Light paper (the default) or a dark, high-contrast document. */
+  theme?:          "light" | "dark";
 }
 
 const DEFAULT_CFG: LetterheadConfig = {
@@ -39,7 +41,55 @@ const DEFAULT_CFG: LetterheadConfig = {
   showFooterDate:  true,
   showFooterPageNum: true,
   font:            "sans",
+  theme:           "light",
 };
+
+/* ── Document palette ─────────────────────────────────────────────
+   One source of truth for every colour a template uses, so a dark
+   document is a palette swap rather than a hundred inline overrides.
+   The accent (the org's letterheadColor) is the one colour that does
+   NOT change between themes — it is the brand. */
+export interface DocPalette {
+  dark: boolean;
+  page: string;        // body background
+  surface: string;     // cards, desc blocks, zebra rows
+  surfaceAlt: string;  // secondary fill
+  ink: string;         // body text
+  heading: string;     // titles
+  muted: string;       // secondary text
+  faint: string;       // labels, footnotes
+  border: string;      // hairlines
+  borderStrong: string;// dividers, table foot
+}
+
+export function docPalette(theme: "light" | "dark" | undefined): DocPalette {
+  if (theme === "dark") {
+    return {
+      dark: true,
+      page: "#0b0b0d",
+      surface: "#17171a",
+      surfaceAlt: "#121214",
+      ink: "#e8e8ea",
+      heading: "#ffffff",
+      muted: "#b4b4b8",
+      faint: "#8a8a90",
+      border: "#2a2a2f",
+      borderStrong: "#3a3a41",
+    };
+  }
+  return {
+    dark: false,
+    page: "#ffffff",
+    surface: "#f9fafb",
+    surfaceAlt: "#fafafa",
+    ink: "#1f2937",
+    heading: "#111827",
+    muted: "#6b7280",
+    faint: "#9ca3af",
+    border: "#f3f4f6",
+    borderStrong: "#e5e7eb",
+  };
+}
 
 function parseCfg(s: CompanySettings): LetterheadConfig {
   try {
@@ -50,143 +100,150 @@ function parseCfg(s: CompanySettings): LetterheadConfig {
 }
 
 /* ── Base CSS ─────────────────────────────────────────────────── */
-function baseStyles(accent: string, font: "sans" | "serif"): string {
+function baseStyles(accent: string, font: "sans" | "serif", pal: DocPalette): string {
   const fontStack = font === "serif"
     ? `Georgia, "Times New Roman", Times, serif`
     : `"Helvetica Neue", Helvetica, Arial, sans-serif`;
 
+  // Badge fills. On light paper these are the familiar pale tints; on a dark
+  // document a pale fill would glare, so they become a translucent wash of the
+  // same hue with a light-tinted label.
+  const badge = (bg: string, fg: string, darkBg: string, darkFg: string) =>
+    pal.dark ? `background: ${darkBg}; color: ${darkFg};` : `background: ${bg}; color: ${fg};`;
+
   return `
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-    @page { size: A4 portrait; margin: 14mm 18mm 20mm 18mm; }
+    @page { size: A4 portrait; margin: 14mm 18mm 20mm 18mm; ${pal.dark ? `background: ${pal.page};` : ""} }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+    html { background: ${pal.page}; }
     body {
       font-family: ${font === "sans" ? `"Inter", "Helvetica Neue", Helvetica, Arial, sans-serif` : fontStack};
       font-size: 9.5pt;
-      color: #1f2937;
+      color: ${pal.ink};
       line-height: 1.6;
-      background: #fff;
+      background: ${pal.page};
       -webkit-font-smoothing: antialiased;
     }
     h1,h2,h3,h4 { line-height: 1.2; font-weight: 700; }
 
     /* ── Document header ── */
     .doc-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
-    .doc-title  { font-size: 22pt; font-weight: 800; color: #111827; letter-spacing: -0.8px; }
-    .doc-number { font-size: 8.5pt; color: #9ca3af; font-family: monospace; margin-top: 5px; letter-spacing: 0.3px; }
+    .doc-title  { font-size: 22pt; font-weight: 800; color: ${pal.heading}; letter-spacing: -0.8px; }
+    .doc-number { font-size: 8.5pt; color: ${pal.faint}; font-family: monospace; margin-top: 5px; letter-spacing: 0.3px; }
     .doc-meta   { text-align: right; }
     .doc-meta .doc-status { margin-bottom: 6px; }
 
     /* ── Divider ── */
-    .divider { height: 1px; background: #f3f4f6; margin: 16px 0; }
+    .divider { height: 1px; background: ${pal.border}; margin: 16px 0; }
     .divider-accent { height: 2px; background: linear-gradient(90deg, ${accent}, transparent); margin: 16px 0; }
 
     /* ── Badges ── */
     .badge { display: inline-block; padding: 3px 9px; border-radius: 20px; font-size: 7.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; }
-    .badge-gray   { background: #f3f4f6; color: #4b5563; }
-    .badge-blue   { background: #eff6ff; color: #1d4ed8; }
-    .badge-green  { background: #f0fdf4; color: #15803d; }
-    .badge-red    { background: #fef2f2; color: #b91c1c; }
-    .badge-amber  { background: #fffbeb; color: #92400e; }
-    .badge-purple { background: #faf5ff; color: #6d28d9; }
-    .badge-indigo { background: #eef2ff; color: #3730a3; }
+    .badge-gray   { ${badge("#f3f4f6", "#4b5563", "rgba(255,255,255,0.10)", "#d4d4d8")} }
+    .badge-blue   { ${badge("#eff6ff", "#1d4ed8", "rgba(59,130,246,0.18)", "#93c5fd")} }
+    .badge-green  { ${badge("#f0fdf4", "#15803d", "rgba(34,197,94,0.18)", "#86efac")} }
+    .badge-red    { ${badge("#fef2f2", "#b91c1c", "rgba(239,68,68,0.18)", "#fca5a5")} }
+    .badge-amber  { ${badge("#fffbeb", "#92400e", "rgba(245,158,11,0.18)", "#fcd34d")} }
+    .badge-purple { ${badge("#faf5ff", "#6d28d9", "rgba(139,92,246,0.18)", "#c4b5fd")} }
+    .badge-indigo { ${badge("#eef2ff", "#3730a3", "rgba(99,102,241,0.18)", "#a5b4fc")} }
 
     /* ── Info grid ── */
     .info-grid   { display: grid; grid-template-columns: 1fr 1fr;     gap: 14px 28px; margin-bottom: 20px; }
     .info-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px 24px; margin-bottom: 20px; }
-    .info-block label { font-size: 7pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #9ca3af; display: block; margin-bottom: 3px; }
-    .info-block p     { font-size: 9.5pt; color: #111827; font-weight: 500; }
-    .info-block p.sub { font-size: 8.5pt; color: #6b7280; font-weight: 400; }
+    .info-block label { font-size: 7pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: ${pal.faint}; display: block; margin-bottom: 3px; }
+    .info-block p     { font-size: 9.5pt; color: ${pal.heading}; font-weight: 500; }
+    .info-block p.sub { font-size: 8.5pt; color: ${pal.muted}; font-weight: 400; }
 
     /* ── Bill To / From block ── */
     .billing-section { display: flex; justify-content: space-between; gap: 24px; margin-bottom: 20px; }
     .billing-block { flex: 1; }
-    .billing-block label { font-size: 7pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #9ca3af; display: block; margin-bottom: 5px; }
-    .billing-block .company { font-size: 11pt; font-weight: 700; color: #111827; }
-    .billing-block .detail  { font-size: 8.5pt; color: #6b7280; line-height: 1.7; }
+    .billing-block label { font-size: 7pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: ${pal.faint}; display: block; margin-bottom: 5px; }
+    .billing-block .company { font-size: 11pt; font-weight: 700; color: ${pal.heading}; }
+    .billing-block .detail  { font-size: 8.5pt; color: ${pal.muted}; line-height: 1.7; }
 
     /* ── Section heading ── */
-    .section-head { font-size: 7.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: ${accent}; margin-bottom: 10px; padding-bottom: 5px; border-bottom: 1.5px solid #f3f4f6; }
+    .section-head { font-size: 7.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: ${accent}; margin-bottom: 10px; padding-bottom: 5px; border-bottom: 1.5px solid ${pal.border}; }
 
     /* ── Description block ── */
-    .desc-block { background: #f9fafb; border-left: 3px solid ${accent}; padding: 11px 15px; border-radius: 0 8px 8px 0; font-size: 9pt; color: #374151; line-height: 1.65; margin-bottom: 20px; }
+    .desc-block { background: ${pal.surface}; border-left: 3px solid ${accent}; padding: 11px 15px; border-radius: 0 8px 8px 0; font-size: 9pt; color: ${pal.ink}; line-height: 1.65; margin-bottom: 20px; }
 
     /* ── Table ── */
     table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 9pt; }
     thead tr  { background: ${accent}; }
     thead th  { color: #fff; font-size: 7.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; padding: 8px 11px; text-align: left; }
     thead th.r { text-align: right; }
-    tbody tr:nth-child(even) { background: #fafafa; }
-    tbody tr  { border-bottom: 1px solid #f3f4f6; }
-    tbody td  { padding: 9px 11px; color: #1f2937; vertical-align: top; }
+    tbody tr:nth-child(even) { background: ${pal.surfaceAlt}; }
+    tbody tr  { border-bottom: 1px solid ${pal.border}; }
+    tbody td  { padding: 9px 11px; color: ${pal.ink}; vertical-align: top; }
     tbody td.r  { text-align: right; white-space: nowrap; }
-    tbody td.sub { font-size: 8pt; color: #6b7280; padding-top: 2px; }
-    tfoot tr  { border-top: 2px solid #e5e7eb; }
+    tbody td.sub { font-size: 8pt; color: ${pal.muted}; padding-top: 2px; }
+    tfoot tr  { border-top: 2px solid ${pal.borderStrong}; }
     tfoot td  { padding: 7px 11px; }
 
     /* ── Totals ── */
     .totals-wrap  { display: flex; justify-content: flex-end; margin-bottom: 20px; }
     .totals-box   { width: 260px; }
-    .totals-row   { display: flex; justify-content: space-between; padding: 4px 0; font-size: 9pt; color: #4b5563; }
-    .totals-row.discount { color: #059669; }
-    .totals-row.total    { border-top: 2px solid #e5e7eb; margin-top: 6px; padding-top: 9px; font-size: 11.5pt; font-weight: 800; color: #111827; }
+    .totals-row   { display: flex; justify-content: space-between; padding: 4px 0; font-size: 9pt; color: ${pal.muted}; }
+    .totals-row.discount { color: ${pal.dark ? "#4ade80" : "#059669"}; }
+    .totals-row.total    { border-top: 2px solid ${pal.borderStrong}; margin-top: 6px; padding-top: 9px; font-size: 11.5pt; font-weight: 800; color: ${pal.heading}; }
     .totals-row.total .amount { color: ${accent}; }
 
     /* ── Invoice totals block (right-aligned) ── */
-    .totals-block { margin-left: auto; width: 270px; margin-top: 6px; margin-bottom: 24px; background: #fafafa; border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px 18px; }
-    .totals-block .totals-row { display: flex; justify-content: space-between; font-size: 9pt; color: #6b7280; padding: 3.5px 0; }
-    .totals-block .totals-row.tax-row { color: #4b5563; }
-    .totals-block .totals-row.disc-row { color: #059669; }
-    .totals-block .totals-grand { display: flex; justify-content: space-between; align-items: center; font-size: 12.5pt; font-weight: 800; color: #111827; border-top: 2px solid #e5e7eb; margin-top: 10px; padding-top: 10px; }
+    .totals-block { margin-left: auto; width: 270px; margin-top: 6px; margin-bottom: 24px; background: ${pal.surfaceAlt}; border: 1px solid ${pal.borderStrong}; border-radius: 10px; padding: 14px 18px; }
+    .totals-block .totals-row { display: flex; justify-content: space-between; font-size: 9pt; color: ${pal.muted}; padding: 3.5px 0; }
+    .totals-block .totals-row.tax-row { color: ${pal.muted}; }
+    .totals-block .totals-row.disc-row { color: ${pal.dark ? "#4ade80" : "#059669"}; }
+    .totals-block .totals-grand { display: flex; justify-content: space-between; align-items: center; font-size: 12.5pt; font-weight: 800; color: ${pal.heading}; border-top: 2px solid ${pal.borderStrong}; margin-top: 10px; padding-top: 10px; }
     .totals-block .totals-grand .grand-amount { color: ${accent}; }
 
     /* ── Invoice line table ── */
     .line-table { width: 100%; border-collapse: collapse; margin-bottom: 0; font-size: 9pt; }
     .line-table thead tr { background: ${accent}; }
     .line-table thead th { color: #fff; font-size: 7.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; padding: 9px 11px; text-align: left; }
-    .line-table tbody td { padding: 10px 11px; color: #1f2937; border-bottom: 1px solid #f3f4f6; vertical-align: top; }
-    .line-table tbody td.desc { color: #374151; }
-    .line-table tbody td.desc-note { font-size: 8pt; color: #9ca3af; padding-top: 2px; }
-    .line-table tbody tr.row-even { background: #fafafa; }
-    .line-table .qty   { text-align: center; width: 64px; color: #4b5563; }
-    .line-table .price { text-align: right; width: 96px; color: #4b5563; }
-    .line-table .total { text-align: right; width: 96px; font-weight: 600; color: #111827; }
+    .line-table tbody td { padding: 10px 11px; color: ${pal.ink}; border-bottom: 1px solid ${pal.border}; vertical-align: top; }
+    .line-table tbody td.desc { color: ${pal.ink}; }
+    .line-table tbody td.desc-note { font-size: 8pt; color: ${pal.faint}; padding-top: 2px; }
+    .line-table tbody tr.row-even { background: ${pal.surfaceAlt}; }
+    .line-table .qty   { text-align: center; width: 64px; color: ${pal.muted}; }
+    .line-table .price { text-align: right; width: 96px; color: ${pal.muted}; }
+    .line-table .total { text-align: right; width: 96px; font-weight: 600; color: ${pal.heading}; }
 
     /* ── Signature ── */
     .sig-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; margin-bottom: 20px; }
-    .sig-card { border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px; }
-    .sig-card .name { font-weight: 700; font-size: 9.5pt; color: #111827; }
-    .sig-card .role { font-size: 8pt; color: #6b7280; margin-bottom: 10px; }
+    .sig-card { border: 1px solid ${pal.borderStrong}; border-radius: 10px; padding: 14px; }
+    .sig-card .name { font-weight: 700; font-size: 9.5pt; color: ${pal.heading}; }
+    .sig-card .role { font-size: 8pt; color: ${pal.muted}; margin-bottom: 10px; }
     .sig-card .signed { display: flex; align-items: center; gap: 7px; font-size: 8.5pt; }
     .sig-card .signed .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
     .sig-card .signed .dot.yes { background: #22c55e; }
-    .sig-card .signed .dot.no  { background: #e5e7eb; }
-    .sig-card .signed-date { font-size: 7.5pt; color: #6b7280; margin-top: 3px; }
-    .sig-card .sig-note    { font-size: 7.5pt; color: #9ca3af; margin-top: 2px; }
-    .sig-line  { height: 36px; border-bottom: 1px dashed #d1d5db; margin: 14px 0 4px; }
-    .sig-label { font-size: 7pt; color: #9ca3af; }
+    .sig-card .signed .dot.no  { background: ${pal.borderStrong}; }
+    .sig-card .signed-date { font-size: 7.5pt; color: ${pal.muted}; margin-top: 3px; }
+    .sig-card .sig-note    { font-size: 7.5pt; color: ${pal.faint}; margin-top: 2px; }
+    .sig-line  { height: 36px; border-bottom: 1px dashed ${pal.borderStrong}; margin: 14px 0 4px; }
+    .sig-label { font-size: 7pt; color: ${pal.faint}; }
 
     /* ── Notes / Terms ── */
-    .note-block { border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; }
-    .note-block h4 { font-size: 8.5pt; font-weight: 700; color: #374151; margin-bottom: 7px; }
-    .note-block p, .note-block pre { font-size: 8.5pt; color: #4b5563; white-space: pre-wrap; font-family: inherit; line-height: 1.65; }
+    .note-block { border: 1px solid ${pal.borderStrong}; border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; }
+    .note-block h4 { font-size: 8.5pt; font-weight: 700; color: ${pal.ink}; margin-bottom: 7px; }
+    .note-block p, .note-block pre { font-size: 8.5pt; color: ${pal.muted}; white-space: pre-wrap; font-family: inherit; line-height: 1.65; }
 
     /* ── Progress ── */
-    .progress-wrap { background: #f3f4f6; border-radius: 4px; height: 6px; margin-top: 5px; overflow: hidden; }
+    .progress-wrap { background: ${pal.dark ? "rgba(255,255,255,0.10)" : "#f3f4f6"}; border-radius: 4px; height: 6px; margin-top: 5px; overflow: hidden; }
     .progress-fill { height: 6px; border-radius: 4px; background: ${accent}; }
 
     /* ── Task list ── */
-    .task-row   { display: flex; align-items: flex-start; gap: 8px; padding: 7px 0; border-bottom: 1px solid #f9fafb; }
+    .task-row   { display: flex; align-items: flex-start; gap: 8px; padding: 7px 0; border-bottom: 1px solid ${pal.border}; }
     .task-dot   { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
-    .task-name  { font-size: 9pt; color: #1f2937; flex: 1; }
-    .task-status { font-size: 7.5pt; color: #6b7280; background: #f3f4f6; padding: 2px 7px; border-radius: 10px; flex-shrink: 0; }
+    .task-name  { font-size: 9pt; color: ${pal.ink}; flex: 1; }
+    .task-status { font-size: 7.5pt; color: ${pal.muted}; background: ${pal.dark ? "rgba(255,255,255,0.08)" : "#f3f4f6"}; padding: 2px 7px; border-radius: 10px; flex-shrink: 0; }
 
     /* ── Page break ── */
     .page-break { page-break-before: always; padding-top: 24px; }
 
     /* ── Print ── */
     @media print {
-      body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+      html, body { background: ${pal.page} !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
       .no-print { display: none !important; }
     }
   `;
@@ -247,14 +304,14 @@ function taskDotColor(status: string) {
   };
   return m[status] ?? "#d1d5db";
 }
-function wrapHtml(title: string, accent: string, font: "sans" | "serif", body: string): string {
+function wrapHtml(title: string, accent: string, font: "sans" | "serif", pal: DocPalette, body: string): string {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>${esc(title)}</title>
-  <style>${baseStyles(accent, font)}</style>
+  <style>${baseStyles(accent, font, pal)}</style>
 </head>
 <body>${body}</body>
 </html>`;
@@ -280,9 +337,11 @@ function logoEl(logo: string | null | undefined, name: string, accent: string, c
   return `<div style="width:${sz}; height:${sz}; border-radius:10px; background:${bg}; color:${fg}; font-size:${fs}; font-weight:800; display:flex; align-items:center; justify-content:center; flex-shrink:0;">${esc(name.charAt(0).toUpperCase())}</div>`;
 }
 
-// Build contact info lines for light/dark backgrounds
-function contactLines(s: CompanySettings, cfg: LetterheadConfig, lightBg = false): string {
-  const col = lightBg ? "rgba(255,255,255,0.75)" : "#6b7280";
+// Build contact info lines for light/dark backgrounds.
+// `lightBg` here means "sitting on the accent/header colour" (always light text);
+// otherwise the colour follows the document palette.
+function contactLines(s: CompanySettings, cfg: LetterheadConfig, lightBg = false, pal?: DocPalette): string {
+  const col = lightBg ? "rgba(255,255,255,0.75)" : (pal?.muted ?? "#6b7280");
   const parts: string[] = [];
   if (cfg.showAddress && s.letterheadAddress) parts.push(esc(s.letterheadAddress.replace(/\n/g, " · ")));
   if (cfg.showPhone   && s.letterheadPhone)   parts.push(esc(s.letterheadPhone));
@@ -292,7 +351,7 @@ function contactLines(s: CompanySettings, cfg: LetterheadConfig, lightBg = false
   return parts.map(p => `<div style="font-size:8pt; color:${col}; line-height:1.7;">${p}</div>`).join("");
 }
 
-export function letterheadHtml(s: CompanySettings): string {
+export function letterheadHtml(s: CompanySettings, pal: DocPalette): string {
   const cfg      = parseCfg(s);
   const template = s.letterheadTemplate ?? "CLASSIC";
   const accent   = s.letterheadColor ?? "#6366f1";
@@ -301,13 +360,17 @@ export function letterheadHtml(s: CompanySettings): string {
   const hBg      = cfg.headerBg ?? "#1e293b";
   const isLight  = cfg.headerTextColor === "light";
   const textCol  = isLight ? "#fff" : "#111827";
+  // Agency name / dividers that sit on the PAGE (not on a coloured header box)
+  // follow the document palette, so a dark document doesn't print black-on-black.
+  const nameCol  = pal.heading;
+  const ruleCol  = pal.borderStrong;
 
   // Logo justify based on logoPosition
   const logoJustify = cfg.logoPosition === "center" ? "center" : cfg.logoPosition === "right" ? "flex-end" : "flex-start";
 
   const lEl = logoEl(logo, name, accent, cfg, isLight);
-  const contact = contactLines(s, cfg, false);
-  const contactLight = contactLines(s, cfg, true);
+  const contact = contactLines(s, cfg, false, pal);
+  const contactLight = contactLines(s, cfg, true, pal);
   const agencyName  = cfg.showAgencyName ? name : "";
 
   // ── CLASSIC ───────────────────────────────────────────────
@@ -316,7 +379,7 @@ export function letterheadHtml(s: CompanySettings): string {
     <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:20px; border-bottom:3px solid ${accent}; padding-bottom:16px; margin-bottom:22px;">
       <div style="display:flex; align-items:center; gap:12px; justify-content:${logoJustify};">
         ${lEl}
-        ${agencyName ? `<div><div style="font-size:15pt; font-weight:800; color:#111827;">${esc(agencyName)}</div></div>` : ""}
+        ${agencyName ? `<div><div style="font-size:15pt; font-weight:800; color:${nameCol};">${esc(agencyName)}</div></div>` : ""}
       </div>
       <div style="text-align:right;">${contact}</div>
     </div>`;
@@ -325,13 +388,13 @@ export function letterheadHtml(s: CompanySettings): string {
   // ── MODERN ────────────────────────────────────────────────
   if (template === "MODERN") {
     return `
-    <div style="display:flex; align-items:stretch; gap:0; border-bottom:1px solid #e5e7eb; padding-bottom:0; margin-bottom:22px;">
+    <div style="display:flex; align-items:stretch; gap:0; border-bottom:1px solid ${ruleCol}; padding-bottom:0; margin-bottom:22px;">
       <div style="width:5px; background:${accent}; border-radius:3px 0 0 3px; flex-shrink:0; margin-right:14px;"></div>
       <div style="flex:1; display:flex; justify-content:space-between; align-items:flex-start; padding-bottom:14px;">
         <div style="display:flex; align-items:center; gap:12px; justify-content:${logoJustify};">
           ${lEl}
           <div>
-            ${agencyName ? `<div style="font-size:14pt; font-weight:800; color:#111827;">${esc(agencyName)}</div>` : ""}
+            ${agencyName ? `<div style="font-size:14pt; font-weight:800; color:${nameCol};">${esc(agencyName)}</div>` : ""}
             <div style="width:32px; height:3px; background:${accent}; border-radius:2px; margin-top:5px;"></div>
           </div>
         </div>
@@ -346,9 +409,9 @@ export function letterheadHtml(s: CompanySettings): string {
     <div style="display:flex; justify-content:space-between; align-items:flex-end; padding-bottom:12px; border-bottom:1.5px solid ${accent}; margin-bottom:22px;">
       <div style="justify-content:${logoJustify}; display:flex; align-items:center; gap:12px;">
         ${logo ? `<img src="${logo}" alt="${esc(name)}" style="object-fit:contain; ${LOGO_SIZE[cfg.logoSize] ?? LOGO_SIZE.md}" />` : ""}
-        ${agencyName ? `<div style="font-size:14pt; font-weight:700; color:#111827; letter-spacing:-0.3px;">${esc(agencyName)}</div>` : ""}
+        ${agencyName ? `<div style="font-size:14pt; font-weight:700; color:${nameCol}; letter-spacing:-0.3px;">${esc(agencyName)}</div>` : ""}
       </div>
-      <div style="text-align:right;">${contactLines(s, cfg, false)}</div>
+      <div style="text-align:right;">${contactLines(s, cfg, false, pal)}</div>
     </div>`;
   }
 
@@ -375,17 +438,17 @@ export function letterheadHtml(s: CompanySettings): string {
     if (cfg.showPhone   && s.letterheadPhone)   contactParts.push(esc(s.letterheadPhone));
     if (cfg.showEmail   && s.letterheadEmail)   contactParts.push(esc(s.letterheadEmail));
     if (cfg.showWebsite && s.letterheadWebsite) contactParts.push(esc(s.letterheadWebsite));
-    const contactStr = contactParts.join(`<span style="color:#d1d5db; margin:0 8px;">·</span>`);
+    const contactStr = contactParts.join(`<span style="color:${ruleCol}; margin:0 8px;">·</span>`);
     return `
     <div style="text-align:center; margin-bottom:22px;">
       <div style="width:60px; height:1.5px; background:${accent}30; margin:0 auto 14px;"></div>
       <div style="display:flex; justify-content:center; margin-bottom:10px;">${logoEl(logo, name, accent, cfg, false)}</div>
-      ${agencyName ? `<div style="font-size:15pt; font-weight:700; color:#111827; letter-spacing:0.5px; text-transform:uppercase; margin-bottom:6px;">${esc(agencyName)}</div>` : ""}
-      ${contactStr ? `<div style="font-size:8pt; color:#9ca3af; margin-top:4px;">${contactStr}</div>` : ""}
+      ${agencyName ? `<div style="font-size:15pt; font-weight:700; color:${nameCol}; letter-spacing:0.5px; text-transform:uppercase; margin-bottom:6px;">${esc(agencyName)}</div>` : ""}
+      ${contactStr ? `<div style="font-size:8pt; color:${pal.faint}; margin-top:4px;">${contactStr}</div>` : ""}
       <div style="display:flex; align-items:center; gap:10px; margin-top:14px;">
-        <div style="flex:1; height:1px; background:#e5e7eb;"></div>
+        <div style="flex:1; height:1px; background:${ruleCol};"></div>
         <div style="width:6px; height:6px; border-radius:50%; background:${accent};"></div>
-        <div style="flex:1; height:1px; background:#e5e7eb;"></div>
+        <div style="flex:1; height:1px; background:${ruleCol};"></div>
       </div>
     </div>`;
   }
@@ -400,8 +463,8 @@ export function letterheadHtml(s: CompanySettings): string {
         ${agencyName ? `<div style="font-size:13pt; font-weight:800; color:${textCol}; line-height:1.2; margin-top:4px;">${esc(agencyName)}</div>` : ""}
         <div style="width:32px; height:2px; background:${accent}; border-radius:2px;"></div>
       </div>
-      <div style="background:#f8fafc; padding:20px 18px; display:flex; flex-direction:column; justify-content:center; gap:3px; border-left:1px solid ${hBg}15;">
-        ${contactLines(s, cfg, false)}
+      <div style="background:${pal.surface}; padding:20px 18px; display:flex; flex-direction:column; justify-content:center; gap:3px; border-left:1px solid ${hBg}15;">
+        ${contactLines(s, cfg, false, pal)}
       </div>
     </div>`;
   }
@@ -427,13 +490,11 @@ export function letterheadHtml(s: CompanySettings): string {
   }
 }
 
-export function footerHtml(s: CompanySettings): string {
+export function footerHtml(s: CompanySettings, pal: DocPalette): string {
   const cfg = parseCfg(s);
   const accent = s.letterheadColor ?? "#6366f1";
   const text   = s.letterheadFooter ?? "This is a computer-generated document.";
   const align  = cfg.footerAlign ?? "center";
-  const justifyMap = { left: "flex-start", center: "center", right: "flex-end" };
-  const justify = justifyMap[align] ?? "center";
 
   const leftItem  = cfg.showFooterDate
     ? `<span>Generated: ${new Date().toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" })}</span>`
@@ -441,7 +502,7 @@ export function footerHtml(s: CompanySettings): string {
   const rightItem = cfg.showFooterPageNum ? `<span>Page 1</span>` : `<span></span>`;
 
   return `
-  <div style="position:fixed; bottom:0; left:0; right:0; display:flex; justify-content:space-between; align-items:center; padding:8px 18mm; border-top:1px solid ${accent}30; font-size:7.5pt; color:#9ca3af;">
+  <div style="position:fixed; bottom:0; left:0; right:0; display:flex; justify-content:space-between; align-items:center; padding:8px 18mm; border-top:1px solid ${accent}30; font-size:7.5pt; color:${pal.faint}; background:${pal.page};">
     ${leftItem}
     <span style="text-align:${align}; flex:1; padding:0 16px;">${esc(text)}</span>
     ${rightItem}
@@ -473,6 +534,7 @@ export interface ContractPdfData {
 export function buildContractHtml(c: ContractPdfData, s: CompanySettings): string {
   const cfg    = parseCfg(s);
   const accent = s.letterheadColor ?? "#6366f1";
+  const pal    = docPalette(cfg.theme);
 
   const typeLabel: Record<string, string> = {
     NDA: "Non-Disclosure Agreement", SERVICE_AGREEMENT: "Service Agreement",
@@ -504,7 +566,7 @@ export function buildContractHtml(c: ContractPdfData, s: CompanySettings): strin
   }).join("");
 
   const body = `
-    ${letterheadHtml(s)}
+    ${letterheadHtml(s, pal)}
     <div class="doc-header">
       <div>
         <div class="doc-title">${esc((typeLabel[c.type] ?? "Contract").toUpperCase())}</div>
@@ -525,9 +587,9 @@ export function buildContractHtml(c: ContractPdfData, s: CompanySettings): strin
     <p class="section-head">Parties</p>
     <div class="sig-grid">${partiesRows}</div>
     ${c.notes ? `<div class="note-block"><h4>Notes</h4><p>${esc(c.notes)}</p></div>` : ""}
-    ${footerHtml(s)}`;
+    ${footerHtml(s, pal)}`;
 
-  return wrapHtml(c.title, accent, cfg.font, body);
+  return wrapHtml(c.title, accent, cfg.font, pal, body);
 }
 
 /* ── PROJECT ──────────────────────────────────────────────── */
@@ -555,6 +617,7 @@ export interface ProjectPdfData {
 export function buildProjectHtml(p: ProjectPdfData, s: CompanySettings): string {
   const cfg    = parseCfg(s);
   const accent = s.letterheadColor ?? "#6366f1";
+  const pal    = docPalette(cfg.theme);
 
   const tasksByStatus = p.tasks.reduce<Record<string, ProjectTaskPdf[]>>((acc, t) => {
     if (!acc[t.status]) acc[t.status] = [];
@@ -574,7 +637,7 @@ export function buildProjectHtml(p: ProjectPdfData, s: CompanySettings): string 
         <div class="task-name">${esc(t.title)}${t.assignee ? `<span style="color:#9ca3af; font-size:8pt;"> · ${esc(t.assignee.name)}</span>` : ""}</div>
         ${t.dueDate ? `<span style="font-size:7.5pt; color:#9ca3af;">${fmtDate(t.dueDate)}</span>` : ""}
       </div>`).join("");
-    return `<div style="margin-bottom:14px;"><div style="font-size:8pt; font-weight:700; color:#374151; margin-bottom:4px;">${statusLabel[st]} (${tasksByStatus[st].length})</div>${rows}</div>`;
+    return `<div style="margin-bottom:14px;"><div style="font-size:8pt; font-weight:700; color:${pal.ink}; margin-bottom:4px;">${statusLabel[st]} (${tasksByStatus[st].length})</div>${rows}</div>`;
   }).join("");
 
   const doneCount  = tasksByStatus["DONE"]?.length ?? 0;
@@ -582,7 +645,7 @@ export function buildProjectHtml(p: ProjectPdfData, s: CompanySettings): string 
   const totalTasks = p.tasks.length;
 
   const body = `
-    ${letterheadHtml(s)}
+    ${letterheadHtml(s, pal)}
     <div class="doc-header">
       <div>
         <div class="doc-title">PROJECT SUMMARY</div>
@@ -602,9 +665,9 @@ export function buildProjectHtml(p: ProjectPdfData, s: CompanySettings): string 
     <div class="progress-wrap" style="margin-bottom:18px;"><div class="progress-fill" style="width:${p.progress}%;"></div></div>
     ${p.description ? `<p class="section-head">Description</p><div class="desc-block">${esc(p.description)}</div>` : ""}
     ${totalTasks > 0 ? `<p class="section-head">Tasks (${totalTasks})</p>${tasksHtml}` : ""}
-    ${footerHtml(s)}`;
+    ${footerHtml(s, pal)}`;
 
-  return wrapHtml(`Project — ${p.name}`, accent, cfg.font, body);
+  return wrapHtml(`Project — ${p.name}`, accent, cfg.font, pal, body);
 }
 
 /* ── Invoice PDF ──────────────────────────────────────────────── */
@@ -625,6 +688,7 @@ export interface InvoicePdfData {
 export function buildInvoiceHtml(inv: InvoicePdfData, s: CompanySettings): string {
   const cfg    = parseCfg(s);
   const accent = s.letterheadColor || "#6366f1";
+  const pal    = docPalette(cfg.theme);
 
   // v3: complimentary lines are listed in their own section with the tag, at
   // the token amount they were invoiced at, so the client sees the goodwill
@@ -681,7 +745,7 @@ export function buildInvoiceHtml(inv: InvoicePdfData, s: CompanySettings): strin
   const agencyName = s.name || "Agency";
 
   const body = `
-    ${letterheadHtml(s)}
+    ${letterheadHtml(s, pal)}
 
     <div class="doc-header">
       <div>
@@ -690,7 +754,7 @@ export function buildInvoiceHtml(inv: InvoicePdfData, s: CompanySettings): strin
       </div>
       <div class="doc-meta">
         <div class="doc-status"><span class="badge ${fmtStatus[inv.status] ?? "badge-gray"}">${statusLabel[inv.status] ?? inv.status}</span></div>
-        ${inv.dueDate ? `<div style="font-size:8.5pt;color:#6b7280;margin-top:4px;">Due <strong style="color:#374151;">${fmtDate(inv.dueDate)}</strong></div>` : ""}
+        ${inv.dueDate ? `<div style="font-size:8.5pt;color:${pal.muted};margin-top:4px;">Due <strong style="color:${pal.ink};">${fmtDate(inv.dueDate)}</strong></div>` : ""}
         ${inv.paidAt  ? `<div style="font-size:8.5pt;color:#15803d;margin-top:3px;font-weight:600;">✓ Paid ${fmtDate(inv.paidAt)}</div>` : ""}
       </div>
     </div>
@@ -754,9 +818,9 @@ export function buildInvoiceHtml(inv: InvoicePdfData, s: CompanySettings): strin
       <div class="note-block"><p>${esc(inv.notes)}</p></div>
     </div>` : ""}
 
-    ${footerHtml(s)}`;
+    ${footerHtml(s, pal)}`;
 
-  return wrapHtml(`Invoice ${inv.invoiceNumber}`, accent, cfg.font, body);
+  return wrapHtml(`Invoice ${inv.invoiceNumber}`, accent, cfg.font, pal, body);
 }
 
 /* ── Task sheet ─────────────────────────────────────────────────
@@ -808,6 +872,7 @@ const PRIORITY_COLOR: Record<string, string> = {
 export function buildTaskSheetHtml(d: TaskSheetData, s: CompanySettings): string {
   const cfg = parseCfg(s);
   const accent = s.letterheadColor ?? "#6366f1";
+  const pal = docPalette(cfg.theme);
 
   const tz = d.timezone;
   const open = d.tasks.filter((t) => t.status !== "DONE");
@@ -858,8 +923,8 @@ export function buildTaskSheetHtml(d: TaskSheetData, s: CompanySettings): string
                 }"></div>
               </td>
               <td style="padding:6px 8px 6px 4px; vertical-align:top;">
-                <div style="font-size:9pt; font-weight:600; color:#111827;${
-                  t.status === "DONE" ? "text-decoration:line-through; color:#9ca3af;" : ""
+                <div style="font-size:9pt; font-weight:600; color:${pal.heading};${
+                  t.status === "DONE" ? `text-decoration:line-through; color:${pal.faint};` : ""
                 }">${esc(t.title)}</div>
                 ${t.description ? `<div style="font-size:7.5pt; color:#6b7280; margin-top:2px; line-height:1.45;">${esc(t.description)}</div>` : ""}
                 ${who ? `<div style="font-size:7pt; color:#9ca3af; margin-top:2px;">${esc(who)}</div>` : ""}
@@ -879,7 +944,7 @@ export function buildTaskSheetHtml(d: TaskSheetData, s: CompanySettings): string
 
       return `
         <div style="margin-bottom:16px; page-break-inside:avoid;">
-          <div style="font-size:8.5pt; font-weight:700; color:#374151; border-bottom:1px solid #e5e7eb; padding-bottom:3px; margin-bottom:2px;">
+          <div style="font-size:8.5pt; font-weight:700; color:${pal.ink}; border-bottom:1px solid ${pal.borderStrong}; padding-bottom:3px; margin-bottom:2px;">
             ${esc(g.name)}${g.client ? `<span style="font-weight:400; color:#9ca3af;"> · ${esc(g.client)}</span>` : ""}
             <span style="float:right; font-weight:400; color:#9ca3af;">${g.tasks.length}</span>
           </div>
@@ -889,7 +954,7 @@ export function buildTaskSheetHtml(d: TaskSheetData, s: CompanySettings): string
     .join("");
 
   const body = `
-    ${letterheadHtml(s)}
+    ${letterheadHtml(s, pal)}
     <div class="doc-header">
       <div>
         <div class="doc-title">TASK SHEET</div>
@@ -903,14 +968,14 @@ export function buildTaskSheetHtml(d: TaskSheetData, s: CompanySettings): string
 
     <div class="info-grid-3" style="margin-bottom:18px;">
       <div class="info-block"><label>Open</label><p style="font-weight:700;">${open.length}</p></div>
-      <div class="info-block"><label>Overdue</label><p style="font-weight:700; color:${overdue.length ? "#dc2626" : "#111827"};">${overdue.length}</p></div>
+      <div class="info-block"><label>Overdue</label><p style="font-weight:700; color:${overdue.length ? "#f87171" : pal.heading};">${overdue.length}</p></div>
       <div class="info-block"><label>Done</label><p style="font-weight:700;">${done.length}</p></div>
     </div>
 
     ${d.tasks.length === 0
       ? `<p style="font-size:9pt; color:#9ca3af;">Nothing assigned.</p>`
       : sections}
-    ${footerHtml(s)}`;
+    ${footerHtml(s, pal)}`;
 
-  return wrapHtml(`Tasks — ${d.subject}`, accent, cfg.font, body);
+  return wrapHtml(`Tasks — ${d.subject}`, accent, cfg.font, pal, body);
 }

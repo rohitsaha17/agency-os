@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { handleApiError } from "@/lib/api-errors";
 import { can } from "@/lib/permissions";
+import { isRostered } from "@/lib/api-permissions";
 import { dayKey, dayString, attendanceDay } from "@/lib/hr";
 
 /**
@@ -68,7 +69,7 @@ export async function GET(req: NextRequest) {
           ...(seesTeam ? {} : { id: user.id }),
         },
         select: {
-          id: true, name: true, avatarUrl: true,
+          id: true, name: true, avatarUrl: true, role: true,
           jobTitle: { select: { name: true } },
         },
         orderBy: { name: "asc" },
@@ -146,7 +147,13 @@ export async function GET(req: NextRequest) {
     const inByUser = new Map(present.map((p) => [p.userId, p]));
     const leaveByUser = new Map(onLeave.map((l) => [l.userId, l]));
 
-    const rows = people.map((p) => {
+    // Owners and admins review attendance rather than record it, so they are
+    // not part of the roster board — the same rule the availability views apply
+    // (see isRostered). Decided by attendance.exempt, not by naming roles, so
+    // an org that moves that capability gets a board that agrees with itself.
+    const rosteredPeople = people.filter((p) => isRostered(p, user));
+
+    const rows = rosteredPeople.map((p) => {
       const checkedIn = inByUser.get(p.id);
       const leave = leaveByUser.get(p.id);
       return {
@@ -166,7 +173,14 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    const me = rows.find((r) => r.id === user.id) ?? null;
+    // The viewer's own state — computed directly, not read off the roster
+    // board, so an exempt admin (who is no longer listed above) still gets it.
+    const meCheckedIn = inByUser.get(user.id);
+    const meLeave = leaveByUser.get(user.id);
+    const me = {
+      state: meCheckedIn ? "IN" : meLeave ? "ON_LEAVE" : "UNKNOWN",
+      checkedInAt: meCheckedIn?.checkedInAt.toISOString() ?? null,
+    };
     // Whether THIS person is expected to check in at all. An owner or admin
     // reviews attendance rather than recording it.
     const exempt = can(user, "attendance.exempt");

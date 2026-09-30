@@ -31,7 +31,16 @@ export async function GET(req: NextRequest) {
     const where = {
       organizationId: user.organizationId,
       ...(scopedToMyWork && {
-        tasks: { some: { deletedAt: null, assignees: { some: { userId: user.id } } } },
+        // A junior sees a project once they hold a task on it OR they've been
+        // added to it as a member (a contributor added up front on the New
+        // Project form). Expressed under AND so it never collides with the
+        // separate `search` OR below.
+        AND: [{
+          OR: [
+            { tasks: { some: { deletedAt: null, assignees: { some: { userId: user.id } } } } },
+            { members: { some: { userId: user.id } } },
+          ],
+        }],
       }),
       ...(clientId && { clientId }),
       ...(statuses?.length === 1 && { status: statuses[0] as never }),

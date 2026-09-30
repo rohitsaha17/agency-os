@@ -265,6 +265,13 @@ export function ProjectForm({ initialData, projectId, defaultClientId, onSuccess
     ["SMM", "ADMIN", "MANAGER", "OWNER"].includes(u.role),
   );
 
+  // People added to the project up front so they have access from the start
+  // (a designer, editor or photographer). They're CONTRIBUTOR members — on the
+  // project and assignable during planning, but they don't plan it.
+  const contributors = members.filter((m) => m.role === "CONTRIBUTOR");
+  // Anyone in the org who isn't already chosen (as the SMM or a contributor).
+  const addableUsers = team.filter((u) => !memberRole(u.id));
+
   const validate = () => {
     const errs: Record<string, string> = {};
     if (!form.clientId) errs.clientId = "Please select a client";
@@ -722,10 +729,63 @@ export function ProjectForm({ initialData, projectId, defaultClientId, onSuccess
           </div>
         )}
 
-        <p className="text-[11px] text-gray-400 mt-3">
-          Editors, photographers and the rest are assigned per item while planning —
-          nothing to decide here.
-        </p>
+        {/* Add anyone else who should be on the project from the start. They
+            get access to it and can be assigned work during planning. Editors,
+            photographers and the rest can still be added per item later — this
+            is just for people you already know belong here. */}
+        <div className="mt-5 pt-4 border-t border-gray-100">
+          <label className="block text-xs font-medium text-gray-700 mb-1">
+            Also on this project <span className="font-normal text-gray-400">— optional</span>
+          </label>
+          <p className="text-[11px] text-gray-400 mb-2.5">
+            Add anyone who should have access from the start — a designer, editor or
+            photographer. They can see the project and be assigned work during planning.
+          </p>
+
+          {contributors.length > 0 && (
+            <ul className="space-y-1.5 mb-2.5">
+              {contributors.map((m) => {
+                const u = team.find((t) => t.id === m.userId);
+                const initials = (u?.name ?? "?").split(" ").map((w) => w[0]).slice(0, 2).join("");
+                return (
+                  <li key={m.userId} className="flex items-center gap-3 px-3 py-2 rounded-lg border border-gray-100 bg-gray-50">
+                    <span className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 bg-gray-200 text-gray-600">
+                      {initials}
+                    </span>
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-sm text-gray-800 truncate">{u?.name ?? "Unknown user"}</span>
+                      <span className="block text-[11px] text-gray-400">
+                        {u?.jobTitle?.name ?? (u ? (ROLE_LABEL[u.role] ?? u.role) : "")}
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => toggleMember(m.userId, "CONTRIBUTOR")}
+                      aria-label={`Remove ${u?.name ?? "member"}`}
+                      className="p-1 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors flex-shrink-0"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+
+          {addableUsers.length > 0 ? (
+            <Select
+              value=""
+              onChange={(userId) => { if (userId) toggleMember(userId, "CONTRIBUTOR"); }}
+              placeholder="Add someone…"
+              options={addableUsers.map((u) => ({
+                value: u.id,
+                label: u.jobTitle?.name ? `${u.name} · ${u.jobTitle.name}` : u.name,
+              }))}
+            />
+          ) : (
+            <p className="text-[11px] text-gray-400">Everyone in the workspace is already on this project.</p>
+          )}
+        </div>
       </Step>
 
       {/* ── Bill it ──

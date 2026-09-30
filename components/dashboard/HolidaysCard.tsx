@@ -43,7 +43,14 @@ export function HolidaysCard() {
   const [failed, setFailed] = useState(false);
 
   const load = useCallback(() => {
-    fetch("/api/holidays?upcoming=1")
+    // Source the SAME set the Manage panel shows (this year), not a
+    // future-only slice. The two used to diverge: a holiday whose date had
+    // already passed this year — or one caught by a timezone/date boundary —
+    // appeared in Manage (?year=) but was filtered out of the widget
+    // (?upcoming=1), so a just-added holiday could be invisible here. We fetch
+    // the year and order upcoming-first below, keeping the "what's ahead"
+    // framing while guaranteeing anything added for this year is visible.
+    fetch(`/api/holidays?year=${new Date().getFullYear()}`)
       .then(async (r) => {
         if (!r.ok) throw new Error(String(r.status));
         return r.json();
@@ -69,7 +76,21 @@ export function HolidaysCard() {
   // lasts until somebody fills it in once, and then never again.
   if (!holidays) return null;
 
-  const extra = holidays.length - ON_DASHBOARD;
+  // Upcoming-first ordering. A holiday is still "ahead" until its last day is
+  // over (a range that started yesterday and ends Friday has not passed).
+  // ISO date strings compare correctly as text, which sidesteps any timezone
+  // drift from parsing them into Date objects.
+  const todayISO = new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD, local
+  const lastDay = (h: Holiday) => h.endDate ?? h.date;
+  const upcoming = holidays
+    .filter((h) => lastDay(h) >= todayISO)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const past = holidays
+    .filter((h) => lastDay(h) < todayISO)
+    .sort((a, b) => b.date.localeCompare(a.date));
+  // Upcoming ones lead; recently-passed ones follow so a holiday added for an
+  // earlier date this year is still visible rather than silently dropped.
+  const ordered = [...upcoming, ...past];
 
   return (
     <>
@@ -107,7 +128,7 @@ export function HolidaysCard() {
         ) : (
           <>
             <ul className="pb-1">
-              {holidays.slice(0, ON_DASHBOARD).map((h) => (
+              {ordered.slice(0, ON_DASHBOARD).map((h) => (
                 <Row key={h.id}>
                   <DayBlock iso={h.date} />
                   <div className="min-w-0 flex-1">
@@ -121,7 +142,9 @@ export function HolidaysCard() {
             <footer className="px-4 sm:px-5 py-2.5 border-t border-gray-100 dark:border-white/[0.05] flex items-center gap-2">
               <CalendarDays className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" aria-hidden="true" />
               <p className="text-[11px] text-gray-400">
-                {holidays.length} {holidays.length === 1 ? "holiday" : "holidays"} ahead
+                {upcoming.length > 0
+                  ? `${upcoming.length} ${upcoming.length === 1 ? "holiday" : "holidays"} ahead`
+                  : `${holidays.length} this year`}
               </p>
             </footer>
           </>

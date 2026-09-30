@@ -142,15 +142,22 @@ interface ViewProps<T> {
   onToggle: (id: string) => void;
   /** Rendered inside the first bucket — the quick add belongs at the top. */
   header?: React.ReactNode;
+  /**
+   * Personal lists (My List and any custom lists). Each is its own column on
+   * the board and its own stacked panel in the list view — the caller decides
+   * their contents, this only decides where they sit.
+   */
+  listPanels?: React.ReactNode[];
   empty?: React.ReactNode;
 }
 
 /** Stacked sections, full width. */
-export function TaskListView<T>({ buckets, renderRow, collapsed, onToggle, header, empty }: ViewProps<T>) {
+export function TaskListView<T>({ buckets, renderRow, collapsed, onToggle, header, listPanels, empty }: ViewProps<T>) {
   const anything = buckets.some((b) => b.total > 0);
   return (
     <div className="max-w-5xl mx-auto w-full p-4 sm:p-6 space-y-1">
       {header}
+      {listPanels?.map((p, i) => <div key={i}>{p}</div>)}
       {!anything && empty}
       {buckets.map((b) => {
         // An empty bucket is noise. "Tomorrow (0)" tells nobody anything.
@@ -187,12 +194,15 @@ export function TaskListView<T>({ buckets, renderRow, collapsed, onToggle, heade
 }
 
 /** Columns, one per bucket, scrolling sideways. */
-export function TaskBoardView<T>({ buckets, renderRow, header, empty }: Omit<ViewProps<T>, "collapsed" | "onToggle">) {
+export function TaskBoardView<T>({ buckets, renderRow, header, listPanels, empty }: Omit<ViewProps<T>, "collapsed" | "onToggle">) {
   const shown = buckets.filter((b) => b.total > 0);
   return (
     <div className="h-full overflow-x-auto">
       <div className="h-full flex items-stretch gap-3 p-4 sm:p-6 min-w-min">
         {header && <div className="w-[85vw] sm:w-[320px] flex-shrink-0">{header}</div>}
+        {listPanels?.map((p, i) => (
+          <div key={i} className="w-[85vw] sm:w-[320px] flex-shrink-0">{p}</div>
+        ))}
         {shown.length === 0 && empty}
         {shown.map((b) => (
           <section

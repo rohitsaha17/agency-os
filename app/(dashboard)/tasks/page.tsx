@@ -8,7 +8,7 @@ import {
   Plus, Star, CheckCircle2, Circle, ChevronDown, ChevronRight, ChevronUp,
   MoreVertical, ListTodo, Clock, ShieldCheck, X, FolderKanban, Repeat,
   Link2 as LinkIcon, Paperclip, FileText, AlertCircle,
-  Search, List as ListIcon, LayoutGrid,
+  Search, List as ListIcon, LayoutGrid, Pencil, Trash2,
 } from "lucide-react";
 import { TaskModal } from "@/components/tasks/TaskModal";
 import { DeliveryDialog } from "@/components/tasks/DeliveryDialog";
@@ -266,6 +266,16 @@ function TasksBoardInner() {
   const [view, setView] = useState<SidebarView>("all");
   const [hiddenLists, setHiddenLists] = useState<Set<string>>(new Set());
   const [showCompleted, setShowCompleted] = useState<Set<string>>(new Set());
+  /**
+   * The viewer's own custom lists (task_lists) — a way to sort your reminders
+   * into named columns beyond the single "My List". Personal to you; they hold
+   * personal items via PersonalItem.listId, never assigned project tasks.
+   */
+  const [lists, setLists] = useState<{ id: string; name: string; sortOrder: number }[]>([]);
+  const [newListName, setNewListName] = useState("");
+  const [creatingList, setCreatingList] = useState(false);
+  const [editingListId, setEditingListId] = useState<string | null>(null);
+  const [editingListName, setEditingListName] = useState("");
   // v3: the shared task drawer, opened from a row or from ?task=<id>
   const [openTask, setOpenTask] = useState<Task | null>(null);
   const [deliveryFor, setDeliveryFor] = useState<{ id: string; title: string } | null>(null);
@@ -398,10 +408,15 @@ function TasksBoardInner() {
         seesPersonal && viewUserId === "__all__" ? "?scope=all"
         : seesPersonal && viewUserId ? `?userId=${encodeURIComponent(viewUserId)}`
         : "";
-      const [itemsRes, tasksRes] = await Promise.all([
+      const [itemsRes, tasksRes, listsRes] = await Promise.all([
         fetch(`/api/personal-items${personalQuery}`),
         fetch("/api/tasks?includeCompleted=true&all=1"),
+        // Your custom lists. Always your own — a colleague's list view still
+        // shows their reminders, but the named lists belong to whoever is
+        // signed in, so this is not scoped to the person picker.
+        fetch("/api/task-lists"),
       ]);
+      if (listsRes.ok) setLists(await listsRes.json());
       /*
         A failed load must not read as an empty one.
 
@@ -653,6 +668,47 @@ function TasksBoardInner() {
     setItems((prev) => prev.filter((x) => x.id !== p.id));
     await fetch(`/api/personal-items/${p.id}`, { method: "DELETE" });
     broadcastChange("all");
+  };
+
+  // ── Custom lists ───────────────────────────────────────────
+
+  const createList = async () => {
+    const name = newListName.trim();
+    if (!name) { setCreatingList(false); return; }
+    try {
+      const res = await fetch("/api/task-lists", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      if (!res.ok) throw new Error();
+      const list = await res.json();
+      setLists((prev) => [...prev, list]);
+      setNewListName("");
+      setCreatingList(false);
+    } catch {
+      toast.error("Couldn't create that list");
+    }
+  };
+
+  const renameList = async (id: string) => {
+    const name = editingListName.trim();
+    setEditingListId(null);
+    if (!name) return;
+    setLists((prev) => prev.map((l) => (l.id === id ? { ...l, name } : l)));
+    await fetch(`/api/task-lists/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    }).catch(() => toast.error("Couldn't rename that list"));
+  };
+
+  const deleteList = async (id: string) => {
+    // The list's tasks aren't deleted — the server moves them back to the
+    // default My List (listId → null), so nothing a person wrote is lost.
+    setLists((prev) => prev.filter((l) => l.id !== id));
+    await fetch(`/api/task-lists/${id}`, { method: "DELETE" }).catch(() => {});
+    fetchAll(); // pull the moved items back onto My List
   };
 
   /**
@@ -927,6 +983,107 @@ function TasksBoardInner() {
           <div className="space-y-px mt-1">{personal.map(renderPersonalRow)}</div>
         )}
       </div>
+    </div>
+  );
+
+  /**
+   * A custom list — the same shape as My List, but for one of the viewer's own
+   * named lists, and with rename/delete on its header. Adding here files the
+   * item under this list (listId), which is how someone sorts their reminders.
+   */
+  const CustomListPanel = ({ list, personal, boxed }: {
+    list: { id: string; name: string }; personal: PersonalRow[]; boxed?: boolean;
+  }) => {
+    const editing = editingListId === list.id;
+    return (
+      <div className={boxed
+        ? "flex flex-col h-full bg-white dark:bg-slate-900 border border-gray-200 dark:border-white/[0.08] rounded-2xl overflow-hidden"
+        : "bg-white dark:bg-slate-900 border border-gray-200 dark:border-white/[0.08] rounded-2xl overflow-hidden mb-4"}>
+        <header className="group px-4 py-3 border-b border-gray-100 dark:border-white/[0.05] flex-shrink-0 flex items-center gap-2">
+          {editing ? (
+            <input
+              autoFocus
+              value={editingListName}
+              onChange={(e) => setEditingListName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") renameList(list.id);
+                if (e.key === "Escape") setEditingListId(null);
+              }}
+              onBlur={() => renameList(list.id)}
+              className="flex-1 min-w-0 text-[13px] font-semibold bg-transparent border-b border-indigo-400 focus:outline-none text-gray-800 dark:text-slate-100"
+            />
+          ) : (
+            <h2 className="text-[13px] font-semibold text-gray-800 dark:text-slate-200 flex-1 truncate">
+              {list.name}
+            </h2>
+          )}
+          <span className="text-[11px] text-gray-400 tabular-nums flex-shrink-0">
+            {personal.filter((p) => !p.done).length}
+          </span>
+          {!editing && (
+            <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+              <button
+                onClick={() => { setEditingListId(list.id); setEditingListName(list.name); }}
+                title="Rename list"
+                className="p-1 text-gray-400 hover:text-indigo-600"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => deleteList(list.id)}
+                title="Delete list — its tasks move back to My List"
+                className="p-1 text-gray-400 hover:text-red-500"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+        </header>
+        <div className={boxed ? "flex-1 overflow-y-auto p-2 min-h-0" : "p-2"}>
+          <AddTaskComposer listId={list.id} onAdded={fetchAll} />
+          {personal.length === 0 ? (
+            <p className="text-[12px] text-gray-400 text-center py-4">Nothing here yet.</p>
+          ) : (
+            <div className="space-y-px mt-1">{personal.map(renderPersonalRow)}</div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  /** The "+ New list" card that closes the row of lists on the board. */
+  const NewListCard = ({ boxed }: { boxed?: boolean }) => (
+    <div className={boxed
+      ? "bg-gray-50/60 dark:bg-white/[0.02] border border-dashed border-gray-300 dark:border-white/[0.1] rounded-2xl p-3"
+      : "bg-gray-50/60 dark:bg-white/[0.02] border border-dashed border-gray-300 dark:border-white/[0.1] rounded-2xl p-3 mb-4"}>
+      {creatingList ? (
+        <div className="flex items-center gap-2">
+          <input
+            autoFocus
+            value={newListName}
+            onChange={(e) => setNewListName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") createList();
+              if (e.key === "Escape") { setCreatingList(false); setNewListName(""); }
+            }}
+            placeholder="List name"
+            className="flex-1 min-w-0 px-2.5 py-1.5 text-sm rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+          <button onClick={createList} className="px-3 py-1.5 text-sm font-semibold rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 flex-shrink-0">
+            Add
+          </button>
+          <button onClick={() => { setCreatingList(false); setNewListName(""); }} className="p-1.5 text-gray-400 hover:text-gray-600 flex-shrink-0">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={() => setCreatingList(true)}
+          className="w-full flex items-center justify-center gap-1.5 py-2 text-sm font-medium text-gray-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-300"
+        >
+          <Plus className="w-4 h-4" /> New list
+        </button>
+      )}
     </div>
   );
 
@@ -1328,6 +1485,28 @@ function TasksBoardInner() {
               <span className="flex-1 truncate font-medium">My List</span>
               <span className="text-xs text-gray-400">{myListCount}</span>
             </label>
+
+            {/* The viewer's own custom lists — always shown (they hold your
+                reminders, not project work), with a quick way to add one. */}
+            {!viewingOthersList && lists.map((l) => {
+              const count = (itemsByList.get(l.id) ?? []).filter((p) => !p.done).length;
+              return (
+                <div key={l.id} className="flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 rounded-lg">
+                  <ListTodo className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                  <span className="flex-1 truncate">{l.name}</span>
+                  {count > 0 && <span className="text-xs text-gray-400">{count}</span>}
+                </div>
+              );
+            })}
+            {!viewingOthersList && (
+              <button
+                onClick={() => setCreatingList(true)}
+                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm font-medium text-indigo-600 hover:bg-indigo-50 rounded-lg"
+              >
+                <Plus className="w-4 h-4" /> New list
+              </button>
+            )}
+
             {autoLists.map((l) => {
               const count = l.tasks.filter((t) => t.status !== "DONE").length;
               return (
@@ -1452,6 +1631,12 @@ function TasksBoardInner() {
                 onToggle={toggleBucket}
                 renderRow={renderOrgTaskRow}
                 header={<MyListPanel personal={noListItems} />}
+                listPanels={viewingOthersList ? undefined : [
+                  ...lists.map((l) => (
+                    <CustomListPanel key={l.id} list={l} personal={itemsByList.get(l.id) ?? []} />
+                  )),
+                  <NewListCard key="__new" />,
+                ]}
                 empty={<EmptyBoard query={query} />}
               />
             </div>
@@ -1461,6 +1646,12 @@ function TasksBoardInner() {
                 buckets={projectGroups}
                 renderRow={renderOrgTaskRow}
                 header={<MyListPanel personal={noListItems} boxed />}
+                listPanels={viewingOthersList ? undefined : [
+                  ...lists.map((l) => (
+                    <CustomListPanel key={l.id} list={l} personal={itemsByList.get(l.id) ?? []} boxed />
+                  )),
+                  <NewListCard key="__new" boxed />,
+                ]}
                 empty={<EmptyBoard query={query} />}
               />
             </div>

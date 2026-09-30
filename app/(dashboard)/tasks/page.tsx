@@ -577,16 +577,16 @@ function TasksBoardInner() {
    * would reopen the dialog the person just closed, forever.
    */
   const openTaskOrPlan = (t: Task, justAnswered = false) => {
-    // An assignment nobody has answered is answered first. Clicking through to
-    // the work while the row still says "Accept?" leaves the question hanging
-    // behind you.
-    if (!justAnswered) {
-      const mine = (t.assignees ?? []).find(
-        (a) => (a.user?.id ?? a.userId) === currentUser?.id);
-      if (mine?.acceptance === "PENDING") { setAcceptFor(t); return; }
-    }
-
     if (t.kind === "PLANNING" && t.projectId) {
+      // A PLANNING task has no drawer — its work is the project's Plan tab —
+      // so a still-unanswered assignment has nowhere to show its Accept banner.
+      // For that one case the dialog answers it first; clicking through while
+      // the row still says "Accept?" would leave the question hanging behind.
+      if (!justAnswered) {
+        const mine = (t.assignees ?? []).find(
+          (a) => (a.user?.id ?? a.userId) === currentUser?.id);
+        if (mine?.acceptance === "PENDING") { setAcceptFor(t); return; }
+      }
       /*
         Opening the plan starts the task.
 
@@ -606,6 +606,10 @@ function TasksBoardInner() {
       router.push(`/projects/${t.projectId}?tab=plan`);
       return;
     }
+    // Every ordinary task opens the full drawer. A pending assignment shows its
+    // Accept / Not-available banner at the top of it (AcceptanceBanner), so the
+    // person reads the whole task and answers there — not from a title-only
+    // popup. (The row's own "Accept?" badge is still a one-click shortcut.)
     setOpenTask(t);
   };
 
@@ -749,7 +753,7 @@ function TasksBoardInner() {
             find the plan anyway.
           */}
           <button onClick={() => openTaskOrPlan(t)}
-            className={`block w-full text-left text-sm leading-snug truncate ${done ? "line-through text-gray-400" : "text-gray-800 dark:text-slate-200 hover:text-indigo-700 dark:hover:text-indigo-300"}`}>
+            className={`block w-full text-left text-sm leading-snug break-words ${done ? "line-through text-gray-400" : "text-gray-800 dark:text-slate-200 hover:text-indigo-700 dark:hover:text-indigo-300"}`}>
             {t.title}
           </button>
           {/*

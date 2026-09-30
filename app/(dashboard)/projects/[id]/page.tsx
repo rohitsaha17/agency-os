@@ -889,7 +889,9 @@ export default function ProjectDetailPage() {
           <span className="text-gray-900 font-medium truncate">{project.name}</span>
         </nav>
 
-        <div className="flex items-start justify-between gap-4">
+        {/* Stack on phones so the title gets the full width instead of being
+            crushed into a narrow column by the action buttons. */}
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
           <div className="flex items-center gap-3 min-w-0">
             <ProgressRing progress={project.progress} />
             <div className="min-w-0">
@@ -921,7 +923,7 @@ export default function ProjectDetailPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 flex-shrink-0">
+          <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
             <Button
               variant="secondary" size="sm"
               icon={pdfLoading ? undefined : <Download className="w-3.5 h-3.5" />}
@@ -1074,7 +1076,7 @@ export default function ProjectDetailPage() {
 
       {/* Page tabs */}
       <div className="bg-white border-b border-gray-200 px-4 sm:px-6 lg:px-8">
-        <div className="overflow-x-auto -mb-px">
+        <div className="overflow-x-auto scrollbar-none -mb-px">
         <div className="flex items-center gap-1 whitespace-nowrap">
           {([
             // v3: Plan is the FIRST tab — it's where the work is created

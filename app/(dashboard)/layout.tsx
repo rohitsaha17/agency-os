@@ -174,7 +174,10 @@ export default async function DashboardLayout({
         <DateInputAutoOpen />
         <div className="min-h-screen bg-gray-50">
           <Sidebar />
-          <main className="lg:ml-64 min-h-screen flex flex-col appbar-offset lg:pt-0 safe-x">
+          {/* min-w-0 lets flex children shrink instead of forcing the page
+              wider than the phone; overflow-x-clip is the backstop that kills
+              any horizontal PAGE scroll without breaking position:sticky. */}
+          <main className="lg:ml-64 min-h-screen flex flex-col min-w-0 overflow-x-clip appbar-offset lg:pt-0 safe-x">
             {children}
           </main>
           <AppTour />

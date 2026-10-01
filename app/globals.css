@@ -768,6 +768,27 @@ input[type="time"]::-webkit-calendar-picker-indicator:hover {
   .h-screen-below-appbar { height: 100dvh; }
 }
 
+/* The tasks module shell.
+   On desktop it fills the viewport: a fixed header and toolbar above a pane
+   that scrolls on its own. Stacked onto a phone that locked a tall header +
+   filter + toolbar + colour key above a sliver of list — three tasks visible,
+   everything above them frozen. Below md the shell grows to its content height
+   instead and the whole page scrolls as one, so the header scrolls away and the
+   full list is reachable. md (tablet, has the bottom nav) and lg keep the
+   fixed-viewport behaviour. */
+.task-shell {
+  height: calc(100dvh - var(--appbar-h) - var(--safe-top) - var(--bottomnav-h) - var(--safe-bottom));
+}
+@media (max-width: 767px) {
+  .task-shell {
+    height: auto;
+    min-height: calc(100dvh - var(--appbar-h) - var(--safe-top) - var(--bottomnav-h) - var(--safe-bottom));
+  }
+}
+@media (min-width: 1024px) {
+  .task-shell { height: 100dvh; }
+}
+
 /* A modal's own bottom edge, so its buttons clear the home indicator. */
 .safe-modal { padding-bottom: max(var(--safe-bottom), 0px); }
 

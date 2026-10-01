@@ -517,8 +517,11 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
       */}
       <div className="fixed inset-0 z-50 sm:inset-4 lg:inset-y-8 lg:left-[max(1rem,calc((100vw-1120px)/2))] lg:right-[max(1rem,calc((100vw-1120px)/2))] bg-white dark:bg-slate-900 sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden">
 
-        {/* Header */}
-        <div className="px-5 py-4 border-b border-gray-200 flex-shrink-0">
+        {/* Header. On a phone the drawer is edge-to-edge (inset-0), so the top
+            padding carries the notch inset — otherwise the title renders under
+            the status bar. From sm up the drawer is inset-4, clear of the
+            cutout, so a flat 1rem is right. */}
+        <div className="px-5 pb-4 pt-[calc(1rem+var(--safe-top))] sm:pt-4 border-b border-gray-200 flex-shrink-0">
           <div className="flex items-start gap-3">
             <div className="relative group mt-0.5 flex-shrink-0">
               <button title={STATUS_OPTIONS.find((o) => o.value === status)?.label ?? status}>
@@ -689,11 +692,18 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
           </div>
         )}
 
-      {/* Two columns: the task, and the talking about it. */}
-      <div className="flex-1 flex flex-col lg:flex-row min-h-0">
+      {/* Two columns on desktop, one scroll on a phone.
+
+          On the desktop the task (left) and the conversation (right) each own
+          their own scroll. Stacked on a phone that became two short scroll
+          windows one above the other — the brief would scroll under a frozen
+          conversation and you could never see the whole of either. Below lg the
+          whole body is a single scroller instead: the columns fall to their
+          natural height and the drawer scrolls through all of it as one. */}
+      <div className="flex-1 flex flex-col lg:flex-row min-h-0 overflow-y-auto lg:overflow-hidden">
 
         {/* ── The task ── */}
-        <div className="flex-1 min-w-0 overflow-y-auto p-5 lg:border-r border-gray-200 dark:border-white/[0.08]">
+        <div className="lg:flex-1 min-w-0 lg:overflow-y-auto p-5 lg:border-r border-gray-200 dark:border-white/[0.08]">
           {/* Until the assignment is answered, nothing else here is really
               theirs to get on with — so it sits above the task, not inside a
               tab that can be on the wrong one. */}
@@ -878,8 +888,9 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
           ))}
         </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-5 min-h-0">
+        {/* Content. Own scroll on desktop; on a phone it grows to its natural
+            height and rides the drawer's single scroll (see the body above). */}
+        <div className="lg:flex-1 lg:overflow-y-auto p-5 lg:min-h-0">
 
 
           
@@ -962,8 +973,8 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
           )}
         </div>
 
-        {/* Footer */}
-        <div className="flex-shrink-0 border-t border-gray-200 px-5 py-4 flex items-center justify-between">
+        {/* Footer. Phone edge-to-edge: pad the bottom past the home indicator. */}
+        <div className="flex-shrink-0 border-t border-gray-200 px-5 pt-4 pb-[calc(1rem+var(--safe-bottom))] sm:pb-4 flex items-center justify-between">
           {canPlan && (
             <button onClick={handleDelete} disabled={deleting}
               className={`flex items-center gap-1.5 text-xs transition-colors ${confirmDelete ? "text-red-600 font-semibold" : "text-gray-400 hover:text-red-500"}`}>

@@ -781,7 +781,7 @@ function TasksBoardInner() {
       // text to open something the size of a card is a small, constant tax.
       <div key={`org-${t.id}`}
         {...clickable(() => openTaskOrPlan(t))}
-        className={`group flex items-center gap-2.5 pl-2.5 pr-3 py-2.5 rounded-xl border-l-[3px] transition-surface duration-150 cursor-pointer ${ROW_HOVER} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${STATUS_ROW_TINT[t.status]} ${done ? "opacity-60" : ""}`}>
+        className={`group flex items-start sm:items-center gap-2.5 pl-2.5 pr-3 py-2.5 rounded-xl border-l-[3px] transition-surface duration-150 cursor-pointer ${ROW_HOVER} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${STATUS_ROW_TINT[t.status]} ${done ? "opacity-60" : ""}`}>
         {/*
           The same control as the project board, deliberately. This used to be
           a tick that jumped a task straight to complete, so the same dot meant
@@ -792,7 +792,7 @@ function TasksBoardInner() {
           Personal items keep the tick — see renderPersonalRow. Ticking your own
           reminder off IS the whole interaction there, and that one is right.
         */}
-        <div className="flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+        <div className="flex-shrink-0 mt-0.5 sm:mt-0" onClick={(e) => e.stopPropagation()}>
           <StatusDot
             status={t.status}
             canPick={canPickStatus}
@@ -809,7 +809,7 @@ function TasksBoardInner() {
             find the plan anyway.
           */}
           <button onClick={() => openTaskOrPlan(t)}
-            className={`block w-full text-left text-sm leading-snug break-words ${done ? "line-through text-gray-400" : "text-gray-800 dark:text-slate-200 hover:text-indigo-700 dark:hover:text-indigo-300"}`}>
+            className={`block w-full text-left text-sm leading-snug break-words line-clamp-2 sm:line-clamp-none ${done ? "line-through text-gray-400" : "text-gray-800 dark:text-slate-200 hover:text-indigo-700 dark:hover:text-indigo-300"}`}>
             {t.title}
           </button>
           {/*
@@ -891,11 +891,39 @@ function TasksBoardInner() {
               </span>
             )}
           </div>
+
+          {/* Phone: the due chip, the faces and the star ride under the title
+              on their own line instead of squeezing the title into a four- or
+              five-line wrap on the right. Desktop keeps them in the right column
+              below. */}
+          <div className="flex sm:hidden items-center gap-2 mt-1.5">
+            {chip && !done && (
+              <span className={`inline-flex items-center text-[11px] font-medium px-2 py-0.5 rounded-md whitespace-nowrap ${
+                chip.late
+                  ? "bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400"
+                  : "bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-slate-400"
+              }`}>
+                {chip.label}
+              </span>
+            )}
+            <AssigneeStack task={t} />
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); toggleTaskStar(t); }}
+              aria-pressed={!!t.starred}
+              title={t.starred ? "Remove from Starred" : "Add to Starred"}
+              className={`ml-auto p-1 rounded-md ${t.starred ? "text-amber-400" : "text-gray-300 dark:text-slate-600"}`}
+            >
+              <Star className={`w-4 h-4 ${t.starred ? "fill-amber-400" : ""}`} />
+            </button>
+          </div>
         </div>
 
         {/* The right edge: when it's due, and whose it is. Fixed position on
-            every row so the eye can run straight down the column. */}
-        <div className="flex items-center gap-2 flex-shrink-0">
+            every row so the eye can run straight down the column. Desktop only —
+            on a phone this moves under the title (above) so the title gets the
+            full width. */}
+        <div className="hidden sm:flex items-center gap-2 flex-shrink-0">
           {/* Hidden until hover unless it is already on — a column of empty
               outlines down a list of forty is noise, but a pin you cannot
               find is worse, so a starred one always shows. */}
@@ -1356,9 +1384,9 @@ function TasksBoardInner() {
   return (
     // Anchor to the viewport so the rail and columns fill the page
     // (the dashboard shell is min-h-screen, so h-full alone can't resolve).
-    <div className="flex flex-col h-screen-below-appbar min-h-0">
+    <div className="flex flex-col task-shell min-h-0">
       {/* ── Page header ── */}
-      <div className="hero-wash bg-white border-b border-gray-200 px-4 sm:px-6 lg:px-8 py-4 flex-shrink-0">
+      <div className="hero-wash bg-white border-b border-gray-200 px-4 sm:px-6 lg:px-8 py-3 sm:py-4 flex-shrink-0">
         {/*
           A link pointed at a task that is not here.
 
@@ -1579,9 +1607,17 @@ function TasksBoardInner() {
           )}
 
           {/* What the colours mean. The rows carry a tint, a coloured edge and
-              a red date, and none of it said what it stood for. */}
+              a red date, and none of it said what it stood for. On a phone the
+              seven-item key wrapped to three lines and ate the list's room, so
+              it folds behind one tap there; on desktop it stays open. */}
           {view !== "starred" && (
-            <StatusLegend className="px-4 sm:px-6 pb-2 flex-shrink-0" />
+            <>
+              <StatusLegend className="hidden sm:flex px-4 sm:px-6 pb-2 flex-shrink-0" />
+              <details className="sm:hidden px-4 pb-2 flex-shrink-0 text-[11px] text-gray-500 dark:text-slate-400">
+                <summary className="cursor-pointer select-none font-medium py-0.5">Colour key</summary>
+                <StatusLegend className="mt-2" />
+              </details>
+            </>
           )}
 
           {view === "starred" ? (

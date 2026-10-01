@@ -21,6 +21,9 @@ export default function MessagesPage() {
   const [manageChannel, setManageChannel] = useState<Channel | null>(null);
   // Bumped whenever a message is sent so MessageFeed remounts and refetches.
   const [feedNonce, setFeedNonce] = useState(0);
+  // Phone master-detail: show the channel list OR one channel, never both side
+  // by side (there is no room). Desktop ignores this and shows both.
+  const [mobileView, setMobileView] = useState<"list" | "chat">("list");
 
   const fetchChannels = useCallback(async () => {
     try {
@@ -73,12 +76,17 @@ export default function MessagesPage() {
 
   const handleSelectChannel = (ch: Channel) => {
     setActiveChannel(ch);
+    setMobileView("chat");
   };
 
   return (
-    <div className="flex h-[calc(100vh-56px)] lg:h-screen overflow-hidden bg-slate-950">
-      {/* Channel sidebar */}
-      <div className="w-full sm:w-64 flex-shrink-0">
+    // h-screen-below-appbar already subtracts the mobile app bar, the bottom nav
+    // and the safe-area insets, so the compose box clears the nav instead of
+    // hiding behind it; it is the full viewport height on desktop.
+    <div className="flex h-screen-below-appbar min-h-0 overflow-hidden bg-slate-950">
+      {/* Channel sidebar — full width on a phone when browsing the list; a
+          fixed rail on desktop. Hidden on a phone once a channel is open. */}
+      <div className={`w-full sm:w-64 flex-shrink-0 ${mobileView === "chat" ? "hidden sm:block" : "block"}`}>
         <ChannelSidebar
           channels={channels}
           activeChannelId={activeChannel?.id ?? null}
@@ -88,13 +96,14 @@ export default function MessagesPage() {
         />
       </div>
 
-      {/* Main chat area */}
-      <div className="flex-1 flex flex-col min-w-0 border-l border-slate-700/50">
+      {/* Main chat area — hidden on a phone until a channel is opened. */}
+      <div className={`flex-1 flex-col min-w-0 border-l border-slate-700/50 ${mobileView === "list" ? "hidden sm:flex" : "flex"}`}>
         {activeChannel ? (
           <>
             <ChannelHeader
               channel={activeChannel}
               onManageMembers={() => setManageChannel(activeChannel)}
+              onBack={() => setMobileView("list")}
             />
             <MessageFeed
               key={`${activeChannel.id}:${feedNonce}`}

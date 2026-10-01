@@ -3,7 +3,7 @@
 import { useState } from "react";
 import {
   Hash, Lock, Users, Building2, Info, X,
-  UserPlus, Settings,
+  UserPlus, Settings, ChevronLeft,
 } from "lucide-react";
 import type { Channel, ChannelType } from "@/types";
 
@@ -24,15 +24,26 @@ function initials(name: string) {
 interface ChannelHeaderProps {
   channel: Channel;
   onManageMembers?: () => void;
+  /** Phone only: go back to the channel list (master-detail navigation). */
+  onBack?: () => void;
 }
 
-export function ChannelHeader({ channel, onManageMembers }: ChannelHeaderProps) {
+export function ChannelHeader({ channel, onManageMembers, onBack }: ChannelHeaderProps) {
   const [showInfo, setShowInfo] = useState(false);
   const memberCount = channel._count?.members ?? channel.members?.length ?? 0;
 
   return (
     <div className="flex-shrink-0 border-b border-slate-700/50 bg-slate-900/50">
-      <div className="flex items-center gap-3 px-5 h-14">
+      <div className="flex items-center gap-3 pl-3 pr-5 sm:px-5 h-14">
+        {onBack && (
+          <button
+            onClick={onBack}
+            aria-label="Back to channels"
+            className="sm:hidden flex-shrink-0 -ml-1 p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] transition-colors"
+          >
+            <ChevronLeft className="w-5 h-5" />
+          </button>
+        )}
         <ChannelIcon type={channel.type} className="w-4 h-4 text-slate-400" />
         <div className="flex-1 min-w-0">
           <span className="text-white font-semibold text-sm">{channel.name}</span>

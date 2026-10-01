@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowRight, Loader2, Users, FolderKanban, FileText,
@@ -37,6 +37,28 @@ export default function LoginPage() {
   const [tempPassword, setTempPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * Remember the email on this device so a returning user lands on the
+   * password step with it already filled — the session cookie is already
+   * long-lived, so this is the "don't make me retype who I am" convenience,
+   * not a security control. Email only, never the password.
+   */
+  const REMEMBER_KEY = "vsf:login:email";
+  const [remember, setRemember] = useState(false);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(REMEMBER_KEY);
+      if (saved) { setEmail(saved); setRemember(true); }
+    } catch { /* private window or storage blocked — fine */ }
+  }, []);
+
+  const persistRemember = (value: string) => {
+    try {
+      if (remember && value.trim()) localStorage.setItem(REMEMBER_KEY, value.trim());
+      else localStorage.removeItem(REMEMBER_KEY);
+    } catch { /* ignore */ }
+  };
 
   const errMsg = (data: unknown) => {
     const e = (data as { error?: unknown })?.error;
@@ -62,6 +84,8 @@ export default function LoginPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(errMsg(data) || "Login failed");
+      // Email is recognised — honour the Remember-me choice for next time.
+      persistRemember(email);
       // First-password setup no longer happens from the login screen (QA-001):
       // it requires the single-use token from an invite link, so every
       // recognised account is prompted for a password here.
@@ -253,6 +277,15 @@ export default function LoginPage() {
                   className="w-full px-4 py-3 text-sm rounded-xl bg-slate-900 border border-slate-700 text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                 />
               </div>
+              <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={remember}
+                  onChange={(e) => { setRemember(e.target.checked); if (!e.target.checked) { try { localStorage.removeItem(REMEMBER_KEY); } catch { /* ignore */ } } }}
+                  className="w-4 h-4 rounded border-slate-600 bg-slate-900 text-indigo-600 focus:ring-indigo-500 focus:ring-offset-slate-900"
+                />
+                <span className="text-xs text-slate-400">Remember me on this device</span>
+              </label>
               <button
                 type="submit" disabled={loading}
                 className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-semibold rounded-xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white transition-colors disabled:opacity-60"

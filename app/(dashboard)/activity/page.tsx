@@ -130,7 +130,7 @@ function ActivityLog() {
 
   return (
     <div className="flex-1 overflow-auto">
-      <div className="bg-white border-b border-gray-200 px-4 sm:px-6 lg:px-8 py-4">
+      <div className="hero-wash bg-white border-b border-gray-200 px-4 sm:px-6 lg:px-8 py-4">
         <h1 className="text-xl font-semibold text-gray-900">Activity</h1>
         <p className="text-sm text-gray-500 mt-0.5">
           Every change recorded in this workspace, newest first.

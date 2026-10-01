@@ -825,6 +825,13 @@ input[type="time"]::-webkit-calendar-picker-indicator:hover {
   box-shadow: none;
 }
 
+/* Gloo's mobile chrome is neutral black, not slate-900 (#0f172a reads navy
+   against Gloo's pure-black page). A near-black keeps the bar/pill visible as
+   raised chrome without the blue cast. Scoped to the mobile chrome only — the
+   desktop rail is unchanged. Off-Gloo these elements keep their slate-900. */
+.theme-glo .nav-chrome      { background-color: #171717; }
+.theme-glo .bottomnav-bar   { background-color: rgba(23, 23, 23, 0.95); }
+
 /* ──────────────────────────────────────────────────────────────
    Phone legibility
    ──────────────────────────────────────────────────────────────

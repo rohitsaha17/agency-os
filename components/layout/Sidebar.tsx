@@ -608,7 +608,7 @@ export function Sidebar() {
       </aside>
 
       {/* ── Mobile / tablet top bar ───────────────────────────── */}
-      <div className="lg:hidden fixed top-0 inset-x-0 appbar bg-slate-900 flex items-center justify-between px-4 z-40 border-b border-white/[0.06]">
+      <div className="nav-chrome lg:hidden fixed top-0 inset-x-0 appbar bg-slate-900 flex items-center justify-between px-4 z-40 border-b border-white/[0.06]">
         <Logo />
         <div className="flex items-center gap-1">
           <NotificationBell align="right" />
@@ -632,7 +632,7 @@ export function Sidebar() {
       {/* ── Mobile drawer ─────────────────────────────────────── */}
       <aside
         className={`
-          lg:hidden fixed inset-y-0 left-0 w-72 bg-slate-900 flex flex-col z-50 safe-top safe-bottom
+          nav-chrome lg:hidden fixed inset-y-0 left-0 w-72 bg-slate-900 flex flex-col z-50 safe-top safe-bottom
           transform transition-transform duration-300 ease-in-out
           ${open ? "translate-x-0" : "-translate-x-full"}
         `}
@@ -669,7 +669,7 @@ export function Sidebar() {
         className="lg:hidden fixed inset-x-0 bottom-0 z-40 flex justify-center px-3 pb-[calc(0.5rem+var(--safe-bottom))] pointer-events-none"
         aria-label="Primary"
       >
-        <div className="pointer-events-auto flex items-center justify-between gap-1 w-full max-w-md px-2 py-2 rounded-full bg-slate-900/95 backdrop-blur border border-white/10 shadow-lg shadow-black/40">
+        <div className="bottomnav-bar pointer-events-auto flex items-center justify-between gap-1 w-full max-w-md px-2 py-2 rounded-full bg-slate-900/95 backdrop-blur border border-white/10 shadow-lg shadow-black/40">
           {[
             { href: "/",         label: "Home",     icon: LayoutDashboard, badge: 0 },
             { href: "/projects", label: "Projects", icon: FolderKanban,    badge: 0 },

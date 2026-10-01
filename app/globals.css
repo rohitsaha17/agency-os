@@ -728,6 +728,9 @@ input[type="time"]::-webkit-calendar-picker-indicator:hover {
   /* The mobile app bar, so the bar and the space reserved for it can
      never drift apart. */
   --appbar-h: 3.5rem;
+  /* The mobile bottom navigation bar (below lg only). Shared by the bar,
+     the content padding under it, and full-height panes so they agree. */
+  --bottomnav-h: 3.75rem;
 }
 
 .safe-top    { padding-top: var(--safe-top); }
@@ -752,9 +755,14 @@ input[type="time"]::-webkit-calendar-picker-indicator:hover {
    Only below lg, where the bar exists at all. */
 @media (max-width: 1023px) {
   .appbar-offset { padding-top: calc(var(--appbar-h) + var(--safe-top)); }
-  /* Full-height panes measure from under the bar, not from the top of
-     the screen — otherwise they overflow by the height of the inset. */
-  .h-screen-below-appbar { height: calc(100dvh - var(--appbar-h) - var(--safe-top)); }
+  /* Full-height panes measure from under the top bar AND above the bottom
+     nav, so neither the app bar nor the bottom nav hides their edges. */
+  .h-screen-below-appbar {
+    height: calc(100dvh - var(--appbar-h) - var(--safe-top) - var(--bottomnav-h) - var(--safe-bottom));
+  }
+  /* Ordinary scrolling pages reserve room for the bottom nav so their last
+     rows aren't tucked behind it. Desktop has no bottom nav, so no rule. */
+  .bottomnav-offset { padding-bottom: calc(var(--bottomnav-h) + var(--safe-bottom)); }
 }
 @media (min-width: 1024px) {
   .h-screen-below-appbar { height: 100dvh; }

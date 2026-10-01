@@ -613,13 +613,8 @@ export function Sidebar() {
         <div className="flex items-center gap-1">
           <NotificationBell align="right" />
           <ThemeToggleIcon />
-          <button
-            onClick={() => setOpen(true)}
-            className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] transition-colors"
-            aria-label="Open navigation menu"
-          >
-            <Menu className="w-5 h-5" />
-          </button>
+          {/* Full menu lives in the bottom nav's "More" now — no second
+              hamburger up here. */}
         </div>
       </div>
 
@@ -658,6 +653,61 @@ export function Sidebar() {
 
         <NavContent pathname={pathname} onClose={() => setOpen(false)} appUser={appUser} unreadCount={unreadCount} />
       </aside>
+
+      {/* ── Mobile bottom navigation ──────────────────────────────
+          The reference apps' pattern: the few places you go most, one tap
+          away, with everything else behind "More". Below lg only — the
+          desktop rail already covers this. Height is --bottomnav-h, which the
+          content padding and full-height panes also read, so nothing hides
+          behind it. */}
+      <nav
+        className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-slate-900/95 backdrop-blur border-t border-white/[0.08] safe-bottom"
+        aria-label="Primary"
+      >
+        <div className="flex items-stretch justify-around px-1">
+          {[
+            { href: "/",         label: "Home",     icon: LayoutDashboard, badge: 0 },
+            { href: "/projects", label: "Projects", icon: FolderKanban,    badge: 0 },
+            { href: "/tasks",    label: "Tasks",    icon: CheckSquare,     badge: 0 },
+            { href: "/messages", label: "Chat",     icon: MessageSquare,   badge: unreadCount },
+          ].map(({ href, label, icon: Icon, badge }) => {
+            const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
+            return (
+              <Link
+                key={href}
+                href={href}
+                aria-current={active ? "page" : undefined}
+                className="flex-1 flex flex-col items-center justify-center gap-0.5 pt-2 pb-1.5"
+              >
+                <span className={`relative flex items-center justify-center w-11 h-7 rounded-full transition-colors ${
+                  active ? "bg-indigo-500/20 text-indigo-300" : "text-slate-400"
+                }`}>
+                  <Icon className="w-5 h-5" />
+                  {badge > 0 && (
+                    <span className="absolute top-0 right-1.5 min-w-[15px] h-[15px] px-1 text-[9px] font-bold leading-none text-white bg-indigo-500 rounded-full flex items-center justify-center ring-2 ring-slate-900">
+                      {badge > 9 ? "9+" : badge}
+                    </span>
+                  )}
+                </span>
+                <span className={`text-[10px] font-medium leading-none ${active ? "text-indigo-300" : "text-slate-500"}`}>
+                  {label}
+                </span>
+              </Link>
+            );
+          })}
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            className="flex-1 flex flex-col items-center justify-center gap-0.5 pt-2 pb-1.5"
+            aria-label="More"
+          >
+            <span className="flex items-center justify-center w-11 h-7 rounded-full text-slate-400">
+              <Menu className="w-5 h-5" />
+            </span>
+            <span className="text-[10px] font-medium leading-none text-slate-500">More</span>
+          </button>
+        </div>
+      </nav>
     </>
   );
 }

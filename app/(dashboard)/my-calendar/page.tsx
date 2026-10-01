@@ -141,6 +141,14 @@ export default function MyCalendarPage() {
   const [visibleKinds, setVisibleKinds] = useState<Set<Kind>>(new Set(ALL_KINDS));
   const [miniMonth, setMiniMonth] = useState<Date>(new Date());
 
+  // A 7-column week grid is unreadable on a phone, so mobile opens on the
+  // single-day view instead (the pattern every phone calendar uses). Done in
+  // an effect, not the initial state, to avoid an SSR/client hydration
+  // mismatch; it runs once, so a later manual view choice still sticks.
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.innerWidth < 1024) setView("day");
+  }, []);
+
   const isSenior =
     currentUser?.role === "ADMIN" || currentUser?.role === "OWNER" ||
     currentUser?.role === "MANAGER" || currentUser?.designation === "HEAD_OF_DESIGN";

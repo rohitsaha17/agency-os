@@ -541,10 +541,24 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
               )}
             </div>
 
-            <input value={title} readOnly={!canPlan}
-              onChange={(e) => { if (!canPlan) return; setTitle(e.target.value); markDirty(); }}
-              className="flex-1 text-base font-semibold text-gray-900 border-none outline-none bg-transparent focus:ring-0 p-0 placeholder:text-gray-400"
-              placeholder="Task title" />
+            {/* The title must WRAP to its full text, not sit on one clipped
+                line. A single-line <input> truncated long titles and, because
+                the global dark form rule paints every input, showed a navy box
+                behind it. Viewers get a wrapping heading; planners get a
+                borderless auto-growing textarea (transparent — no field box). */}
+            {canPlan ? (
+              <textarea
+                value={title}
+                onChange={(e) => { setTitle(e.target.value); markDirty(); }}
+                rows={1}
+                placeholder="Task title"
+                className="flex-1 min-w-0 resize-none field-sizing-content text-base font-semibold text-gray-900 dark:text-slate-100 leading-snug border-none outline-none !bg-transparent focus:ring-0 focus:!shadow-none p-0 placeholder:text-gray-400 break-words"
+              />
+            ) : (
+              <h2 className="flex-1 min-w-0 text-base font-semibold text-gray-900 dark:text-slate-100 leading-snug break-words">
+                {title}
+              </h2>
+            )}
 
             <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0">
               <X className="w-4 h-4 text-gray-500" />

@@ -1270,6 +1270,29 @@ input[type="time"]::-webkit-calendar-picker-indicator:hover {
   --glo-teal: #2dd4bf;    --glo-teal-bg: rgba(45, 212, 191, 0.12);  --glo-teal-line: rgba(45, 212, 191, 0.34);
 }
 
+/* Gloo dark form fields: a neutral field, not the default dark theme's navy
+   slate. The global `.dark input/textarea/select` rule paints fields #1e293b,
+   which reads blue against Gloo's black page; this overrides it (same selector
+   shape, higher specificity via .theme-glo.dark) with a neutral surface and an
+   orange focus ring. Fixes the navy boxes behind inputs and textareas. */
+.theme-glo.dark input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="submit"]):not([type="button"]):not([type="reset"]),
+.theme-glo.dark textarea,
+.theme-glo.dark select {
+  background-color: var(--glo-surface-2);
+  border-color: var(--glo-surface-4);
+  color: var(--glo-text);
+}
+.theme-glo.dark input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="submit"]):not([type="button"]):not([type="reset"]):focus,
+.theme-glo.dark textarea:focus,
+.theme-glo.dark select:focus {
+  border-color: var(--glo-accent);
+  box-shadow: 0 0 0 3px var(--glo-accent-soft);
+}
+.theme-glo.dark input::placeholder,
+.theme-glo.dark textarea::placeholder {
+  color: var(--glo-text-fainter);
+}
+
 /* ═══ Everything below reads the variables above, so it is written
        once and serves both modes. ═══ */
 

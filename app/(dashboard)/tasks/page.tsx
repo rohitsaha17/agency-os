@@ -1559,6 +1559,32 @@ function TasksBoardInner() {
 
         {/* ── Board ── */}
         <div className="flex-1 min-w-0 bg-gray-50 dark:bg-slate-950 flex flex-col min-h-0">
+          {/* Phone: the left rail is hidden, which also hid the All / Starred
+              switch. (New list and the lists themselves already show inline in
+              the board below.) Surface the switch here as two chips — always on,
+              since the toolbar below is hidden in the Starred view. */}
+          <div className="md:hidden flex items-center gap-2 px-4 pt-3 flex-shrink-0">
+            <button
+              onClick={() => setView("all")}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-medium transition-colors ${
+                view === "all" ? "bg-indigo-600 text-white" : "bg-white dark:bg-slate-900 border border-gray-200 dark:border-white/[0.08] text-gray-600 dark:text-slate-300"
+              }`}
+            >
+              <ListTodo className="w-3.5 h-3.5" /> All tasks
+            </button>
+            <button
+              onClick={() => setView("starred")}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-medium transition-colors ${
+                view === "starred" ? "bg-indigo-600 text-white" : "bg-white dark:bg-slate-900 border border-gray-200 dark:border-white/[0.08] text-gray-600 dark:text-slate-300"
+              }`}
+            >
+              <Star className={`w-3.5 h-3.5 ${view === "starred" ? "fill-white" : ""}`} /> Starred
+              {starredCount > 0 && (
+                <span className={view === "starred" ? "text-white/80" : "text-gray-400"}>{starredCount}</span>
+              )}
+            </button>
+          </div>
+
           {/* Toolbar: search, and how you want to read it. Sits above both
               views so switching doesn't move the controls. */}
           {view !== "starred" && (

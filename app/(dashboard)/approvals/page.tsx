@@ -323,7 +323,7 @@ function ApprovalsInner() {
                   ))}
                 </section>
 
-                <div className="flex items-center gap-2.5">
+                <div className="flex flex-wrap items-center gap-y-2 gap-2.5">
                   <Button onClick={() => decide(selected, "APPROVED")} loading={busy}
                     icon={<CheckCircle2 className="w-4 h-4" />}>
                     Approve

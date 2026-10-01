@@ -106,7 +106,7 @@ function ClientsPageBody() {
               <button
                 key={value}
                 onClick={() => setStatusFilter(value)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                className={`shrink-0 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
                   statusFilter === value
                     ? "bg-indigo-600 text-white"
                     : "text-gray-600 hover:bg-gray-100"

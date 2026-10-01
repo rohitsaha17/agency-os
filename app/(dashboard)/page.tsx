@@ -864,7 +864,7 @@ export default function DashboardPage() {
                 <h2 className="text-sm font-semibold text-gray-900">Project Health</h2>
                 <p className="text-xs text-gray-400 mt-0.5">Active projects sorted by recent activity</p>
               </div>
-              <div className="flex items-center gap-3 text-xs text-gray-400">
+              <div className="flex flex-wrap items-center gap-3 gap-y-2 text-xs text-gray-400">
                 <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" /> On track</span>
                 <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-400 inline-block" /> At risk</span>
                 <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500 inline-block" /> Critical</span>

@@ -2122,21 +2122,23 @@ export default function SettingsPage() {
 
       <div className="px-6 lg:px-8 py-6 max-w-5xl">
         {/* Tab bar */}
-        <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit mb-6">
-          {visibleTabs.map(({ id, label, icon: Icon }) => (
-            <button
-              key={id}
-              onClick={() => setTab(id)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                tab === id
-                  ? "bg-white text-gray-900 shadow-sm"
-                  : "text-gray-500 hover:text-gray-700"
-              }`}
-            >
-              <Icon className="w-4 h-4" />
-              {label}
-            </button>
-          ))}
+        <div className="overflow-x-auto scrollbar-none -mx-6 px-6 mb-6">
+          <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
+            {visibleTabs.map(({ id, label, icon: Icon }) => (
+              <button
+                key={id}
+                onClick={() => setTab(id)}
+                className={`shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  tab === id
+                    ? "bg-white text-gray-900 shadow-sm"
+                    : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                <Icon className="w-4 h-4" />
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Settings load error banner — only shown after load completes with an error */}

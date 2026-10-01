@@ -87,7 +87,10 @@ export function PersonDayDrawer({
       aria-label={`${person.name}, ${longDay(date)}`}
       className="flex flex-col h-full w-full lg:w-[340px] flex-shrink-0 bg-white dark:bg-slate-900 border-l border-gray-200 dark:border-white/[0.08]"
     >
-      <header className="flex items-start gap-3 px-4 py-3 border-b border-gray-100 dark:border-white/[0.06] flex-shrink-0">
+      {/* pt carries the notch inset: on a phone this drawer fills the screen
+          edge-to-edge (fixed inset-0 parent), so the header would otherwise sit
+          under the status bar. The inset is 0px on desktop. */}
+      <header className="flex items-start gap-3 px-4 pb-3 pt-[calc(0.75rem+var(--safe-top))] lg:pt-3 border-b border-gray-100 dark:border-white/[0.06] flex-shrink-0">
         <Avatar name={person.name} url={person.avatarUrl} size={9} />
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-gray-900 dark:text-slate-100 truncate">{person.name}</p>

@@ -368,8 +368,9 @@ export function FileReviewModal({
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-slate-950">
-      {/* ── TOP BAR ── */}
-      <div className="flex-shrink-0 h-14 bg-slate-900 border-b border-slate-800 flex items-center px-4 gap-3">
+      {/* ── TOP BAR ── grows by the notch inset (edge-to-edge, fullscreen on a
+          phone) and pads its row down so the controls clear the status bar. */}
+      <div className="flex-shrink-0 h-[calc(3.5rem+var(--safe-top))] pt-[var(--safe-top)] bg-slate-900 border-b border-slate-800 flex items-center px-4 gap-3">
         <button
           onClick={onClose}
           className="flex-shrink-0 p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"

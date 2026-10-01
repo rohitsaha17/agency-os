@@ -377,9 +377,9 @@ function ItemPanel({
   return (
     <>
       <div className="fixed inset-0 z-40 bg-black/20" onClick={onClose} />
-      <div className="fixed top-0 right-0 bottom-0 z-50 w-full sm:w-full sm:w-[440px] max-w-full bg-white shadow-2xl flex flex-col">
-        {/* Header */}
-        <div className="px-5 py-4 border-b border-gray-200">
+      <div className="fixed top-0 right-0 bottom-0 z-50 w-full sm:w-[440px] max-w-full bg-white shadow-2xl flex flex-col">
+        {/* Header. pt carries the notch inset — edge-to-edge on a phone. */}
+        <div className="px-5 pb-4 pt-[calc(1rem+var(--safe-top))] sm:pt-4 border-b border-gray-200">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">

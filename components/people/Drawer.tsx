@@ -126,7 +126,10 @@ export function Drawer({
           shown ? "translate-x-0 opacity-100" : "translate-x-full opacity-0"
         }`}
       >
-        <header className="flex items-start gap-3 px-4 py-3 border-b border-gray-100 dark:border-white/[0.06] flex-shrink-0">
+        {/* pt carries the notch inset: the drawer is edge-to-edge on a phone,
+            so without it the title renders under the status bar. The inset is
+            0px on desktop, so the right-side panel there is unchanged. */}
+        <header className="flex items-start gap-3 px-4 pb-3 pt-[calc(0.75rem+var(--safe-top))] border-b border-gray-100 dark:border-white/[0.06] flex-shrink-0">
           <div className="min-w-0 flex-1">
             <div className="text-[15px] font-semibold text-gray-900 dark:text-slate-100 truncate">
               {title}

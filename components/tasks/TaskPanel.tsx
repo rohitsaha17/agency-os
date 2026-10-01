@@ -880,7 +880,7 @@ export function TaskPanel({ task, allTasks, projectId, onClose, onUpdated, onDel
         <div className="flex border-b border-gray-200 flex-shrink-0 px-1 overflow-x-auto">
           {TABS.map((t) => (
             <button key={t.id} onClick={() => setTab(t.id)}
-              className={`flex items-center gap-1.5 px-3 py-3 text-xs font-medium transition-colors border-b-2 -mb-px whitespace-nowrap ${
+              className={`flex items-center gap-1.5 shrink-0 px-3 py-3 text-xs font-medium transition-colors border-b-2 -mb-px whitespace-nowrap ${
                 tab === t.id ? "border-indigo-600 text-indigo-700" : "border-transparent text-gray-500 hover:text-gray-700"
               }`}>
               {t.icon} {t.label}

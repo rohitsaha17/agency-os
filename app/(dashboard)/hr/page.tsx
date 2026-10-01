@@ -134,7 +134,7 @@ function HRPageBody() {
               type="button"
               onClick={() => { setTab(t.id); setFocus(null); }}
               aria-current={active ? "page" : undefined}
-              className={`inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium border-b-2 -mb-px whitespace-nowrap transition-colors ${
+              className={`inline-flex items-center gap-1.5 shrink-0 px-3 py-2 text-[13px] font-medium border-b-2 -mb-px whitespace-nowrap transition-colors ${
                 active
                   ? "border-indigo-500 text-indigo-600 dark:text-indigo-300"
                   : "border-transparent text-gray-500 dark:text-slate-400 hover:text-gray-800 dark:hover:text-slate-200"

@@ -321,70 +321,123 @@ export default function MyCalendarPage() {
 
     const single = days.length === 1;
 
+    // One day as a desktop column (also the whole of the single-day view).
+    const DayColumn = (d: Date, i: number) => {
+      const items = ordered(d);
+      return (
+        <div key={i} className={`flex flex-col min-h-0 ${i > 0 ? "border-l border-gray-100" : ""} ${isToday(d) ? "bg-indigo-50/30" : ""}`}>
+          {/* Day header */}
+          <div className="flex-shrink-0 px-2 pt-3 pb-2 border-b border-gray-100 text-center">
+            <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">
+              {d.toLocaleDateString("en-US", { weekday: single ? "long" : "short" })}
+            </p>
+            <button onClick={() => { setAnchor(d); setView("day"); }}
+              className={`inline-flex w-8 h-8 items-center justify-center text-base font-semibold rounded-full transition-colors mt-0.5 ${
+                isToday(d) ? "bg-indigo-600 text-white" : "text-gray-700 hover:bg-gray-100"
+              }`}>
+              {d.getDate()}
+            </button>
+            {items.length > 0 && (
+              <p className="text-[10px] text-gray-400 mt-0.5">
+                {items.length} {items.length === 1 ? "item" : "items"}
+              </p>
+            )}
+          </div>
+
+          {/* That day's work */}
+          <div className="flex-1 overflow-y-auto p-1.5 space-y-1">
+            {items.length === 0 ? (
+              <button
+                onClick={() => { setAddDate(toDateKey(d)); setAddOpen(true); }}
+                className="w-full h-full min-h-[80px] rounded-lg text-[11px] text-gray-300 hover:text-indigo-500 hover:bg-indigo-50/50 transition-colors"
+              >
+                {single ? "Nothing due today" : "—"}
+              </button>
+            ) : (
+              <>
+                {items.map((e) => {
+                  const mins = minutesOf(e);
+                  return (
+                    <div key={`${e.kind}-${e.id}`} className={single ? "flex items-start gap-3" : ""}>
+                      {single && (
+                        <span className="w-16 flex-shrink-0 pt-0.5 text-[11px] tabular-nums text-gray-400 text-right">
+                          {mins === null
+                            ? "All day"
+                            : new Date(e.date).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+                        </span>
+                      )}
+                      <div className="flex-1 min-w-0">{chip(e, { compact: !single })}</div>
+                    </div>
+                  );
+                })}
+                <button
+                  onClick={() => { setAddDate(toDateKey(d)); setAddOpen(true); }}
+                  className="w-full py-1.5 rounded-lg text-[11px] text-gray-300 hover:text-indigo-500 hover:bg-indigo-50/50 transition-colors"
+                >
+                  + Add
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      );
+    };
+
+    // One day as a phone row — a full-width section, so the week reads top to
+    // bottom instead of being crushed into seven ~50px columns.
+    const DayRow = (d: Date, i: number) => {
+      const items = ordered(d);
+      const today = isToday(d);
+      return (
+        <div key={i} className={`px-3 py-3 ${today ? "bg-indigo-50/40" : ""}`}>
+          <div className="flex items-center gap-2 mb-2">
+            <button onClick={() => { setAnchor(d); setView("day"); }}
+              className={`inline-flex items-center justify-center min-w-7 h-7 px-2 rounded-full text-sm font-semibold ${
+                today ? "bg-indigo-600 text-white" : "text-gray-700 hover:bg-gray-100"
+              }`}>
+              {d.getDate()}
+            </button>
+            <span className="text-sm font-medium text-gray-700">{d.toLocaleDateString("en-US", { weekday: "long" })}</span>
+            {items.length > 0 && (
+              <span className="ml-auto text-[11px] text-gray-400">{items.length} {items.length === 1 ? "item" : "items"}</span>
+            )}
+          </div>
+          {items.length === 0 ? (
+            <button onClick={() => { setAddDate(toDateKey(d)); setAddOpen(true); }}
+              className="w-full text-left text-[12px] text-gray-400 hover:text-indigo-500 py-1">
+              + Add something
+            </button>
+          ) : (
+            <div className="space-y-1">
+              {items.map((e) => <div key={`${e.kind}-${e.id}`}>{chip(e)}</div>)}
+              <button onClick={() => { setAddDate(toDateKey(d)); setAddOpen(true); }}
+                className="w-full text-left text-[12px] text-gray-400 hover:text-indigo-500 py-1">
+                + Add
+              </button>
+            </div>
+          )}
+        </div>
+      );
+    };
+
     return (
       <div className="flex flex-col h-full min-h-0 bg-white border border-gray-200 rounded-2xl overflow-hidden">
-        <div className="flex-1 grid min-h-0" style={{ gridTemplateColumns: `repeat(${days.length}, minmax(0,1fr))` }}>
-          {days.map((d, i) => {
-            const items = ordered(d);
-            return (
-              <div key={i} className={`flex flex-col min-h-0 ${i > 0 ? "border-l border-gray-100" : ""} ${isToday(d) ? "bg-indigo-50/30" : ""}`}>
-                {/* Day header */}
-                <div className="flex-shrink-0 px-2 pt-3 pb-2 border-b border-gray-100 text-center">
-                  <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">
-                    {d.toLocaleDateString("en-US", { weekday: single ? "long" : "short" })}
-                  </p>
-                  <button onClick={() => { setAnchor(d); setView("day"); }}
-                    className={`inline-flex w-8 h-8 items-center justify-center text-base font-semibold rounded-full transition-colors mt-0.5 ${
-                      isToday(d) ? "bg-indigo-600 text-white" : "text-gray-700 hover:bg-gray-100"
-                    }`}>
-                    {d.getDate()}
-                  </button>
-                  {items.length > 0 && (
-                    <p className="text-[10px] text-gray-400 mt-0.5">
-                      {items.length} {items.length === 1 ? "item" : "items"}
-                    </p>
-                  )}
-                </div>
-
-                {/* That day's work */}
-                <div className="flex-1 overflow-y-auto p-1.5 space-y-1">
-                  {items.length === 0 ? (
-                    <button
-                      onClick={() => { setAddDate(toDateKey(d)); setAddOpen(true); }}
-                      className="w-full h-full min-h-[80px] rounded-lg text-[11px] text-gray-300 hover:text-indigo-500 hover:bg-indigo-50/50 transition-colors"
-                    >
-                      {single ? "Nothing due today" : "—"}
-                    </button>
-                  ) : (
-                    <>
-                      {items.map((e) => {
-                        const mins = minutesOf(e);
-                        return (
-                          <div key={`${e.kind}-${e.id}`} className={single ? "flex items-start gap-3" : ""}>
-                            {single && (
-                              <span className="w-16 flex-shrink-0 pt-0.5 text-[11px] tabular-nums text-gray-400 text-right">
-                                {mins === null
-                                  ? "All day"
-                                  : new Date(e.date).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
-                              </span>
-                            )}
-                            <div className="flex-1 min-w-0">{chip(e, { compact: !single })}</div>
-                          </div>
-                        );
-                      })}
-                      <button
-                        onClick={() => { setAddDate(toDateKey(d)); setAddOpen(true); }}
-                        className="w-full py-1.5 rounded-lg text-[11px] text-gray-300 hover:text-indigo-500 hover:bg-indigo-50/50 transition-colors"
-                      >
-                        + Add
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        {single ? (
+          <div className="flex-1 grid min-h-0" style={{ gridTemplateColumns: "repeat(1, minmax(0,1fr))" }}>
+            {DayColumn(days[0], 0)}
+          </div>
+        ) : (
+          <>
+            {/* Desktop: the days side by side. */}
+            <div className="hidden sm:grid flex-1 min-h-0" style={{ gridTemplateColumns: `repeat(${days.length}, minmax(0,1fr))` }}>
+              {days.map((d, i) => DayColumn(d, i))}
+            </div>
+            {/* Phone: stacked, one readable section per day. */}
+            <div className="sm:hidden flex-1 min-h-0 overflow-y-auto divide-y divide-gray-100">
+              {days.map((d, i) => DayRow(d, i))}
+            </div>
+          </>
+        )}
       </div>
     );
   };
@@ -508,7 +561,10 @@ export default function MyCalendarPage() {
             {viewMenu && (
               <>
                 <div className="fixed inset-0 z-30" onClick={() => setViewMenu(false)} />
-                <div className="absolute right-0 top-10 z-40 bg-white border border-gray-200 rounded-xl shadow-lg py-1.5 min-w-[190px]">
+                {/* On a phone the dropdown button sits at the left of a wrapped
+                    header row, so right-0 pushed the panel off the left edge.
+                    Open rightward there; keep the desktop right-align. */}
+                <div className="absolute left-0 sm:left-auto sm:right-0 top-10 z-40 bg-white border border-gray-200 rounded-xl shadow-lg py-1.5 min-w-[190px]">
                   {VIEW_OPTIONS.map((v) => (
                     <button key={v.id} onClick={() => { setView(v.id); setViewMenu(false); }}
                       className="w-full flex flex-wrap items-center justify-between gap-y-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
@@ -637,6 +693,23 @@ export default function MyCalendarPage() {
                 selected={anchor}
                 onDayClick={(day) => { setAnchor(day); setView("day"); }}
                 cellCount={(day) => entriesOn(day).length}
+                /* Phone: a month cell is ~1/7 of the width, far too narrow for
+                   the event chips — they overlapped the date and truncated to a
+                   letter. Show coloured dots instead (one per item, up to four),
+                   tap a day to open its agenda. Desktop keeps the full chips. */
+                renderCellMobile={(day) => {
+                  const list = entriesOn(day);
+                  const blocked = blockedDays[availDayString(day)];
+                  if (list.length === 0 && !blocked) return null;
+                  return (
+                    <div className="flex items-center justify-center gap-[3px] pt-[3px]">
+                      {blocked && <span className="w-[5px] h-[5px] rounded-full bg-gray-300 dark:bg-white/25" aria-hidden />}
+                      {list.slice(0, 4).map((e) => (
+                        <span key={`${e.kind}-${e.id}`} className={`w-[5px] h-[5px] rounded-full ${KIND_META[e.kind].dot}`} aria-hidden />
+                      ))}
+                    </div>
+                  );
+                }}
                 renderCell={(day) => {
                   const list = entriesOn(day);
                   const blocked = blockedDays[availDayString(day)];

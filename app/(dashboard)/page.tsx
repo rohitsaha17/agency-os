@@ -671,9 +671,12 @@ export default function DashboardPage() {
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-4 sm:px-6 lg:px-8 py-4 sm:py-5 flex-shrink-0">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:justify-between">
+      {/* Header — a quiet accent wash gives the page a "hero" the way the
+          reference apps do, drawn from the theme accent so it's orange in Gloo
+          and indigo elsewhere, not a new colour. */}
+      <div className="relative overflow-hidden bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-white/[0.07] px-4 sm:px-6 lg:px-8 py-4 sm:py-5 flex-shrink-0">
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-gradient-to-br from-indigo-500/[0.10] via-indigo-500/[0.02] to-transparent" />
+        <div className="relative flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:justify-between">
           <div>
             <h1 className="text-xl font-semibold text-gray-900">
               {greeting()}, {currentUser?.name?.split(" ")[0] ?? "there"}

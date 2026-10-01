@@ -146,12 +146,12 @@ export default function ProjectsPage() {
           </div>
           {/* Row 2: status + type filters */}
           <div className="flex items-center gap-3 flex-wrap">
-            <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1">
+            <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1 overflow-x-auto scrollbar-none">
               {STATUS_FILTERS.map(({ label, value }) => (
                 <button
                   key={value}
                   onClick={() => setStatusFilter(value)}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap shrink-0 ${
                     statusFilter === value
                       ? "bg-indigo-600 text-white"
                       : "text-gray-600 hover:bg-gray-100"

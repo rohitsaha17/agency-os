@@ -728,9 +728,11 @@ input[type="time"]::-webkit-calendar-picker-indicator:hover {
   /* The mobile app bar, so the bar and the space reserved for it can
      never drift apart. */
   --appbar-h: 3.5rem;
-  /* The mobile bottom navigation bar (below lg only). Shared by the bar,
-     the content padding under it, and full-height panes so they agree. */
-  --bottomnav-h: 3.75rem;
+  /* The mobile bottom navigation (below lg only) — now a floating pill, so
+     this reserves the pill's height plus the gap it floats above the edge.
+     Shared by the bar, the content padding under it, and full-height panes so
+     they agree. */
+  --bottomnav-h: 4.75rem;
 }
 
 .safe-top    { padding-top: var(--safe-top); }

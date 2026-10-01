@@ -685,7 +685,7 @@ export function Sidebar() {
                 title={label}
                 className={`relative flex items-center justify-center gap-1.5 h-10 rounded-full transition-all duration-200 ${
                   active
-                    ? "px-3.5 bg-[var(--glo-accent,#6366f1)] text-white shadow-sm"
+                    ? "px-3.5 bottomnav-active shadow-sm"
                     : "w-10 text-slate-400 hover:text-slate-200"
                 }`}
               >

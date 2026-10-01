@@ -810,6 +810,21 @@ input[type="time"]::-webkit-calendar-picker-indicator:hover {
     transparent 74%);
 }
 
+/* The mobile bottom-nav active pill.
+   Default theme: a solid accent fill with white content. On Gloo a solid
+   orange pill on the black bar is too bright and tiring, so there the pill is
+   a soft orange tint with an orange icon and label — the bar stays black and
+   the highlight reads as orange without the glare. */
+.bottomnav-active {
+  background-color: var(--glo-accent, #6366f1);
+  color: #fff;
+}
+.theme-glo .bottomnav-active {
+  background-color: color-mix(in srgb, var(--glo-accent) 16%, transparent);
+  color: var(--glo-accent);
+  box-shadow: none;
+}
+
 /* ──────────────────────────────────────────────────────────────
    Phone legibility
    ──────────────────────────────────────────────────────────────

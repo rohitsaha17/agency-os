@@ -334,6 +334,7 @@ model User {
   projectMemberships ProjectMember[]
   statusChanges      StatusHistory[] @relation("StatusChanges")
   notifications      Notification[]
+  pushSubscriptions  PushSubscription[]
   // ── HR ──
   starredTasks       TaskStar[]
   attendance         Attendance[]    @relation("AttendanceUser")
@@ -1651,6 +1652,7 @@ model Organization {
   taskTemplates TaskTemplate[]
   statusHistory StatusHistory[]
   notifications Notification[]
+  pushSubscriptions PushSubscription[]
   unavailability Unavailability[]
   creativeTypes CreativeType[]
   contentItems  ContentItem[]
@@ -1908,6 +1910,30 @@ model Notification {
   @@index([userId, readAt])
   @@index([userId, createdAt])
   @@map("notifications")
+}
+
+/// A browser/device push subscription, so an in-app notification can also be
+/// delivered to the phone's lock screen (Web Push). One per browser+device;
+/// a user who signs in on their phone and laptop has two. `endpoint` is the
+/// push service URL and is globally unique, so re-subscribing the same browser
+/// updates the row rather than duplicating it.
+model PushSubscription {
+  id             String   @id @default(cuid())
+  organizationId String
+  userId         String
+  endpoint       String   @unique
+  p256dh         String
+  auth           String
+  // The User-Agent at subscribe time, purely so a person can tell their
+  // devices apart if a "manage devices" screen is ever added.
+  userAgent      String?
+  createdAt      DateTime @default(now())
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_subscriptions")
 }
 
 // ════════════════════════════════════════════════════════════════════════

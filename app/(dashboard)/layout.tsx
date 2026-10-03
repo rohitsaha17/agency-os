@@ -6,6 +6,7 @@ import { ToastProvider } from "@/components/ui/Toast";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import { DateInputAutoOpen } from "@/components/ui/DateInputAutoOpen";
 import { AppTour } from "@/components/onboarding/AppTour";
+import { PushProvider } from "@/components/providers/PushProvider";
 import { CurrentUserSeed } from "@/components/layout/CurrentUserSeed";
 import type { CurrentUser } from "@/lib/useCurrentUser";
 import { CheckInGate } from "@/components/hr/CheckInGate";
@@ -181,6 +182,7 @@ export default async function DashboardLayout({
             {children}
           </main>
           <AppTour />
+          <PushProvider />
         </div>
       </ConfirmProvider>
     </ToastProvider>

@@ -15,7 +15,7 @@
  * content-hashed and therefore safe to keep forever.
  */
 
-const VERSION = "studio-flow-v1";
+const VERSION = "studio-flow-v2";
 const STATIC_CACHE = `${VERSION}-static`;
 const OFFLINE_URL = "/offline.html";
 
@@ -82,4 +82,47 @@ self.addEventListener("fetch", (event) => {
         }))),
     );
   }
+});
+
+/*
+ * ── Web Push ──────────────────────────────────────────────────────────────
+ * The server (lib/push.ts) sends a JSON payload { title, body, link }. We show
+ * it as a system notification; tapping it focuses an open tab (navigating it to
+ * the link) or opens a new one.
+ */
+self.addEventListener("push", (event) => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch { data = {}; }
+
+  const title = data.title || "Studio Flow";
+  const options = {
+    body: data.body || "",
+    icon: "/icons/icon-192.png",
+    badge: "/icons/icon-192-maskable.png",
+    data: { link: data.link || "/" },
+    // Collapse repeats of the same thing instead of stacking the lock screen.
+    tag: data.tag || undefined,
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const link = (event.notification.data && event.notification.data.link) || "/";
+
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        // Reuse a tab that's already on this app.
+        if (client.url && new URL(client.url).origin === self.location.origin && "focus" in client) {
+          client.focus();
+          if ("navigate" in client) client.navigate(link).catch(() => {});
+          return undefined;
+        }
+      }
+      if (self.clients.openWindow) return self.clients.openWindow(link);
+      return undefined;
+    }),
+  );
 });

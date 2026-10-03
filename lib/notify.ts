@@ -2,6 +2,7 @@
 // Notification delivery is in-app only for now (docs/V2_CONTEXT.md §4).
 
 import { prisma } from "@/lib/prisma";
+import { sendPushToUser } from "@/lib/push";
 
 export type NotificationType =
   | "TASK_ASSIGNED"
@@ -33,6 +34,9 @@ export async function notify(args: NotifyArgs): Promise<void> {
         link: args.link ?? null,
       },
     });
+    // Also push it to the user's phone/desktop if they've allowed it. Fire and
+    // forget — a push failure must never fail the mutation or the in-app notice.
+    void sendPushToUser(args.userId, { title: args.title, body: args.body, link: args.link });
   } catch (err) {
     console.error("[notify] failed:", err);
   }

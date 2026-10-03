@@ -980,8 +980,8 @@ export default function ProjectDetailPage() {
           </span>
         </div>
 
-        {/* v3: the deal at a glance — what's owed, and who's on it */}
-        {((project.deliverables?.length ?? 0) > 0 || (project.members?.length ?? 0) > 0) && (
+        {/* v3: the deal at a glance — what's owed */}
+        {(project.deliverables?.length ?? 0) > 0 && (
           <div className="flex items-center gap-4 mt-3 flex-wrap">
             {(project.deliverables ?? []).map((d) => (
               <span key={d.id}
@@ -993,32 +993,10 @@ export default function ProjectDetailPage() {
               </span>
             ))}
 
-            {/* v3: which cycle we're looking at. Phase 3's Plan tab reads
-                this selection, so switching here changes what's planned. */}
-            {cycles.length > 0 && (
-              <span className="inline-flex items-center gap-0.5 ml-auto">
-                <button
-                  onClick={() => setCycleIndex((i) => Math.max(0, i - 1))}
-                  disabled={cycleIndex <= 0}
-                  title="Previous cycle"
-                  className="p-1 rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-30 disabled:hover:bg-transparent transition-colors">
-                  <ChevronLeft className="w-3.5 h-3.5" />
-                </button>
-                <span className="text-xs font-medium text-gray-700 min-w-[72px] text-center">
-                  {cycles[cycleIndex]?.label}
-                  {cycles[cycleIndex]?.status === "CLOSED" && (
-                    <span className="block text-[10px] font-normal text-gray-400 leading-none">closed</span>
-                  )}
-                </span>
-                <button
-                  onClick={() => setCycleIndex((i) => Math.min(cycles.length - 1, i + 1))}
-                  disabled={cycleIndex >= cycles.length - 1}
-                  title="Next cycle"
-                  className="p-1 rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-30 disabled:hover:bg-transparent transition-colors">
-                  <ChevronRight className="w-3.5 h-3.5" />
-                </button>
-              </span>
-            )}
+            {/* The cycle selector that used to sit here (ml-auto, which left the
+                big gap on the right) only ever navigated its own label — nothing
+                read it. The real one lives in the Plan tab, so this duplicate is
+                gone and the row closes up. */}
           </div>
         )}
       </div>

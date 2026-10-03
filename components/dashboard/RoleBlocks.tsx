@@ -162,7 +162,7 @@ export function RoleBlocks({ currency = "USD" }: { currency?: string }) {
           Numbers, not another copy of the task list. The full list is the
           "My Tasks" card below; this one is the summary you scan first. */}
       <Card
-        title="Needs your attention"
+        title="Your work at a glance"
         icon={<Bell className="w-4 h-4" />}
         urgent={attention > 0}
         count={attention}
@@ -177,7 +177,7 @@ export function RoleBlocks({ currency = "USD" }: { currency?: string }) {
         </div>
         <p className="text-[11px] text-gray-400 dark:text-slate-500 mt-3">
           {attention > 0
-            ? `${attention} ${attention === 1 ? "thing needs" : "things need"} attention`
+            ? `${attention} ${attention === 1 ? "thing needs" : "things need"} action`
             : "All caught up — nothing overdue or waiting."}
         </p>
       </Card>

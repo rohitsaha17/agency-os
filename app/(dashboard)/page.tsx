@@ -666,7 +666,7 @@ export default function DashboardPage() {
     ? (stats.overdueTasksCount + stats.blockedTasksCount + stats.filesInReview)
     : 0;
   const headlineMsg = alertCount > 0
-    ? `You have ${alertCount} item${alertCount !== 1 ? "s" : ""} that need${alertCount === 1 ? "s" : ""} attention`
+    ? `You have ${alertCount} item${alertCount !== 1 ? "s" : ""} to act on`
     : "Everything is on track — great work!";
 
   return (

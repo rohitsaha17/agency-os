@@ -20,7 +20,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Plus, Check, X, CalendarDays } from "lucide-react";
+import { Plus, Check, X } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
@@ -35,7 +35,7 @@ import {
 } from "@/components/people/kit";
 import { MIN_LEAVE_REASON, MAX_LEAVE_REASON } from "@/lib/hr";
 import {
-  dateRange, longDate, matchesQuery, monthDays, monthName, shortDate,
+  dateRange, longDate, matchesQuery, monthName,
 } from "@/lib/people";
 
 interface Req {
@@ -400,9 +400,9 @@ export function LeaveTab({
               </section>
             </div>
 
-            {/* The month at a glance, and who is out in it. */}
+            {/* Who is out this month. (The month-grid calendar that used to sit
+                above this was removed — the list is the clearer answer.) */}
             <aside className="space-y-3 lg:sticky lg:top-2">
-              <LeaveCalendar month={month} approved={approvedThisMonth} />
               <section className="rounded-xl border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-slate-900 overflow-hidden">
                 <header className="px-3 py-2 border-b border-gray-100 dark:border-white/[0.06]">
                   <h3 className="text-[11px] font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-300">
@@ -542,73 +542,6 @@ export function LeaveTab({
  * glance, and the names are one click away in the list underneath. Making it
  * a second table would just be the table again, smaller.
  */
-function LeaveCalendar({ month, approved }: { month: string; approved: Req[] }) {
-  const days = useMemo(() => monthDays(month), [month]);
-  const today = new Date().toISOString().slice(0, 10);
-
-  const byDay = useMemo(() => {
-    const m = new Map<string, string[]>();
-    for (const r of approved) {
-      for (const d of days) {
-        if (d.key >= r.start && d.key <= r.end) {
-          if (!m.has(d.key)) m.set(d.key, []);
-          m.get(d.key)!.push(r.user.name);
-        }
-      }
-    }
-    return m;
-  }, [approved, days]);
-
-  // Monday-first, matching how the week is talked about here.
-  const lead = days.length ? (days[0].dow + 6) % 7 : 0;
-
-  return (
-    <section className="rounded-xl border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-slate-900 p-3">
-      <header className="flex items-center gap-1.5 mb-2">
-        <CalendarDays className="w-3.5 h-3.5 text-gray-400" aria-hidden />
-        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-300">
-          {monthName(month)}
-        </h3>
-      </header>
-      <div className="grid grid-cols-7 gap-0.5 text-center">
-        {["M", "T", "W", "T", "F", "S", "S"].map((d, i) => (
-          <span key={i} className="text-[9px] uppercase text-gray-400 py-1">{d}</span>
-        ))}
-        {Array.from({ length: lead }).map((_, i) => <span key={`pad-${i}`} />)}
-        {days.map((d) => {
-          const who = byDay.get(d.key);
-          const label = who
-            ? `${shortDate(d.key)} — ${who.join(", ")}`
-            : shortDate(d.key);
-          return (
-            <span
-              key={d.key}
-              title={label}
-              aria-label={label}
-              className={`relative h-6 flex items-center justify-center text-[11px] tabular-nums rounded ${
-                d.key === today
-                  ? "bg-indigo-600 text-white font-semibold"
-                  : who
-                    ? "bg-sky-50 dark:bg-sky-500/15 text-sky-700 dark:text-sky-300 font-medium"
-                    : "text-gray-500 dark:text-slate-400"
-              }`}
-            >
-              {d.dom}
-              {who && d.key !== today && (
-                <span className="absolute bottom-0.5 w-1 h-1 rounded-full bg-sky-500" aria-hidden />
-              )}
-            </span>
-          );
-        })}
-      </div>
-      <p className="text-[10px] text-gray-400 mt-2 flex items-center gap-1.5">
-        <span className="inline-block w-2 h-2 rounded-full bg-sky-500" aria-hidden />
-        Somebody is on approved leave
-      </p>
-    </section>
-  );
-}
-
 function AskForLeave({
   canRecordForOthers, onClose, onDone,
 }: {

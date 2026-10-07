@@ -339,8 +339,11 @@ export function LeaveTab({
                               <Td align="right" className="text-gray-600 dark:text-slate-300">{r.days}</Td>
                               <Td>
                                 {r.status === "APPROVED" ? (
-                                  <StatusBadge tone={r.kind === "UNPAID" ? "grey" : "green"}>
-                                    {r.kind === "UNPAID" ? "Unpaid" : "Paid"}
+                                  // Say both at once — it's approved, AND whether
+                                  // it's paid or unpaid — so the row isn't read as
+                                  // just "Unpaid" with no decision shown.
+                                  <StatusBadge tone="green">
+                                    {r.kind === "UNPAID" ? "Approved · Unpaid" : "Approved · Paid"}
                                   </StatusBadge>
                                 ) : (
                                   <StatusBadge tone={STATUS_TONE[r.status]}>{STATUS_LABEL[r.status]}</StatusBadge>
@@ -383,7 +386,11 @@ export function LeaveTab({
                                 {dateRange(r.start, r.end)} · {r.days}d
                               </p>
                             </div>
-                            <StatusBadge tone={STATUS_TONE[r.status]}>{STATUS_LABEL[r.status]}</StatusBadge>
+                            <StatusBadge tone={r.status === "APPROVED" ? "green" : STATUS_TONE[r.status]}>
+                              {r.status === "APPROVED"
+                                ? (r.kind === "UNPAID" ? "Approved · Unpaid" : "Approved · Paid")
+                                : STATUS_LABEL[r.status]}
+                            </StatusBadge>
                           </div>
                         </MobileCard>
                       ))}

@@ -3,8 +3,9 @@
 import { RequireCapability } from "@/components/layout/RequireCapability";
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { Search, Plus, Users, TrendingUp, UserCheck } from "lucide-react";
+import { Search, Plus, Users, TrendingUp, UserCheck, Upload } from "lucide-react";
 import { ClientCard } from "@/components/clients/ClientCard";
+import { BulkImportDialog } from "@/components/clients/BulkImportDialog";
 import { Button } from "@/components/ui/Button";
 import { ClientSummary, ClientStatus } from "@/types";
 
@@ -22,6 +23,7 @@ function ClientsPageBody() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<ClientStatus | "ALL">("ALL");
+  const [importOpen, setImportOpen] = useState(false);
 
   const fetchClients = useCallback(async () => {
     setLoading(true);
@@ -63,11 +65,26 @@ function ClientsPageBody() {
               Manage your agency's client relationships
             </p>
           </div>
-          <Link href="/clients/new">
-            <Button icon={<Plus className="w-4 h-4" />}>New Client</Button>
-          </Link>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              variant="secondary"
+              icon={<Upload className="w-4 h-4" />}
+              onClick={() => setImportOpen(true)}
+            >
+              Bulk import
+            </Button>
+            <Link href="/clients/new">
+              <Button icon={<Plus className="w-4 h-4" />}>New Client</Button>
+            </Link>
+          </div>
         </div>
       </div>
+
+      <BulkImportDialog
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        onImported={fetchClients}
+      />
 
       <div className="flex-1 px-4 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-6">
         {/* Stats */}

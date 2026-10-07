@@ -20,7 +20,8 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Plus, UserPlus, Pencil, ExternalLink, KeyRound, Copy, Check } from "lucide-react";
+import { Plus, UserPlus, Pencil, ExternalLink, KeyRound, Copy, Check, Upload } from "lucide-react";
+import { TeamImportDialog } from "@/components/hr/TeamImportDialog";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
@@ -71,6 +72,7 @@ export function StaffTab({
   const [open, setOpen] = useState<string | null>(null);
   const [editing, setEditing] = useState<Staff | null>(null);
   const [adding, setAdding] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [craft, setCraft] = useState("");
   const [type, setType] = useState("");
   const [status, setStatus] = useState("");
@@ -161,11 +163,24 @@ export function StaffTab({
         />
         {filtersOn && <ClearFilters onClear={() => { setCraft(""); setType(""); setStatus(""); }} />}
         {canInvite && (
-          <Button size="sm" className="ml-auto" icon={<Plus className="w-3.5 h-3.5" />} onClick={() => setAdding(true)}>
-            Add person
-          </Button>
+          <div className="ml-auto flex items-center gap-2">
+            <Button size="sm" variant="secondary" icon={<Upload className="w-3.5 h-3.5" />} onClick={() => setImporting(true)}>
+              Bulk invite
+            </Button>
+            <Button size="sm" icon={<Plus className="w-3.5 h-3.5" />} onClick={() => setAdding(true)}>
+              Add person
+            </Button>
+          </div>
         )}
       </div>
+
+      {importing && (
+        <TeamImportDialog
+          open={importing}
+          onClose={() => setImporting(false)}
+          onImported={load}
+        />
+      )}
 
       {error ? (
         <LoadError message="Couldn't load the staff list" detail={error} onRetry={load} />

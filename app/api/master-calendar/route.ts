@@ -110,6 +110,12 @@ export async function GET(req: NextRequest) {
             where: {
               organizationId: user.organizationId,
               date: { gte: from, lt: to },
+              // When the calendar is filtered to one person, their leave is the
+              // only leave that belongs on it. Without this the away layer kept
+              // showing the WHOLE team's days off while everything else narrowed
+              // to the chosen person — so the page read as if that person were
+              // away on days their colleagues were, which they were not.
+              ...(assigneeId ? { userId: assigneeId } : {}),
             },
             select: {
               userId: true, date: true, kind: true, reason: true,

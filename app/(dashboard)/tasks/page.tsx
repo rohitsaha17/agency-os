@@ -14,7 +14,7 @@ import { TaskModal } from "@/components/tasks/TaskModal";
 import { DeliveryDialog } from "@/components/tasks/DeliveryDialog";
 import { CalendarTasksSwitch } from "@/components/calendar/CalendarTasksSwitch";
 import { useCurrentUser } from "@/lib/useCurrentUser";
-import { can } from "@/lib/permissions";
+import { can, rolesSeniorTo } from "@/lib/permissions";
 import { TaskPanel } from "@/components/tasks/TaskPanel";
 import { TaskListView, TaskBoardView, useBuckets, useProjectGroups } from "@/components/tasks/TaskViews";
 import { StatusLegend } from "@/components/tasks/StatusLegend";
@@ -348,13 +348,18 @@ function TasksBoardInner() {
         if (!Array.isArray(d)) return;
         // A design lead is offered their designers and nobody else, so the
         // picker cannot name somebody whose list they would then be refused.
-        const rows = isDesignLead && !seesEveryone
+        let rows = isDesignLead && !seesEveryone
           ? d.filter((u: { jobTitle?: { isDesign?: boolean } | null }) => u.jobTitle?.isDesign)
           : d;
+        // Never offer someone more senior than you. Their board is hidden by
+        // taskVisibilityScope, so picking them would only ever show an empty
+        // list under their name — and the point is that it is not yours to see.
+        const seniors = new Set<string>(rolesSeniorTo(currentUser?.role));
+        rows = rows.filter((u: { role?: string | null }) => !seniors.has(u.role ?? "TEAM"));
         setPeople(rows.map((u: { id: string; name: string }) => ({ id: u.id, name: u.name })));
       })
       .catch(() => {});
-  }, [canSwitchViewer, isDesignLead, seesEveryone]);
+  }, [canSwitchViewer, isDesignLead, seesEveryone, currentUser?.role]);
 
   const viewingLabel =
     viewUserId === "__all__" ? "Everyone"
@@ -390,26 +395,23 @@ function TasksBoardInner() {
     }
   }, [viewUserId, currentUser?.id]);
 
-  /** Owner, admin and manager. An SMM sees the board but not the notebook. */
-  const seesPersonal = can(currentUser, "tasks.viewPersonal");
-  /** The reminders on screen belong to somebody else. */
-  const viewingOthersList =
-    seesPersonal && !!viewUserId && viewUserId !== currentUser?.id;
+  /*
+    Personal reminders are private — there is no "view someone else's list".
+    The person picker still switches the shared BOARD below, but it never
+    reaches this column: "My Personal List" is always, only, your own.
+  */
+  const viewingOthersList = false;
 
   const fetchAll = useCallback(async (opts?: { silent?: boolean }) => {
     if (!opts?.silent) setLoading(true);
     try {
       /*
-        The reminders column follows the person picker, like everything else
-        on this page. Without tasks.viewPersonal the query is ignored by the
-        server and you get your own, which is what a junior should see.
+        The reminders column does NOT follow the person picker. It is private:
+        the server only ever returns your own, so switching to a colleague
+        reloads their board but leaves this column yours.
       */
-      const personalQuery =
-        seesPersonal && viewUserId === "__all__" ? "?scope=all"
-        : seesPersonal && viewUserId ? `?userId=${encodeURIComponent(viewUserId)}`
-        : "";
       const [itemsRes, tasksRes, listsRes] = await Promise.all([
-        fetch(`/api/personal-items${personalQuery}`),
+        fetch(`/api/personal-items`),
         fetch("/api/tasks?includeCompleted=true&all=1"),
         // Your custom lists. Always your own — a colleague's list view still
         // shows their reminders, but the named lists belong to whoever is
@@ -454,10 +456,10 @@ function TasksBoardInner() {
     } finally {
       setLoading(false);
     }
-    // viewUserId is in here because the reminders column follows the picker:
-    // without it, switching to a colleague reloaded their tasks and left the
-    // previous person's reminders sitting beside them.
-  }, [currentUser?.id, seesPersonal, viewUserId]);
+    // The board arrives whole (/api/tasks is scoped server-side) and the
+    // picker narrows it in memory, so the fetch itself depends only on who is
+    // signed in — not on viewUserId. The reminders column is always your own.
+  }, [currentUser?.id]);
 
   useEffect(() => { if (currentUser) fetchAll(); }, [currentUser, fetchAll]);
   // Live: pick up calendar-side edits (and teammates' changes) instantly
@@ -989,18 +991,16 @@ function TasksBoardInner() {
       : "bg-white dark:bg-slate-900 border border-gray-200 dark:border-white/[0.08] rounded-2xl overflow-hidden mb-4"}>
       <header className="px-4 py-3 border-b border-gray-100 dark:border-white/[0.05] flex-shrink-0">
         <h2 className="text-[13px] font-semibold text-gray-800 dark:text-slate-200">
-          {viewingOthersList ? `${viewingLabel}’s list` : "My List"}
+          My Personal List <span className="font-normal text-gray-400">(Private)</span>
         </h2>
         {/*
-          It used to say "Your own reminders", and that stopped being true the
-          day owners, admins and managers could read them. A label that
-          promises privacy the product does not keep is worse than no label —
-          somebody writes differently when they believe nobody else is looking.
+          It once said "visible to admins and managers", because at the time
+          they could read these rows. That capability was removed so this could
+          be what it now honestly claims: private. Nobody else — no manager, no
+          admin, no owner — sees what you write here.
         */}
         <p className="text-[11px] text-gray-400 mt-0.5">
-          {viewingOthersList
-            ? "Their reminders"
-            : "Your reminders · visible to admins and managers"}
+          Only you can see this — your reminders are never shared with anyone.
         </p>
       </header>
       <div className={boxed ? "flex-1 overflow-y-auto p-2 min-h-0" : "p-2"}>
@@ -1059,7 +1059,7 @@ function TasksBoardInner() {
               </button>
               <button
                 onClick={() => deleteList(list.id)}
-                title="Delete list — its tasks move back to My List"
+                title="Delete list — its tasks move back to My Personal List"
                 className="p-1 text-gray-400 hover:text-red-500"
               >
                 <Trash2 className="w-3.5 h-3.5" />
@@ -1510,7 +1510,7 @@ function TasksBoardInner() {
 
             <label className="flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 rounded-lg cursor-default">
               <input type="checkbox" checked readOnly className="rounded border-gray-300 text-indigo-600" />
-              <span className="flex-1 truncate font-medium">My List</span>
+              <span className="flex-1 truncate font-medium">My Personal List <span className="font-normal text-gray-400">(Private)</span></span>
               <span className="text-xs text-gray-400">{myListCount}</span>
             </label>
 

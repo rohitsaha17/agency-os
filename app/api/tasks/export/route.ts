@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { taskVisibilityScope, mayExportTasksFor } from "@/lib/api-permissions";
+import { rolesSeniorTo } from "@/lib/permissions";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 import { buildTaskSheetHtml } from "@/lib/pdfTemplates";
 import type { CompanySettings } from "@/types";
@@ -55,9 +56,17 @@ export async function GET(req: NextRequest) {
       const targetId = requested || user.id;
       const target = await prisma.user.findFirst({
         where: { id: targetId, organizationId: user.organizationId },
-        select: { id: true, name: true },
+        select: { id: true, name: true, role: true },
       });
       if (!target) throw new ApiError("Person not found", 404);
+      // No reaching up the org chart. taskVisibilityScope would already hide a
+      // senior's work and leave this sheet titled with their name but empty —
+      // so refuse outright rather than hand back a document that misrepresents
+      // itself. Your own sheet is always allowed.
+      const seniorToMe = new Set<string>(rolesSeniorTo(user.role));
+      if (target.id !== user.id && seniorToMe.has(target.role)) {
+        throw new ApiError("You can only export tasks for yourself and your team, not someone senior to you", 403);
+      }
       subject = target.name;
       assigneeId = target.id;
     }

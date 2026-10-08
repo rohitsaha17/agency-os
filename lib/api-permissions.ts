@@ -12,7 +12,7 @@
  */
 import { NextResponse } from "next/server";
 import { ApiError } from "./api-errors";
-import { can, stripFinancials, type Capability, type HasRole } from "./permissions";
+import { can, rolesSeniorTo, stripFinancials, type Capability, type HasRole } from "./permissions";
 import { isDesignHead, designHeadMayAssignTo, designTasksScope, type WithJobTitle } from "./design-head";
 
 /** Throws ApiError(403) unless the user holds the capability. */
@@ -51,9 +51,12 @@ export function jsonFor<T>(
  * A Prisma `where` fragment limiting a task list to what this person should
  * see — the org chart expressed as a query.
  *
- * Admin and manager see the whole board; that's the job. An SMM sees the
- * projects they plan and anything routed to them. Everyone else sees the work
- * they were actually given, and not a list of what their colleagues are up to.
+ * Owner and admin see the whole board; that's the job. A manager or an SMM
+ * sees the board too, but NOT upward: a junior should not be reading their
+ * senior's task list, so the work on a more-senior person's plate is hidden
+ * from them unless they are part of it. An SMM sees the projects they plan and
+ * anything routed to them. Everyone else sees the work they were actually
+ * given, and not a list of what their colleagues are up to.
  *
  * Returns `{}` for the unrestricted case so it can be spread unconditionally.
  * Combine with AND, never by spreading into a `where` that already has an OR.
@@ -61,10 +64,35 @@ export function jsonFor<T>(
 export function taskVisibilityScope(
   user: { id: string; role?: string | null } & WithJobTitle,
 ) {
-  // Everybody's work, for the people whose job is knowing who is doing what.
+  // The people whose job is knowing who is doing what see the board — but a
+  // manager does not look up at an admin, nor an SMM at a manager. Only owner
+  // and admin, with nobody above them, see it whole.
+  //
   // Was projects.manage, which tied seeing the board to running a project and
-  // so left an SMM briefing four people unable to see where any of it went.
-  if (can(user, "tasks.viewAll")) return {};
+  // so left an SMM briefing four people unable to see where any of it went;
+  // then it was wide open, which let an SMM read an admin's own task list.
+  if (can(user, "tasks.viewAll")) {
+    const seniors = rolesSeniorTo(user.role);
+    if (seniors.length === 0) return {}; // owner / admin — the whole board
+
+    // Everything, minus the private work of the people above you. "Minus"
+    // never reaches what is yours: a task you are assigned, delegated or set
+    // to review stays visible however senior the colleague beside you on it.
+    return {
+      OR: [
+        { assignees: { some: { userId: user.id } } },
+        { managerId: user.id },
+        { approverId: user.id },
+        {
+          AND: [
+            { NOT: { assignees: { some: { user: { role: { in: seniors } } } } } },
+            { NOT: { manager: { role: { in: seniors } } } },
+            { NOT: { approver: { role: { in: seniors } } } },
+          ],
+        },
+      ],
+    };
+  }
 
   // Typed loosely because the clauses are different shapes — an assignee
   // filter, a manager id, a relation traversal — and they only ever meet

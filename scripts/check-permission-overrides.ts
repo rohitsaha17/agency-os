@@ -98,25 +98,17 @@ check("a valid grant beside an invalid one still lands",
   can(asUser("TEAM", { TEAM: { "nope.nope": true, "hr.today": true } }), "hr.today"), true);
 
 console.log("");
-console.log("— the board and the notebook are different permissions —");
+console.log("— the board is shared; the notebook is nobody's business —");
 /*
-  tasks.viewAll is the task board: who is doing what. tasks.viewPersonal is
-  somebody's own reminders, which nobody assigned and which were written on
-  the understanding that they were private.
-
-  An SMM holds the first and not the second, and that gap is the whole point
-  of there being two capabilities rather than one.
+  tasks.viewAll is the task board: who is doing what. Personal reminders —
+  "My Personal List" — are a separate thing entirely, and there is no longer
+  any capability that reads someone else's. They are private, full stop, so
+  the only assertion left is that the board capability behaves as before.
 */
 check("an SMM sees the board", can(asUser("SMM"), "tasks.viewAll"), true);
-check("...and not the notebook", can(asUser("SMM"), "tasks.viewPersonal"), false);
-check("a manager sees both",
-  can(asUser("MANAGER"), "tasks.viewAll") && can(asUser("MANAGER"), "tasks.viewPersonal"), true);
-check("an admin sees both",
-  can(asUser("ADMIN"), "tasks.viewAll") && can(asUser("ADMIN"), "tasks.viewPersonal"), true);
-check("a junior sees neither",
-  can(asUser("TEAM"), "tasks.viewAll") || can(asUser("TEAM"), "tasks.viewPersonal"), false);
-check("and a workspace can take the notebook back off its managers",
-  can(asUser("MANAGER", { MANAGER: { "tasks.viewPersonal": false } }), "tasks.viewPersonal"), false);
+check("a manager sees the board", can(asUser("MANAGER"), "tasks.viewAll"), true);
+check("an admin sees the board", can(asUser("ADMIN"), "tasks.viewAll"), true);
+check("a junior does not", can(asUser("TEAM"), "tasks.viewAll"), false);
 
 check("the audit trail belongs to the people who would be asked about it",
   ["OWNER", "ADMIN", "MANAGER"].every((r) => can(asUser(r), "activity.view")), true);

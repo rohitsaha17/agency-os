@@ -38,6 +38,8 @@ type TestTask = {
   managerId?: string | null;
   approverId?: string | null;
   projectMembers?: { userId: string; role: string }[];
+  /** The role of each user id involved, for the seniority clauses. */
+  roles?: Record<string, Role>;
 };
 
 const ME = "me";
@@ -48,12 +50,39 @@ function serverWouldReturn(user: { id: string; role: Role }, task: TestTask): bo
   const scope = taskVisibilityScope(user) as Record<string, unknown>;
   if (!scope || Object.keys(scope).length === 0) return true; // {} = everything
 
+  // A user with no role declared on the task is treated as a junior — the
+  // least-privilege default the real query would land on too.
+  const roleOf = (userId: string | null | undefined): Role =>
+    (userId && task.roles?.[userId]) || "TEAM";
+
   const clause = (c: Record<string, any>): boolean => {
+    if (c.AND) return (c.AND as Record<string, any>[]).every(clause);
+    if (c.OR) return (c.OR as Record<string, any>[]).some(clause);
+    if (c.NOT) return !clause(c.NOT);
+
+    // assignee, by id or by role
     if (c.assignees?.some?.userId !== undefined) {
       return task.assignees.some((a) => a.userId === c.assignees.some.userId);
     }
+    if (c.assignees?.some?.user?.role?.in !== undefined) {
+      const roles: Role[] = c.assignees.some.user.role.in;
+      return task.assignees.some((a) => roles.includes(roleOf(a.userId)));
+    }
+
+    // manager, by id or by role
     if (c.managerId !== undefined) return task.managerId === c.managerId;
+    if (c.manager?.role?.in !== undefined) {
+      const roles: Role[] = c.manager.role.in;
+      return task.managerId != null && roles.includes(roleOf(task.managerId));
+    }
+
+    // approver, by id or by role
     if (c.approverId !== undefined) return task.approverId === c.approverId;
+    if (c.approver?.role?.in !== undefined) {
+      const roles: Role[] = c.approver.role.in;
+      return task.approverId != null && roles.includes(roleOf(task.approverId));
+    }
+
     if (c.project?.members?.some !== undefined) {
       const m = c.project.members.some;
       return (task.projectMembers ?? []).some(
@@ -112,20 +141,61 @@ for (const role of ROLES) {
 console.log("");
 console.log("— who can see what everybody is doing —");
 /*
-  Reading everybody's work is its own capability now, rather than a side
-  effect of being able to run a project. An SMM hands work out all day and
-  could not see where any of it went; a junior still sees their own.
-
-  An empty scope means "no restriction" — the whole organization.
+  Reading the board is its own capability now, rather than a side effect of
+  being able to run a project. But it does not look UPWARD: a manager does not
+  read an admin's list, nor an SMM a manager's. Only owner and admin, with
+  nobody above them, see the board whole — an empty scope, "no restriction".
 */
 const seesAll = (role: Role) =>
   Object.keys(taskVisibilityScope({ id: ME, role })).length === 0;
-for (const role of ["OWNER", "ADMIN", "MANAGER", "SMM"] as Role[]) {
-  check(`${role.padEnd(7)} sees everybody's tasks`, seesAll(role), true);
+for (const role of ["OWNER", "ADMIN"] as Role[]) {
+  check(`${role.padEnd(7)} sees the whole board`, seesAll(role), true);
 }
-check("TEAM    does not", seesAll("TEAM"), false);
-check("...and is still scoped to their own work",
+for (const role of ["MANAGER", "SMM", "TEAM"] as Role[]) {
+  check(`${role.padEnd(7)} is scoped, not unrestricted`, seesAll(role), false);
+}
+check("a junior is still scoped to their own work",
   serverWouldReturn({ id: ME, role: "TEAM" }, TASKS[4]), false);
+
+console.log("");
+console.log("— a junior does not read a senior's task list —");
+/*
+  The rule the whole change is for: an SMM must not see an admin's tasks, a
+  manager must not see an owner's. A task on a more-senior person's plate is
+  hidden — UNLESS the viewer is part of it, which no seniority overrides.
+*/
+const RANK: Record<Role, number> = { OWNER: 3, ADMIN: 3, MANAGER: 2, SMM: 1, TEAM: 0 };
+// A task that is somebody's alone, by role. Nobody junior is on it.
+const ownedBy = (role: Role): TestTask => ({
+  name: `${role}'s own task`,
+  assignees: [{ userId: `u-${role}` }],
+  roles: { [`u-${role}`]: role },
+});
+for (const viewer of ["MANAGER", "SMM"] as Role[]) {
+  for (const owner of ["OWNER", "ADMIN", "MANAGER", "SMM", "TEAM"] as Role[]) {
+    const senior = RANK[owner] > RANK[viewer];
+    check(`${viewer.padEnd(7)} ${senior ? "cannot" : "can    "} see a ${owner}'s task`,
+      serverWouldReturn({ id: ME, role: viewer }, ownedBy(owner)), !senior);
+  }
+}
+// Owner and admin are peers at the top: each still sees the other's.
+check("an admin still sees an owner's task",
+  serverWouldReturn({ id: ME, role: "ADMIN" }, ownedBy("OWNER")), true);
+// Involvement beats seniority, every way in.
+check("an SMM sees an admin's task they are assigned to",
+  serverWouldReturn({ id: ME, role: "SMM" },
+    { name: "admin task, I'm on it",
+      assignees: [{ userId: ME }, { userId: "u-ADMIN" }],
+      roles: { "u-ADMIN": "ADMIN" } }), true);
+check("...one they delegated",
+  serverWouldReturn({ id: ME, role: "SMM" },
+    { name: "admin task, I manage it",
+      assignees: [{ userId: "u-ADMIN" }], managerId: ME,
+      roles: { "u-ADMIN": "ADMIN" } }), true);
+check("...and one they are set to review",
+  serverWouldReturn({ id: ME, role: "SMM" },
+    { name: "admin task, I approve", assignees: [{ userId: "u-ADMIN" }], approverId: ME,
+      roles: { "u-ADMIN": "ADMIN" } }), true);
 
 console.log("");
 console.log("— the regression that started this —");

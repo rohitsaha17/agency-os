@@ -62,19 +62,18 @@ export type Capability =
    * hr.records, and assigning is still bounded by assignScope.
    */
   | "tasks.viewAll"
-  /**
-   * Read other people's personal reminders — the "My List" column.
-   *
-   * Narrower than tasks.viewAll on purpose, and owner, admin and manager
-   * only. Those rows are not work anybody assigned; they are what somebody
-   * wrote for themselves, and a supervisor reading them is a different act
-   * from seeing the board.
-   *
-   * Its own capability rather than a role check so it can be switched off in
-   * Settings, and so the decision is visible there rather than buried in a
-   * route.
-   */
-  | "tasks.viewPersonal"
+  /*
+    There is no "read someone else's personal reminders" capability, and that
+    is deliberate. "My Personal List" is private to the person who writes it —
+    nobody, not even an owner, reads another person's notebook. It was once a
+    capability (tasks.viewPersonal) held by owner, admin and manager; it was
+    removed so the column could honestly be labelled private, because a
+    reminder list somebody believes is theirs alone is written in differently
+    from one a supervisor might open.
+
+    The task BOARD — who is doing what — is still shared, through
+    tasks.viewAll. This only ever concerned the self-written reminders.
+  */
   | "cycles.close"
   | "billing.flag"
   | "financials.view"
@@ -151,7 +150,7 @@ const MATRIX: Record<Exclude<Role, "MEMBER">, Record<Capability, boolean>> = {
     "projects.pricing": true, "projects.assignSmm": true, "activity.view": true,
     "content.plan": true,
     "tasks.assign": true, "tasks.review": true, "tasks.viewAll": true,
-    "tasks.viewPersonal": true, "cycles.close": true,
+    "cycles.close": true,
     "billing.flag": true, "financials.view": true, "expenses.create": true,
     "invoices.manage": true, "reports.all": true, "reports.delivery": true,
     "attendance.mark": true, "hr.today": true, "hr.records": true,
@@ -163,7 +162,7 @@ const MATRIX: Record<Exclude<Role, "MEMBER">, Record<Capability, boolean>> = {
     "projects.pricing": true, "projects.assignSmm": true, "activity.view": true,
     "content.plan": true,
     "tasks.assign": true, "tasks.review": true, "tasks.viewAll": true,
-    "tasks.viewPersonal": true, "cycles.close": true,
+    "cycles.close": true,
     "billing.flag": true, "financials.view": true, "expenses.create": true,
     "invoices.manage": true, "reports.all": true, "reports.delivery": true,
     "attendance.mark": true, "hr.today": true, "hr.records": true,
@@ -179,7 +178,7 @@ const MATRIX: Record<Exclude<Role, "MEMBER">, Record<Capability, boolean>> = {
     "projects.pricing": true, "projects.assignSmm": true, "activity.view": true,
     "content.plan": true,
     "tasks.assign": true, "tasks.review": true, "tasks.viewAll": true,
-    "tasks.viewPersonal": true, "cycles.close": true,
+    "cycles.close": true,
     "billing.flag": true, "financials.view": true, "expenses.create": true,
     "invoices.manage": true,
     "reports.all": false, // no org P&L / revenue / margin
@@ -217,9 +216,6 @@ const MATRIX: Record<Exclude<Role, "MEMBER">, Record<Capability, boolean>> = {
       capability: it widens what is visible, not what can be changed.
     */
     "tasks.viewAll": true,
-    // The board, not the notebook. An SMM needs to know where work went;
-    // reading what a colleague wrote for themselves is a supervisor's act.
-    "tasks.viewPersonal": false,
     /*
       Was true, and it was inconsistent with the row it sits in: deciding
       what a client is charged for is a money decision, and this role has
@@ -265,7 +261,6 @@ const MATRIX: Record<Exclude<Role, "MEMBER">, Record<Capability, boolean>> = {
     // Their own work, and whatever they are managing or reviewing on it.
     // Everybody's board is a supervisor's view, not a junior's.
     "tasks.viewAll": false,
-    "tasks.viewPersonal": false,
     "financials.view": false,
     // They can file what they spent out of pocket — and see only their own.
     // Scoping lives in the expenses routes, not here.
@@ -456,6 +451,41 @@ export function assignScope(user: HasRole | null | undefined): AssignScope {
 export function canAssignTo(actor: HasRole | null | undefined, targetRole: string): boolean {
   if (!actor) return false;
   return SCOPE_TARGETS[assignScope(actor)].includes(normalizeRole(targetRole));
+}
+
+/**
+ * The org chart as rungs, highest first.
+ *
+ * OWNER and ADMIN share the top rung — an admin is an owner for everything
+ * but immovability — then MANAGER, SMM and TEAM. This is the same hierarchy
+ * ASSIGN_SCOPE already encodes (who may hand work to whom); expressed as a
+ * rank so a second question can be asked of it: "is this person above me?"
+ */
+const ROLE_RANK: Record<Exclude<Role, "MEMBER">, number> = {
+  OWNER: 3,
+  ADMIN: 3,
+  MANAGER: 2,
+  SMM: 1,
+  TEAM: 0,
+};
+
+/**
+ * The roles that sit STRICTLY above `role` on the org chart.
+ *
+ * Used to keep a junior out of a senior's task list: a task on a more-senior
+ * person's plate is not something a junior should be reading, even when the
+ * junior can otherwise see the whole board. Peers (same rung) are not senior,
+ * so this never hides a colleague's work from an equal.
+ *
+ * Returns [] for OWNER/ADMIN — nobody is above them, so nothing is hidden.
+ */
+export function rolesSeniorTo(
+  role: string | null | undefined,
+): Exclude<Role, "MEMBER">[] {
+  const mine = ROLE_RANK[normalizeRole(role)];
+  return (Object.keys(ROLE_RANK) as Exclude<Role, "MEMBER">[]).filter(
+    (r) => ROLE_RANK[r] > mine,
+  );
 }
 
 /**

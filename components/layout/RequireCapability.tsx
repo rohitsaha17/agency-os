@@ -14,12 +14,19 @@ import { useCurrentUser } from "@/lib/useCurrentUser";
 import { can, type Capability } from "@/lib/permissions";
 
 export function RequireCapability({
-  capability, children, what,
+  capability, children, what, allowWhen,
 }: {
   capability: Capability;
   children: React.ReactNode;
   /** What the page is, in words — used in the refusal message. */
   what?: string;
+  /**
+   * An escape hatch for a page whose audience is wider than one capability —
+   * e.g. Approvals, which a Head of Design may open by designation even without
+   * tasks.review. When true, the capability check is waived. The API still
+   * enforces its own rule; this only decides whether to show the page shell.
+   */
+  allowWhen?: boolean;
 }) {
   const { user, loading } = useCurrentUser();
 
@@ -33,7 +40,7 @@ export function RequireCapability({
     );
   }
 
-  if (!can(user, capability)) {
+  if (!can(user, capability) && !allowWhen) {
     return (
       <div role="alert" className="flex flex-col items-center justify-center py-24 px-6 text-center">
         <div className="w-12 h-12 rounded-2xl bg-gray-100 dark:bg-white/[0.06] flex items-center justify-center mb-4">

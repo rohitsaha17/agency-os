@@ -403,6 +403,19 @@ function InvoicesPageInner() {
     fetch("/api/projects").then((r) => r.json()).then((d) => setProjects(Array.isArray(d) ? d : d.projects ?? []));
   }, []);
 
+  // The cycle-closed notification deep-links here with ?needsPricing=1 —
+  // "items need an amount before invoicing". That amount is given in the
+  // build-from-billables flow, so open it straight away instead of landing on a
+  // plain list that doesn't say what to do. Runs once; the param is cleared so a
+  // refresh doesn't reopen it.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("needsPricing") !== "1") return;
+    setAddOpen(true);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("needsPricing");
+    window.history.replaceState({}, "", url.pathname + url.search);
+  }, []);
+
   const handleStatusChange = async (id: string, status: InvoiceStatus) => {
     const inv = invoices.find((i) => i.id === id);
 

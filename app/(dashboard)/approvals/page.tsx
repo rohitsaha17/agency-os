@@ -295,13 +295,21 @@ function ApprovalsInner() {
           {[1, 2, 3].map((i) => <div key={i} className="h-20 bg-gray-100 rounded-xl animate-pulse" />)}
         </div>
       ) : items.length === 0 ? (
-        <div className="flex-1 flex flex-col items-center justify-center text-center px-6">
-          <div className="w-14 h-14 rounded-2xl bg-emerald-50 flex items-center justify-center mb-4">
-            <CheckCircle2 className="w-7 h-7 text-emerald-500" />
+        // With a live assignment queue above, "Queue is clear" would contradict
+        // it — so only claim the whole queue is clear when it truly is.
+        assignments.length > 0 ? (
+          <div className="flex-1 flex items-center justify-center text-center px-6 text-sm text-gray-400">
+            No work is waiting for content review.
           </div>
-          <p className="text-base font-semibold text-gray-800">Queue is clear</p>
-          <p className="text-sm text-gray-500 mt-1">Work submitted for your review lands here.</p>
-        </div>
+        ) : (
+          <div className="flex-1 flex flex-col items-center justify-center text-center px-6">
+            <div className="w-14 h-14 rounded-2xl bg-emerald-50 flex items-center justify-center mb-4">
+              <CheckCircle2 className="w-7 h-7 text-emerald-500" />
+            </div>
+            <p className="text-base font-semibold text-gray-800">Queue is clear</p>
+            <p className="text-sm text-gray-500 mt-1">Work submitted for your review lands here.</p>
+          </div>
+        )
       ) : (
         <div className="flex-1 flex min-h-0">
           {/* The queue. On a phone it's the whole screen until you pick
@@ -488,8 +496,14 @@ function ApprovalsInner() {
 }
 
 export default function ApprovalsPage() {
+  // A Head of Design may reach Approvals to act on the assignment queue even
+  // when their role carries no tasks.review (e.g. a TEAM-role design lead).
+  // The page and the API both honour that; each queue still shows only to the
+  // audience the server lets act on it.
+  const { user } = useCurrentUser();
+  const isHeadOfDesign = user?.designation === "HEAD_OF_DESIGN";
   return (
-    <RequireCapability capability="tasks.review" what="Approvals">
+    <RequireCapability capability="tasks.review" what="Approvals" allowWhen={isHeadOfDesign}>
       <ApprovalsInner />
     </RequireCapability>
   );

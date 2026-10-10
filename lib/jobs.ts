@@ -4,8 +4,22 @@ import { logStatus } from "@/lib/audit";
 import { scanUpcomingEvents } from "@/lib/reminders";
 import { runV3Reminders } from "@/lib/v3-reminders";
 import { designationBranches } from "@/lib/designation-scope";
+import { can } from "@/lib/permissions";
 
 function dayKey(d: Date) { return d.toISOString().slice(0, 10); }
+
+/**
+ * Keep only recipients who can actually OPEN the page a digest links to.
+ *
+ * These digests all point at /reports, which needs reports.delivery. The
+ * recipient queries include a Head-of-Design / POC designation branch, and that
+ * designation can sit on a role (e.g. TEAM) with no reports access — so without
+ * this a design lead got a "weekly digest" notification that opened a wall.
+ * Role-only check (defaults), which is the granularity these queries already use.
+ */
+function canOpenReports<T extends { role: string | null }>(people: T[]): T[] {
+  return people.filter((p) => can({ role: p.role }, "reports.delivery"));
+}
 
 /**
  * The v2 daily scan (docs/V2_CONTEXT.md Phase 8). Idempotent per calendar
@@ -94,14 +108,14 @@ export async function runDailyScan(
     }
     // summary to managers/heads
     if (overdueTasks.length > 0) {
-      const managers = await prisma.user.findMany({
+      const managers = canOpenReports(await prisma.user.findMany({
         where: {
           organizationId, isActive: true,
           // QA-018: resolve the head across v2 (enum) and v3 (job-title slug).
           OR: [{ role: { in: ["MANAGER", "ADMIN", "OWNER"] } }, ...designationBranches(["HEAD_OF_DESIGN"])],
         },
-        select: { id: true },
-      });
+        select: { id: true, role: true },
+      }));
       for (const mgr of managers) {
         const dup = await prisma.notification.findFirst({
           where: { userId: mgr.id, type: "DEADLINE_SUMMARY", createdAt: { gte: today } },
@@ -216,14 +230,14 @@ export async function runDailyScan(
         return `${name}: ${titles.length} overdue`;
       });
       if (lines.length) {
-        const heads = await prisma.user.findMany({
+        const heads = canOpenReports(await prisma.user.findMany({
           where: {
             organizationId, isActive: true,
             // QA-018: head via enum (v2) or job-title slug (v3).
             OR: [{ role: { in: ["MANAGER", "ADMIN", "OWNER"] } }, ...designationBranches(["HEAD_OF_DESIGN"])],
           },
-          select: { id: true },
-        });
+          select: { id: true, role: true },
+        }));
         await notifyMany(heads.map((h) => h.id), {
           organizationId,
           type: "DIGEST_WEEKLY",
@@ -255,14 +269,14 @@ export async function runDailyScan(
           .sort((a, b) => b._count._all - a._count._all)
           .map((r) => `${nameById.get(r.clientId) ?? r.clientId}: ${r._count._all} missed`)
           .join("\n");
-        const admins = await prisma.user.findMany({
+        const admins = canOpenReports(await prisma.user.findMany({
           where: {
             organizationId, isActive: true,
             // QA-018: POC via enum (v2) or job-title slug (v3).
             OR: [{ role: { in: ["ADMIN", "OWNER"] } }, ...designationBranches(["POC"])],
           },
-          select: { id: true },
-        });
+          select: { id: true, role: true },
+        }));
         await notifyMany(admins.map((a) => a.id), {
           organizationId,
           type: "DIGEST_MONTHLY",

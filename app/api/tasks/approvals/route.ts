@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAuth } from "@/lib/auth";
-import { requireCapability } from "@/lib/api-permissions";
-import { handleApiError } from "@/lib/api-errors";
+import { requireAuth, isHeadOfDesign } from "@/lib/auth";
+import { ApiError, handleApiError } from "@/lib/api-errors";
 import { can } from "@/lib/permissions";
 
 /**
@@ -18,14 +17,26 @@ import { can } from "@/lib/permissions";
 export async function GET(req: NextRequest) {
   try {
     const user = await requireAuth(req);
-    requireCapability(user, "tasks.review");
+    // Two audiences reach this inbox. Content REVIEWERS (tasks.review) get the
+    // submitted-work queue; ASSIGNMENT approvers (Head of Design, admin, owner)
+    // get the assignment queue. A Head of Design whose role is TEAM holds
+    // neither clients.manage nor tasks.review, so gating on tasks.review alone
+    // locked them out of the very queue the gate exists to give them.
+    const canReview = can(user, "tasks.review");
+    const canApproveAssignments = isHeadOfDesign(user);
+    if (!canReview && !canApproveAssignments) {
+      throw new ApiError("You do not have permission to perform this action", 403, "FORBIDDEN");
+    }
 
     // An SMM sees their own projects; admin and manager see everything, so
     // work is never stuck behind someone who's away.
     const seesEverything = can(user, "clients.manage");
 
     const [submitted, org] = await Promise.all([
-      prisma.task.findMany({
+      // Only a content reviewer gets the submitted-work half; a review-less
+      // assignment approver receives an empty list here and the assignment
+      // queue below.
+      !canReview ? Promise.resolve([]) : prisma.task.findMany({
         where: {
           organizationId: user.organizationId,
           deletedAt: null,

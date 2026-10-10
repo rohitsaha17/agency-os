@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { handleApiError } from "@/lib/api-errors";
+import { sendPushToUser } from "@/lib/push";
 import {
   localDay, dayToISO, celebrationsWithin, monthDayOf,
   noticeForOthers, noticeForSelf, celebrationDedupeKey,
@@ -114,7 +115,24 @@ async function dispatchTodaysNotices(
     }),
   );
 
-  if (data.length) {
-    await prisma.notification.createMany({ data, skipDuplicates: true });
+  if (!data.length) return;
+
+  // Which greetings don't exist yet — so the push goes out once, with the
+  // in-app row, and a second dashboard-open the same morning pushes nothing.
+  // (createMany's skipDuplicates handles the rows; this handles the push, which
+  // createMany can't tell us about since it returns only a count.)
+  const existing = await prisma.notification.findMany({
+    where: { dedupeKey: { in: data.map((d) => d.dedupeKey) } },
+    select: { dedupeKey: true },
+  });
+  const already = new Set(existing.map((e) => e.dedupeKey));
+  const fresh = data.filter((d) => !already.has(d.dedupeKey));
+
+  await prisma.notification.createMany({ data, skipDuplicates: true });
+
+  // Birthdays and work anniversaries reach the phone too, like every other
+  // notification. Fire-and-forget: a failed push never blocks the greeting.
+  for (const n of fresh) {
+    void sendPushToUser(n.userId, { title: n.title, body: n.body, link: n.link });
   }
 }

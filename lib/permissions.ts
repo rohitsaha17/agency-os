@@ -549,10 +549,15 @@ export function canViewContacts(user: HasRole | null | undefined): boolean {
  * only defence.
  */
 const MONEY_FIELDS = new Set([
-  "amount", "amountPaid", "balance", "billingAmount", "budget", "cycleAmount",
-  "defaultRate", "discountValue", "expensesTotal", "invoicedTotal", "margin",
-  "netMargin", "outstanding", "paidTotal", "pipelineValue", "revenue",
-  "subtotal", "total", "unitPrice", "value",
+  "amount", "amountPaid", "amountRepaid", "advanceDeducted", "balance",
+  "billingAmount", "budget", "cycleAmount", "defaultRate", "discountValue",
+  "expensesTotal", "grossAmount", "invoicedTotal", "margin", "monthlySalary",
+  "netAmount", "netMargin", "outstanding", "paidTotal", "pipelineValue",
+  "recoveryAmount", "revenue", "subtotal", "total", "unitPrice", "value",
+  // NOTE: when you add a money column to the schema, add its field name here.
+  // scripts/check-money-fields.ts fails the build if a Decimal column is
+  // neither listed here nor on its explicit non-money allowlist, so this set
+  // cannot silently drift out of date again.
 ]);
 
 /**

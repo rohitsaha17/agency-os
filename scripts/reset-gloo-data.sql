@@ -11,17 +11,19 @@
 --      titles/roles)
 --    • the admin user(s): everyone with role OWNER or ADMIN stays; all other
 --      users are removed
---  Everything else owned by the org is deleted: clients, projects, tasks,
---  content, invoices, billables, expenses, HR, availability, files, channels,
---  notifications, and the kept admins' own personal lists/reminders.
+--  Everything else owned by the org is deleted, and the kept admins' own
+--  personal lists/reminders too.
 --
---  Scoped strictly to the gloo orgs — no other tenant is touched.
---  Plain DELETEs (no PL/pgSQL) so the SQL editor runs it as-is.
+--  This version reads the LIVE list of tables, so it adapts to your database
+--  automatically (it skips tables your schema doesn't have) and deletes in a
+--  foreign-key-safe order. Scoped strictly to the gloo orgs — no other tenant
+--  is touched.
 --
---  HOW TO USE — two separate runs:
---    1) Select the STEP 1 query below and Run it. Confirm it lists EXACTLY your
---       two gloo orgs and the right admin for each. If anything else shows, STOP.
---    2) Select everything from "STEP 2" (the BEGIN … COMMIT block) and Run it.
+--  HOW TO RUN — two separate runs in the SQL editor:
+--    1) Run STEP 1 (the SELECT). Confirm it lists EXACTLY your two gloo orgs
+--       and the right admin email(s). If anything else shows, STOP.
+--    2) Run STEP 2 (the whole DO … block) with the green Run button.
+--       Do NOT use the editor's "Fix with Assistant" — just Run it as-is.
 -- ============================================================================
 
 
@@ -29,55 +31,80 @@
 SELECT o.id,
        o.name,
        (SELECT count(*) FROM users u WHERE u."organizationId" = o.id) AS users_total,
-       (SELECT count(*) FROM users u WHERE u."organizationId" = o.id
-          AND u.role IN ('OWNER','ADMIN')) AS admins_kept,
-       (SELECT string_agg(u.email, ', ') FROM users u WHERE u."organizationId" = o.id
-          AND u.role IN ('OWNER','ADMIN')) AS admin_emails
+       (SELECT count(*) FROM users u WHERE u."organizationId" = o.id AND u.role IN ('OWNER','ADMIN')) AS admins_kept,
+       (SELECT string_agg(u.email, ', ') FROM users u WHERE u."organizationId" = o.id AND u.role IN ('OWNER','ADMIN')) AS admin_emails
 FROM organizations o
 WHERE o.name ILIKE '%gloo%'
 ORDER BY o."createdAt";
 
 
 -- ─── STEP 2 — EXECUTE (run after STEP 1 looks right) ────────────────────────
-BEGIN;
+DO $reset$
+DECLARE
+  v_org   record;
+  v_users text[];
+  v_tbl   text;
+  v_remaining   text[];   -- tenant-scoped tables still to clear
+  v_remaining_u text[];   -- user-owned child tables still to clear
+  v_still   text[];
+  v_still_u text[];
+  v_progress boolean;
+  v_pass int;
+BEGIN
+  FOR v_org IN SELECT id, name FROM organizations WHERE name ILIKE '%gloo%' ORDER BY "createdAt" LOOP
+    SELECT array_agg(id) INTO v_users FROM users WHERE "organizationId" = v_org.id;
 
--- the kept admins' own personal lists/reminders (no organizationId column)
-DELETE FROM personal_items WHERE "userId" IN (SELECT id FROM users WHERE "organizationId" IN (SELECT id FROM organizations WHERE name ILIKE '%gloo%'));
-DELETE FROM task_lists     WHERE "userId" IN (SELECT id FROM users WHERE "organizationId" IN (SELECT id FROM organizations WHERE name ILIKE '%gloo%'));
+    -- Tenant-scoped tables that actually exist, minus the config we keep.
+    SELECT array_agg(table_name) INTO v_remaining
+      FROM information_schema.columns
+      WHERE table_schema = 'public' AND column_name = 'organizationId'
+        AND table_name NOT IN ('organizations','creative_types','designations');
 
--- all tenant data (children clear via ON DELETE CASCADE); clients is last
--- because invoices & projects reference it.
-DELETE FROM "attendance"         WHERE "organizationId" IN (SELECT id FROM organizations WHERE name ILIKE '%gloo%');
-DELETE FROM "billable_items"     WHERE "organizationId" IN (SELECT id FROM organizations WHERE name ILIKE '%gloo%');
-DELETE FROM "calendar_events"    WHERE "organizationId" IN (SELECT id FROM organizations WHERE name ILIKE '%gloo%');
-DELETE FROM "channels"           WHERE "organizationId" IN (SELECT id FROM organizations WHERE name ILIKE '%gloo%');
-DELETE FROM "client_packages"    WHERE "organizationId" IN (SELECT id FROM organizations WHERE name ILIKE '%gloo%');
-DELETE FROM "content_items"      WHERE "organizationId" IN (SELECT id FROM organizations WHERE name ILIKE '%gloo%');
-DELETE FROM "contracts"          WHERE "organizationId" IN (SELECT id FROM organizations WHERE name ILIKE '%gloo%');
-DELETE FROM "expenses"           WHERE "organizationId" IN (SELECT id FROM organizations WHERE name ILIKE '%gloo%');
-DELETE FROM "files"              WHERE "organizationId" IN (SELECT id FROM organizations WHERE name ILIKE '%gloo%');
-DELETE FROM "folders"            WHERE "organizationId" IN (SELECT id FROM organizations WHERE name ILIKE '%gloo%');
-DELETE FROM "follow_ups"         WHERE "organizationId" IN (SELECT id FROM organizations WHERE name ILIKE '%gloo%');
-DELETE FROM "holidays"           WHERE "organizationId" IN (SELECT id FROM organizations WHERE name ILIKE '%gloo%');
-DELETE FROM "invoices"           WHERE "organizationId" IN (SELECT id FROM organizations WHERE name ILIKE '%gloo%');
-DELETE FROM "leave_requests"     WHERE "organizationId" IN (SELECT id FROM organizations WHERE name ILIKE '%gloo%');
-DELETE FROM "notifications"      WHERE "organizationId" IN (SELECT id FROM organizations WHERE name ILIKE '%gloo%');
-DELETE FROM "projects"           WHERE "organizationId" IN (SELECT id FROM organizations WHERE name ILIKE '%gloo%');
-DELETE FROM "push_subscriptions" WHERE "organizationId" IN (SELECT id FROM organizations WHERE name ILIKE '%gloo%');
-DELETE FROM "receipts"           WHERE "organizationId" IN (SELECT id FROM organizations WHERE name ILIKE '%gloo%');
-DELETE FROM "review_batches"     WHERE "organizationId" IN (SELECT id FROM organizations WHERE name ILIKE '%gloo%');
-DELETE FROM "salary_payments"    WHERE "organizationId" IN (SELECT id FROM organizations WHERE name ILIKE '%gloo%');
-DELETE FROM "staff_advances"     WHERE "organizationId" IN (SELECT id FROM organizations WHERE name ILIKE '%gloo%');
-DELETE FROM "staff_profiles"     WHERE "organizationId" IN (SELECT id FROM organizations WHERE name ILIKE '%gloo%');
-DELETE FROM "status_history"     WHERE "organizationId" IN (SELECT id FROM organizations WHERE name ILIKE '%gloo%');
-DELETE FROM "task_templates"     WHERE "organizationId" IN (SELECT id FROM organizations WHERE name ILIKE '%gloo%');
-DELETE FROM "tasks"              WHERE "organizationId" IN (SELECT id FROM organizations WHERE name ILIKE '%gloo%');
-DELETE FROM "unavailability"     WHERE "organizationId" IN (SELECT id FROM organizations WHERE name ILIKE '%gloo%');
-DELETE FROM "clients"            WHERE "organizationId" IN (SELECT id FROM organizations WHERE name ILIKE '%gloo%');
+    -- User-owned child tables with no organizationId (personal lists/reminders).
+    SELECT array_agg(c.table_name) INTO v_remaining_u
+      FROM information_schema.columns c
+      WHERE c.table_schema = 'public' AND c.column_name = 'userId'
+        AND NOT EXISTS (SELECT 1 FROM information_schema.columns o
+                        WHERE o.table_schema = 'public' AND o.table_name = c.table_name AND o.column_name = 'organizationId');
 
--- every non-admin user (keeps OWNER + ADMIN)
-DELETE FROM users
-WHERE "organizationId" IN (SELECT id FROM organizations WHERE name ILIKE '%gloo%')
-  AND role NOT IN ('OWNER','ADMIN');
+    -- Delete in repeated passes; a table blocked by a foreign key this pass is
+    -- retried next pass once its dependants are gone. Order-independent.
+    v_pass := 0;
+    WHILE array_length(v_remaining,1) IS NOT NULL OR array_length(v_remaining_u,1) IS NOT NULL LOOP
+      v_pass := v_pass + 1;
+      v_still := ARRAY[]::text[]; v_still_u := ARRAY[]::text[]; v_progress := false;
 
-COMMIT;
+      IF v_remaining IS NOT NULL THEN
+        FOREACH v_tbl IN ARRAY v_remaining LOOP
+          BEGIN
+            IF v_tbl = 'users' THEN
+              EXECUTE format('DELETE FROM public.%I WHERE "organizationId"=$1 AND role NOT IN (''OWNER'',''ADMIN'')', v_tbl) USING v_org.id;
+            ELSE
+              EXECUTE format('DELETE FROM public.%I WHERE "organizationId"=$1', v_tbl) USING v_org.id;
+            END IF;
+            v_progress := true;
+          EXCEPTION WHEN foreign_key_violation THEN v_still := array_append(v_still, v_tbl); END;
+        END LOOP;
+      END IF;
+
+      IF v_remaining_u IS NOT NULL THEN
+        FOREACH v_tbl IN ARRAY v_remaining_u LOOP
+          BEGIN
+            EXECUTE format('DELETE FROM public.%I WHERE "userId" = ANY($1)', v_tbl) USING v_users;
+            v_progress := true;
+          EXCEPTION WHEN foreign_key_violation THEN v_still_u := array_append(v_still_u, v_tbl); END;
+        END LOOP;
+      END IF;
+
+      IF (array_length(v_still,1) IS NOT NULL OR array_length(v_still_u,1) IS NOT NULL) AND NOT v_progress THEN
+        RAISE EXCEPTION 'Could not clear org % — blocked tables: % / %', v_org.id, v_still, v_still_u;
+      END IF;
+      v_remaining   := NULLIF(v_still,   ARRAY[]::text[]);
+      v_remaining_u := NULLIF(v_still_u, ARRAY[]::text[]);
+      IF v_pass > 50 THEN RAISE EXCEPTION 'Too many passes on org %', v_org.id; END IF;
+    END LOOP;
+
+    RAISE NOTICE 'Cleared "%" (%) in % pass(es)', v_org.name, v_org.id, v_pass;
+  END LOOP;
+END
+$reset$;

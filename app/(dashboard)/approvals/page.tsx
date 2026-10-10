@@ -32,7 +32,10 @@ interface Delivery {
   id: string;
   method: string | null;
   url: string | null;
-  remarks: string | null;
+  // The column is `note` on TaskDelivery — the reviewer's only evidence when
+  // the proof is a typed remark (WhatsApp/Slack/Other, no URL or file). This
+  // was `remarks`, which the API never sends, so that remark rendered as blank.
+  note: string | null;
   deliveredAt: string;
   deliveredBy: { id: string; name: string } | null;
   file: { id: string; name: string; url: string } | null;
@@ -306,7 +309,7 @@ function ApprovalsInner() {
                         <span className="font-medium">{d.deliveredBy?.name ?? "Someone"}</span>
                         <span className="text-gray-500"> submitted{d.method ? ` via ${d.method.toLowerCase().replace("_", " ")}` : ""}</span>
                       </p>
-                      {d.remarks && <p className="text-sm text-gray-600 italic">{d.remarks}</p>}
+                      {d.note && <p className="text-sm text-gray-600 italic">{d.note}</p>}
                       {d.url && (
                         <a href={d.url} target="_blank" rel="noreferrer"
                           className="inline-flex items-center gap-1.5 text-sm text-indigo-600 hover:underline break-all">

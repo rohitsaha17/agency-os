@@ -77,10 +77,13 @@ const headScope = taskVisibilityScope(HEAD) as { OR?: object[] };
 const juniorScope = taskVisibilityScope(NO_TITLE) as { OR?: object[] };
 check("the head's view is still restricted, not opened up",
   Object.keys(headScope).length > 0, true);
-check("it holds their own work, what they manage, and design",
-  headScope.OR?.length, 3);
-check("a plain junior's holds only the first two",
-  juniorScope.OR?.length, 2);
+// Base `mine` is three clauses now — assigned, managed, approved (approverId
+// was added so the server scope agrees with belongsOnList and the dashboard) —
+// and the head adds a fourth for their designers' work.
+check("it holds their own work, what they manage, what they review, and design",
+  headScope.OR?.length, 4);
+check("a plain junior's holds only the first three",
+  juniorScope.OR?.length, 3);
 check("and design is matched by the flag, not by a list of names",
   JSON.stringify(headScope.OR).includes('"isDesign":true'), true);
 

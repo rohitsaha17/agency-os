@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { requireCapability } from "@/lib/api-permissions";
+import { requireProjectCapability } from "@/lib/project-scope";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 import { deleteFile } from "@/lib/storage";
 
@@ -63,9 +64,13 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
     const existing = await prisma.file.findFirst({
       where: { id, organizationId: user.organizationId },
-      select: { id: true },
+      select: { id: true, projectId: true },
     });
     if (!existing) throw new ApiError("File not found", 404);
+    // QA-016 parity: an SMM holds content.plan org-wide, so without this they
+    // could edit a file on a project they're not on. Scope it to their own
+    // projects, exactly as content-items and tasks do.
+    await requireProjectCapability(user, "content.plan", existing.projectId);
 
     const body = await req.json();
 
@@ -155,9 +160,13 @@ export async function DELETE(req: NextRequest, { params }: Params) {
       where: { id, organizationId: user.organizationId },
       // s3Key of the file itself + every version, so the objects go with the
       // row (QA-005). Collected BEFORE the delete, because FileVersion cascades.
-      select: { id: true, s3Key: true, versions: { select: { s3Key: true } } },
+      select: { id: true, projectId: true, s3Key: true, versions: { select: { s3Key: true } } },
     });
     if (!existing) throw new ApiError("File not found", 404);
+    // QA-016 parity: an SMM may only delete files on projects they're on —
+    // deleting removes the storage object permanently, so this matters more here
+    // than on PATCH.
+    await requireProjectCapability(user, "content.plan", existing.projectId);
 
     await prisma.file.delete({ where: { id } });
 

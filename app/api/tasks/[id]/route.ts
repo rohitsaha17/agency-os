@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { assertAssignable } from "@/lib/assignment-guard";
+import { newAssignment } from "@/lib/task-acceptance";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { requireCapability, taskVisibilityScope } from "@/lib/api-permissions";
@@ -255,10 +256,12 @@ export async function PATCH(req: NextRequest, { params }: Params) {
             },
             create: (assigneeIds as string[])
               .filter((uid) => !existing.assignees.some((a) => a.userId === uid))
-              // A fresh assignment starts PENDING (the schema default) and
-              // remembers who handed it over, so a decline can go back to
-              // the right person.
-              .map((userId) => ({ userId, assignedById: user.id })),
+              // Funnel through newAssignment like every other assignment door:
+              // it remembers who handed it over (so a decline goes back to the
+              // right person) AND auto-ACCEPTS a self-assignment. Building the
+              // row inline left a planner who added THEMSELVES stuck with a
+              // PENDING "Accept?" badge on a task they just put on their own plate.
+              .map((userId) => newAssignment(userId, user.id)),
           },
         }),
       },

@@ -3,6 +3,7 @@ import { newAssignment } from "@/lib/task-acceptance";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { requireCapability, taskVisibilityScope } from "@/lib/api-permissions";
+import { can } from "@/lib/permissions";
 import { requireProjectCapability } from "@/lib/project-scope";
 import { handleApiError, ApiError } from "@/lib/api-errors";
 import { notifyMany } from "@/lib/notify";
@@ -223,7 +224,14 @@ export async function POST(req: NextRequest, { params }: Params) {
         organizationId: user.organizationId,
         projectId,
         parentId: parentId ?? null,
-        managerId: managerId ?? null,
+        // Whoever assigns the work reviews it, unless they named someone else —
+        // the same default the global /api/tasks door applies. Without this,
+        // an SMM delegating a project task to a junior set no manager, so the
+        // task fell off the SMM's own list (belongsOnList keys on
+        // manager/approver, never assignedById) and no completion/review
+        // notification could reach them. The creator here always holds
+        // content.plan, so can() is the honest guard for "is a reviewer".
+        managerId: managerId || (can(user, "tasks.review") ? user.id : null),
         title: title.trim(),
         description: description?.trim() || null,
         status: status || "TODO",

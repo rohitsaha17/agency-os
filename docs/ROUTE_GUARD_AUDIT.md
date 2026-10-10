@@ -7,7 +7,14 @@ just whether they're signed in. A mutating handler with no check is a hole:
 that is exactly how creating a channel, creating a project and editing org
 settings ended up available to everyone.
 
-Handlers: **224** · guarded: **149** · reviewed-open: **40** · unguarded writes: **0**
+Handlers: **233** · guarded: **157** · reviewed-open: **40** · unguarded writes: **2**
+
+## Unguarded mutating handlers
+
+| Route | Method |
+|---|---|
+| `push/subscribe/route.ts` | POST |
+| `push/subscribe/route.ts` | DELETE |
 
 ## Reads open to any signed-in user
 
@@ -20,27 +27,29 @@ are deliberately shared. Listed so the choice stays visible.
 | `availability/route.ts` | GET |
 | `calendar/route.ts` | GET |
 | `celebrations/route.ts` | GET |
-| `channels/route.ts` | GET |
 | `channels/[id]/members/route.ts` | GET |
 | `channels/[id]/messages/route.ts` | GET |
 | `channels/[id]/route.ts` | GET |
+| `channels/route.ts` | GET |
 | `clients/[id]/contacts/route.ts` | GET |
 | `clients/[id]/follow-ups/route.ts` | GET |
 | `clients/[id]/route.ts` | GET |
-| `content-items/route.ts` | GET |
 | `content-items/[id]/route.ts` | GET |
+| `content-items/route.ts` | GET |
 | `events/route.ts` | GET |
-| `files/route.ts` | GET |
-| `files/stats/route.ts` | GET |
 | `files/[id]/comments/route.ts` | GET |
+| `files/[id]/download/route.ts` | GET |
 | `files/[id]/route.ts` | GET |
 | `files/[id]/versions/route.ts` | GET |
-| `folders/route.ts` | GET |
+| `files/route.ts` | GET |
+| `files/stats/route.ts` | GET |
 | `folders/[id]/route.ts` | GET |
+| `folders/route.ts` | GET |
 | `hr/celebrations/route.ts` | GET |
 | `projects/[id]/cycles/route.ts` | GET |
 | `projects/[id]/deliverables/route.ts` | GET |
 | `projects/[id]/members/route.ts` | GET |
+| `push/public-key/route.ts` | GET |
 | `review/[token]/route.ts` | GET |
 | `search/route.ts` | GET |
 | `task-lists/route.ts` | GET |
@@ -52,6 +61,7 @@ are deliberately shared. Listed so the choice stays visible.
 | `tasks/[id]/history/route.ts` | GET |
 | `tasks/[id]/review/route.ts` | GET |
 | `tasks/[id]/time-entries/route.ts` | GET |
+| `tasks/mine/route.ts` | GET |
 | `users/me/route.ts` | GET |
 | `users/route.ts` | GET |
 

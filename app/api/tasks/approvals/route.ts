@@ -39,10 +39,11 @@ export async function GET(req: NextRequest) {
                 ],
               }),
         },
-        // The four unbounded free-text columns, withheld for the same reason as
-        // GET /api/tasks: only TaskPanel reads them, and it fetches the one
-        // task it is showing. See scripts/check-task-list-payload.ts.
-        omit: { description: true, content: true, topic: true, extraNote: true },
+        // topic and content ARE needed here: the Approvals page shows "What was
+        // asked for" from them, and it does no per-task detail fetch, so
+        // omitting them left the reviewer judging against a blank brief. Only
+        // the two this surface never reads stay withheld.
+        omit: { description: true, extraNote: true },
         include: {
           project: { select: { id: true, name: true, client: { select: { id: true, name: true } } } },
           client: { select: { id: true, name: true } },

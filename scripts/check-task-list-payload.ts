@@ -30,7 +30,11 @@ const WITHHELD = ["description", "content", "topic", "extraNote"];
  */
 const ALSO_WITHHOLDING: Array<[string, string[]]> = [
   ["app/api/projects/[id]/tasks/route.ts", ["content", "topic", "extraNote"]],
-  ["app/api/tasks/approvals/route.ts", ["description", "content", "topic", "extraNote"]],
+  // The Approvals page shows "What was asked for" from topic + content and does
+  // no per-task detail fetch, so those two MUST ride along here — withholding
+  // them left the reviewer judging against a blank brief. Only the two that
+  // surface never reads stay withheld.
+  ["app/api/tasks/approvals/route.ts", ["description", "extraNote"]],
 ];
 
 /** Files that render a task straight from the list response. */

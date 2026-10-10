@@ -100,6 +100,12 @@ export function taskVisibilityScope(
   const mine: object[] = [
     { assignees: { some: { userId: user.id } } },
     { managerId: user.id },
+    // A task you review is yours to see, at every tier. belongsOnList and the
+    // dashboard's "my open" count both treat approverId as own-work, so leaving
+    // it out here alone meant a row that was counted and kept on the list but
+    // never actually returned — "1 open" linking to nothing. Planners already
+    // had it via the content.plan branch; this makes the base branch agree too.
+    { approverId: user.id },
   ];
 
   /*
@@ -115,8 +121,7 @@ export function taskVisibilityScope(
   if (can(user, "content.plan")) {
     return {
       OR: [
-        ...mine,
-        { approverId: user.id },
+        ...mine, // already includes approverId
         { project: { members: { some: { userId: user.id, role: "SMM" as const } } } },
       ],
     };

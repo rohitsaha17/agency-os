@@ -230,14 +230,19 @@ export async function POST(req: NextRequest) {
         });
 
         // A cycle records where it was billed, so the Plan tab can say so.
+        // BOTH queries stay inside the tenant: `consumed` is a list of ids from
+        // the request body, and a foreign billable-item id (another org's)
+        // would otherwise let this read its cycleId and stamp that org's
+        // ProjectCycle with our invoiceId. The updateMany at :227 already
+        // ignores foreign ids via its org filter; these two must too.
         const cycles = await tx.billableItem.findMany({
-          where: { id: { in: consumed }, cycleId: { not: null } },
+          where: { id: { in: consumed }, organizationId: user.organizationId, cycleId: { not: null } },
           select: { cycleId: true },
         });
         const cycleIds = [...new Set(cycles.map((c) => c.cycleId!))];
         if (cycleIds.length) {
           await tx.projectCycle.updateMany({
-            where: { id: { in: cycleIds } },
+            where: { id: { in: cycleIds }, project: { organizationId: user.organizationId } },
             data: { invoiceId: created.id },
           });
         }

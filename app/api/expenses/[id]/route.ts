@@ -64,6 +64,14 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     await assertInOrg("project", projectId, user.organizationId, { label: "Project" });
     await assertInOrg("user", userId, user.organizationId, { label: "User" });
 
+    // Who-it-belongs-to and its approval status are financial decisions. POST
+    // already forces an expense onto the creator and refuses a body status for
+    // non-financial users; PATCH must do the same, or an SMM/TEAM member editing
+    // their own reimbursement could set status to APPROVED/PAID (self-approval)
+    // or hand it to a colleague. Those two fields are ignored unless you may see
+    // money; everything else on your own expense stays editable.
+    const maySetFinancial = canViewFinancials(user);
+
     const expense = await prisma.expense.update({
       where: { id },
       data: {
@@ -73,9 +81,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         ...(amount !== undefined ? { amount: parseFloat(amount) } : {}),
         ...(currency !== undefined ? { currency } : {}),
         ...(date !== undefined ? { date: new Date(date) } : {}),
-        ...(status !== undefined ? { status } : {}),
+        ...(maySetFinancial && status !== undefined ? { status } : {}),
         ...(projectId !== undefined ? { projectId: projectId || null } : {}),
-        ...(userId !== undefined ? { userId: userId || null } : {}),
+        ...(maySetFinancial && userId !== undefined ? { userId: userId || null } : {}),
         ...(isReimbursable !== undefined ? { isReimbursable } : {}),
         ...(receiptUrl !== undefined ? { receiptUrl: receiptUrl?.trim() || null } : {}),
         ...(notes !== undefined ? { notes: notes?.trim() || null } : {}),

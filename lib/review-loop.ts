@@ -119,7 +119,7 @@ export async function approve(opts: {
     where: { id: opts.taskId, organizationId: opts.organizationId, deletedAt: null },
     select: {
       id: true, status: true, revision: true, title: true, projectId: true,
-      clientId: true, cycleId: true, contentItemId: true,
+      clientId: true, cycleId: true, contentItemId: true, approverId: true,
       client: { select: { name: true } },
       assignees: { select: { userId: true } },
       contentItem: { select: { id: true, topic: true, date: true, status: true } },
@@ -171,13 +171,17 @@ export async function approve(opts: {
     });
   }
 
-  // The posting task — due on the day the content actually publishes.
+  // The posting task — due on the day the content actually publishes. It
+  // belongs to the content's own SMM (the task's approver), NOT whoever cleared
+  // the review: when an admin covers for an absent SMM, the posting is still
+  // the SMM's. Falls back to the actor when no approver is recorded.
   let postTaskId: string | null = null;
   if (task.contentItem) {
     postTaskId = await createPostTask({
       organizationId: opts.organizationId,
       contentItemId: task.contentItem.id,
       userId: opts.userId,
+      assigneeId: task.approverId ?? opts.userId,
     });
   }
 
@@ -265,8 +269,17 @@ export async function requestChanges(opts: {
 export async function createPostTask(opts: {
   organizationId: string;
   contentItemId: string;
+  /** Who did the approving — recorded in the audit trail. */
   userId: string;
+  /**
+   * Who the posting task belongs to. The content's own SMM, not necessarily
+   * the approver: when an admin or manager clears the queue to cover for an
+   * SMM who is away, the posting still belongs to that SMM. Defaults to the
+   * actor when no owner was resolved.
+   */
+  assigneeId?: string;
 }): Promise<string | null> {
+  const owner = opts.assigneeId ?? opts.userId;
   const item = await prisma.contentItem.findUnique({
     where: { id: opts.contentItemId },
     select: {
@@ -300,7 +313,7 @@ export async function createPostTask(opts: {
       status: "TODO",
       // Due the day it publishes — not before, not after.
       dueDate: item.date,
-      assignees: { create: [newAssignment(opts.userId, opts.userId)] },
+      assignees: { create: [newAssignment(owner, opts.userId)] },
     },
     select: { id: true },
   });
@@ -315,7 +328,7 @@ export async function createPostTask(opts: {
   });
   await notify({
     organizationId: opts.organizationId,
-    userId: opts.userId,
+    userId: owner,
     type: "TASK_ASSIGNED",
     title: `Post ${item.topic}`,
     body: `${item.client.name} — publishes ${item.date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`,

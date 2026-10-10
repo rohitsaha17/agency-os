@@ -26,7 +26,23 @@ import { Button } from "@/components/ui/Button";
 import { RequestChangesDialog } from "@/components/tasks/ReviewDialogs";
 import { CreativeTypeDot } from "@/components/content/CreativeTypeDot";
 import { broadcastChange, useLiveRefresh } from "@/lib/live";
+import { useCurrentUser } from "@/lib/useCurrentUser";
 import { toast } from "@/lib/toast";
+
+/**
+ * A task waiting on the Head of Design to approve who it goes to — only ever
+ * present when the org has the assignment-approval gate switched on (off by
+ * default). Rendered here because the notification and the "Approvals" entry
+ * both point at this page; before this, nothing on it read `assignments`, so a
+ * task assigned under the gate sat with no assignee and no reachable approver.
+ */
+interface Assignment {
+  id: string;
+  title: string;
+  client: { id: string; name: string } | null;
+  project: { id: string; name: string; client: { id: string; name: string } | null } | null;
+  preferredAssignee: { id: string; name: string } | null;
+}
 
 interface Delivery {
   id: string;
@@ -65,6 +81,7 @@ function initials(name: string) {
 }
 
 function ApprovalsInner() {
+  const { user: me } = useCurrentUser();
   const [items, setItems] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -75,12 +92,23 @@ function ApprovalsInner() {
   const [byClient, setByClient] = useState("");
   const [byProject, setByProject] = useState("");
 
+  // Assignment-approval queue (Head-of-Design gate). The server only lets an
+  // admin/owner or a Head-of-Design designation act on these (mirrors
+  // isHeadOfDesign); showing the buttons to anyone else would hand them a 403.
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [teamUsers, setTeamUsers] = useState<{ id: string; name: string }[]>([]);
+  const [reassignFor, setReassignFor] = useState<string | null>(null);
+  const [reassignTo, setReassignTo] = useState("");
+  const isAssignmentApprover =
+    me?.role === "ADMIN" || me?.role === "OWNER" || me?.designation === "HEAD_OF_DESIGN";
+
   const fetchQueue = useCallback(async () => {
     try {
       const res = await fetch("/api/tasks/approvals");
       if (!res.ok) return;
       const d = await res.json();
       setItems(Array.isArray(d.submitted) ? d.submitted : []);
+      setAssignments(Array.isArray(d.assignments) ? d.assignments : []);
     } finally {
       setLoading(false);
     }
@@ -88,6 +116,37 @@ function ApprovalsInner() {
 
   useEffect(() => { fetchQueue(); }, [fetchQueue]);
   useLiveRefresh(["tasks"], fetchQueue);
+
+  // Team list for the "someone else" reassign picker — fetched only when there
+  // is actually an assignment queue to act on.
+  useEffect(() => {
+    if (!isAssignmentApprover || assignments.length === 0 || teamUsers.length > 0) return;
+    fetch("/api/users")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((d) => Array.isArray(d) && setTeamUsers(d.map((u: { id: string; name: string }) => ({ id: u.id, name: u.name }))))
+      .catch(() => {});
+  }, [isAssignmentApprover, assignments.length, teamUsers.length]);
+
+  const approveAssignment = async (taskId: string, assigneeId?: string) => {
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/approve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(assigneeId ? { assigneeId } : {}),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => null);
+        toast.error(d?.error?.message ?? "Couldn't approve that assignment");
+        return;
+      }
+      toast.success("Assignment approved");
+      setReassignFor(null);
+      setReassignTo("");
+      await fetchQueue();
+      broadcastChange("tasks");
+    } finally { setBusy(false); }
+  };
 
   /** Filter options are built from the queue itself — no empty choices. */
   const options = useMemo(() => {
@@ -181,6 +240,55 @@ function ApprovalsInner() {
           </div>
         )}
       </div>
+
+      {/* Assignment approvals — only when the Head-of-Design gate is on and
+          there is something pending. Additive: with the gate off (the default)
+          `assignments` is always empty and this renders nothing. */}
+      {isAssignmentApprover && assignments.length > 0 && (
+        <div className="flex-shrink-0 border-b border-amber-200 bg-amber-50/60 px-4 sm:px-6 lg:px-8 py-4">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-amber-700 mb-2">
+            Assignment approvals · {assignments.length}
+          </p>
+          <div className="space-y-2">
+            {assignments.map((t) => (
+              <div key={t.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-amber-200 bg-white px-3.5 py-2.5">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-gray-900 truncate">{t.title}</p>
+                  <p className="text-xs text-gray-500 truncate mt-0.5">
+                    {t.project?.client?.name ?? t.client?.name ?? "General"}
+                    {t.project ? ` · ${t.project.name}` : ""}
+                    {t.preferredAssignee && <> · Preferred: <b className="text-gray-700">{t.preferredAssignee.name}</b></>}
+                  </p>
+                </div>
+                {reassignFor === t.id ? (
+                  <div className="flex items-center gap-2">
+                    <Select
+                      value={reassignTo}
+                      onChange={setReassignTo}
+                      size="sm"
+                      options={[{ value: "", label: "Pick person…" }, ...teamUsers.map((u) => ({ value: u.id, label: u.name }))]}
+                    />
+                    <Button size="sm" disabled={!reassignTo || busy} onClick={() => reassignTo && approveAssignment(t.id, reassignTo)}>Assign</Button>
+                    <button onClick={() => { setReassignFor(null); setReassignTo(""); }} className="text-xs text-gray-400 hover:text-gray-700">Cancel</button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <Button size="sm" disabled={!t.preferredAssignee || busy} onClick={() => approveAssignment(t.id)}>
+                      Approve{t.preferredAssignee ? ` → ${t.preferredAssignee.name}` : ""}
+                    </Button>
+                    <button
+                      onClick={() => { setReassignFor(t.id); setReassignTo(""); }}
+                      className="px-3 py-1.5 text-xs font-medium border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50"
+                    >
+                      Someone else
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {loading ? (
         <div className="flex-1 p-6 space-y-3">

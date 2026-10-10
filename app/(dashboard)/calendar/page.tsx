@@ -240,6 +240,32 @@ function CalendarPageBody() {
 
   useEffect(() => { fetchMaster(); }, [fetchMaster]);
 
+  /*
+    A notification can deep-link to one event (?event=<id>) — the festival and
+    event reminders do. Before this the param was dropped and the reader landed
+    on the current month with nothing picked. Consumed once: when that event is
+    in the loaded window (reminders fire within it), jump the grid to its month
+    and highlight its day. Setting year/month refetches, but the id is already
+    cleared, so there is no loop.
+  */
+  const pendingEventId = useRef<string | null>(
+    typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("event") : null,
+  );
+  useEffect(() => {
+    const id = pendingEventId.current;
+    if (!id || orgEvents.length === 0) return;
+    const ev = orgEvents.find((e) => e.id === id);
+    if (!ev) return; // not in the loaded window — leave the view as it is
+    pendingEventId.current = null;
+    const d = new Date(ev.date);
+    setYear(d.getFullYear());
+    setMonth(d.getMonth());
+    setSelected(d);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("event");
+    window.history.replaceState({}, "", url.pathname + url.search);
+  }, [orgEvents]);
+
   // Legacy task/project layers (only when toggled on)
   const fetchLegacy = useCallback(async () => {
     if (!showTasks && !showProjects) { setEvents([]); return; }

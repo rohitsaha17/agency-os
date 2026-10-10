@@ -15,6 +15,7 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { CreativeTypeDot } from "@/components/content/CreativeTypeDot";
 import { Select } from "@/components/ui/Select";
 import { TableCards } from "@/components/ui/TableCards";
+import { TeamImportDialog } from "@/components/hr/TeamImportDialog";
 
 /* ─────────────────────────────────────────────────────────────
    Helpers
@@ -1074,6 +1075,7 @@ function UsersTab() {
   const [designations, setDesignations] = useState<DesignationRole[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   // The invite's one-time setup link, shown to the admin so they can pass it on.
   const [setupLink, setSetupLink] = useState<{ name: string; url: string } | null>(null);
   const [editId, setEditId]   = useState<string | null>(null);
@@ -1183,14 +1185,29 @@ function UsersTab() {
       >
         <div className="flex flex-wrap items-center justify-between gap-y-2 mb-4">
           <p className="text-xs text-gray-500">{activeUsers.length} active member{activeUsers.length !== 1 ? "s" : ""}</p>
-          <button
-            onClick={() => setShowAdd((v) => !v)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-500 transition-colors"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Add Member
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowImport(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-slate-800 text-gray-700 dark:text-slate-200 text-xs font-medium rounded-lg border border-gray-200 dark:border-white/[0.1] hover:bg-gray-50 dark:hover:bg-white/[0.04] transition-colors"
+            >
+              <Upload className="w-3.5 h-3.5" />
+              Bulk import
+            </button>
+            <button
+              onClick={() => setShowAdd((v) => !v)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-500 transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Add Member
+            </button>
+          </div>
         </div>
+
+        <TeamImportDialog
+          open={showImport}
+          onClose={() => setShowImport(false)}
+          onImported={fetchUsers}
+        />
 
         {/* Add form */}
         {showAdd && (

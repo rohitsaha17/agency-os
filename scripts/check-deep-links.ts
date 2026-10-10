@@ -108,14 +108,18 @@ for (const c of CONTRACTS) {
 
 console.log("");
 console.log("— and the one that goes by another name —");
-// auto-tasks sends acceptTask= rather than task= on purpose: the bell offers
-// Accept before sending anybody on, and `task=` would open the panel over
-// that prompt. The bell is the reader, so that is where it has to be handled.
-const bell = sources.get("components/notifications/NotificationBell.tsx");
+// The planning-task notification (lib/auto-tasks.ts) sends acceptTask= rather
+// than task= on purpose: its destination is the plan (?tab=plan), and `task=`
+// would force the project page onto its task board. `acceptTask=` instead opens
+// the task drawer OVER the plan, so the SMM can accept/decline and read the
+// brief without being pulled off the plan. The project page is the reader, so
+// that is where it must be handled — otherwise the link opens the plan with no
+// way to accept the work it was about.
+const projectPage = sources.get("app/(dashboard)/projects/[id]/page.tsx");
 check(
-  "acceptTask is understood by the notification bell",
-  !!bell && /acceptTask/.test(bell),
-  "NotificationBell must recognise acceptTask, or that link does nothing",
+  "acceptTask is read by the project page it links to",
+  !!projectPage && /acceptTask/.test(projectPage),
+  "projects/[id]/page.tsx must read acceptTask, or that notification does nothing",
 );
 
 console.log("");

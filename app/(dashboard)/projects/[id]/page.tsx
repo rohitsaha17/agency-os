@@ -564,12 +564,23 @@ export default function ProjectDetailPage() {
     if (tasksLoading) return;
 
     // ?tab= has an owner above; this resolves the task the link is about.
-    const wanted = new URLSearchParams(window.location.search).get("task");
-    if (!wanted) return;
+    //
+    // Two params, one job: `task=` is a plain "open this task" link and wants
+    // the task board; `acceptTask=` is what the planning-task notification
+    // sends — it rides on top of the tab the link already chose (?tab=plan), so
+    // the SMM lands on the plan with the task drawer open over it and can
+    // accept, decline or read the brief without being yanked off the plan.
+    // Before this, nothing read `acceptTask`, so that notification opened the
+    // plan with no way to accept the work it was about.
+    const params = new URLSearchParams(window.location.search);
+    const wanted = params.get("task");
+    const acceptWanted = params.get("acceptTask");
+    const id = wanted || acceptWanted;
+    if (!id) return;
 
-    const t = tasks.find((x) => x.id === wanted);
+    const t = tasks.find((x) => x.id === id);
     if (t) {
-      setPageTab("tasks");
+      if (wanted) setPageTab("tasks");
       setTaskPanel({ open: true, task: t });
     } else {
       setDeepLinkMiss(true);
@@ -578,6 +589,7 @@ export default function ProjectDetailPage() {
     consumedDeepLink.current = true;
     const url = new URL(window.location.href);
     url.searchParams.delete("task");
+    url.searchParams.delete("acceptTask");
     window.history.replaceState({}, "", url.pathname + url.search);
   }, [tasks, tasksLoading]);
 

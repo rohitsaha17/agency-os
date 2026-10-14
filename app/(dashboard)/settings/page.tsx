@@ -12,6 +12,7 @@ import { useToast } from "@/components/ui/Toast";
 import { useCurrentUser } from "@/lib/useCurrentUser";
 import { can } from "@/lib/permissions";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { Modal } from "@/components/ui/Modal";
 import { CreativeTypeDot } from "@/components/content/CreativeTypeDot";
 import { Select } from "@/components/ui/Select";
 import { TableCards } from "@/components/ui/TableCards";
@@ -1050,11 +1051,17 @@ function LetterheadTab({
 function UsersTab() {
   const toast = useToast();
   const confirm = useConfirm();
+  const { user: me } = useCurrentUser();
+  // Privilege/lifecycle (role, active, delete) is admin/owner; editing a
+  // member's name and contact details is also open to managers — see the
+  // route. The server enforces both; this only decides what to show.
+  const canManage = can(me, "users.manage");
+  const canEditProfile = canManage || can(me, "hr.manage");
   const [users, setUsers]     = useState<TeamUser[]>([]);
   const [designations, setDesignations] = useState<DesignationRole[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
-  const [editId, setEditId]   = useState<string | null>(null);
+  const [editUser, setEditUser] = useState<TeamUser | null>(null);
   const [newForm, setNewForm] = useState({ name: "", email: "", role: "TEAM", designationId: "" });
   const [saving, setSaving]   = useState(false);
   const [error, setError]     = useState("");
@@ -1144,6 +1151,36 @@ function UsersTab() {
     }
   };
 
+  // Hard delete — only reachable for an already-deactivated member (the button
+  // only shows in the Deactivated section) and only for users.manage holders.
+  const handleDelete = async (user: TeamUser) => {
+    const ok = await confirm({
+      title: `Delete ${user.name} permanently?`,
+      message:
+        "This removes the member and their personal data — contact details, " +
+        "attendance, leave, reminders, notifications — for good. Work they " +
+        "created (projects, tasks, files, history) is kept but no longer shows " +
+        "their name. This cannot be undone.",
+      confirmLabel: "Delete permanently",
+      variant: "danger",
+    });
+    if (!ok) return;
+    const res = await fetch(`/api/users/${user.id}`, { method: "DELETE" });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      toast.error(data?.error?.message ?? "Could not delete this member");
+      return;
+    }
+    setUsers((p) => p.filter((u) => u.id !== user.id));
+    toast.success(`${user.name} deleted`);
+  };
+
+  const handleProfileSaved = (updated: TeamUser) => {
+    setUsers((p) => p.map((u) => u.id === updated.id ? { ...u, ...updated } : u));
+    setEditUser(null);
+    toast.success("Details updated");
+  };
+
   const activeUsers   = users.filter((u) => u.isActive);
   const inactiveUsers = users.filter((u) => !u.isActive);
 
@@ -1225,9 +1262,13 @@ function UsersTab() {
                 key={user.id}
                 user={user}
                 designations={designations}
+                canManage={canManage}
+                canEditProfile={canEditProfile}
                 onRoleChange={handleRoleChange}
                 onDesignationChange={handleDesignationChange}
                 onToggleActive={handleToggleActive}
+                onEdit={setEditUser}
+                onDelete={handleDelete}
               />
             ))}
           </div>
@@ -1242,9 +1283,13 @@ function UsersTab() {
                 key={user.id}
                 user={user}
                 designations={designations}
+                canManage={canManage}
+                canEditProfile={canEditProfile}
                 onRoleChange={handleRoleChange}
                 onDesignationChange={handleDesignationChange}
                 onToggleActive={handleToggleActive}
+                onEdit={setEditUser}
+                onDelete={handleDelete}
               />
             ))}
           </div>
@@ -1256,7 +1301,148 @@ function UsersTab() {
         designations={designations}
         onChanged={() => { fetchDesignations(); fetchUsers(); }}
       />
+
+      {editUser && (
+        <EditMemberDialog
+          user={editUser}
+          onClose={() => setEditUser(null)}
+          onSaved={handleProfileSaved}
+        />
+      )}
     </div>
+  );
+}
+
+/**
+ * Edit a member's name and contact details.
+ *
+ * Opens on the member it was given, then loads their contact card fresh (phone
+ * and the rest live on StaffProfile, which the list doesn't carry). Admins and
+ * managers reach this; the server checks again on save.
+ */
+function EditMemberDialog({
+  user, onClose, onSaved,
+}: {
+  user: TeamUser;
+  onClose: () => void;
+  onSaved: (u: TeamUser) => void;
+}) {
+  const [form, setForm] = useState({
+    name: user.name,
+    phone: "", address: "", dateOfBirth: "", dateOfJoining: "",
+    emergencyName: "", emergencyPhone: "", notes: "",
+  });
+  const [loaded, setLoaded] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let alive = true;
+    fetch(`/api/users/${user.id}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!alive || !d) { setLoaded(true); return; }
+        const p = d.staffProfile ?? {};
+        setForm({
+          name: d.name ?? user.name,
+          phone: p.phone ?? "",
+          address: p.address ?? "",
+          dateOfBirth: p.dateOfBirth ? String(p.dateOfBirth).slice(0, 10) : "",
+          dateOfJoining: p.dateOfJoining ? String(p.dateOfJoining).slice(0, 10) : "",
+          emergencyName: p.emergencyName ?? "",
+          emergencyPhone: p.emergencyPhone ?? "",
+          notes: p.notes ?? "",
+        });
+        setLoaded(true);
+      })
+      .catch(() => setLoaded(true));
+    return () => { alive = false; };
+  }, [user.id, user.name]);
+
+  const set = (k: keyof typeof form, v: string) => setForm((p) => ({ ...p, [k]: v }));
+
+  const save = async () => {
+    if (!form.name.trim()) { setError("Name is required"); return; }
+    setSaving(true); setError("");
+    try {
+      const res = await fetch(`/api/users/${user.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: form.name.trim(),
+          staffProfile: {
+            phone: form.phone, address: form.address,
+            dateOfBirth: form.dateOfBirth || null,
+            dateOfJoining: form.dateOfJoining || null,
+            emergencyName: form.emergencyName, emergencyPhone: form.emergencyPhone,
+            notes: form.notes,
+          },
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data?.error?.message ?? "Could not save"); return; }
+      onSaved(data);
+    } finally { setSaving(false); }
+  };
+
+  const field = "w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500";
+
+  return (
+    <Modal open onClose={onClose} title={`Edit ${user.name}`} width="max-w-lg">
+      {!loaded ? (
+        <p className="text-sm text-gray-500 py-6 text-center">Loading…</p>
+      ) : (
+        <div className="space-y-3">
+          <label className="block">
+            <span className="block text-[11px] font-medium text-gray-500 dark:text-slate-400 mb-1">Full name</span>
+            <input value={form.name} onChange={(e) => set("name", e.target.value)} className={field} />
+          </label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label className="block">
+              <span className="block text-[11px] font-medium text-gray-500 dark:text-slate-400 mb-1">Phone</span>
+              <input value={form.phone} onChange={(e) => set("phone", e.target.value)} placeholder="+91…" className={field} />
+            </label>
+            <label className="block">
+              <span className="block text-[11px] font-medium text-gray-500 dark:text-slate-400 mb-1">Date of birth</span>
+              <input type="date" value={form.dateOfBirth} onChange={(e) => set("dateOfBirth", e.target.value)} className={field} />
+            </label>
+          </div>
+          <label className="block">
+            <span className="block text-[11px] font-medium text-gray-500 dark:text-slate-400 mb-1">Address</span>
+            <input value={form.address} onChange={(e) => set("address", e.target.value)} className={field} />
+          </label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label className="block">
+              <span className="block text-[11px] font-medium text-gray-500 dark:text-slate-400 mb-1">Date of joining</span>
+              <input type="date" value={form.dateOfJoining} onChange={(e) => set("dateOfJoining", e.target.value)} className={field} />
+            </label>
+            <label className="block">
+              <span className="block text-[11px] font-medium text-gray-500 dark:text-slate-400 mb-1">Emergency contact name</span>
+              <input value={form.emergencyName} onChange={(e) => set("emergencyName", e.target.value)} className={field} />
+            </label>
+          </div>
+          <label className="block">
+            <span className="block text-[11px] font-medium text-gray-500 dark:text-slate-400 mb-1">Emergency contact phone</span>
+            <input value={form.emergencyPhone} onChange={(e) => set("emergencyPhone", e.target.value)} className={field} />
+          </label>
+          <label className="block">
+            <span className="block text-[11px] font-medium text-gray-500 dark:text-slate-400 mb-1">Notes</span>
+            <textarea value={form.notes} onChange={(e) => set("notes", e.target.value)} rows={2} className={field} />
+          </label>
+
+          {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
+
+          <div className="flex justify-end gap-2 pt-1">
+            <button onClick={onClose} className="px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-slate-700 text-gray-600 dark:text-slate-300">
+              Cancel
+            </button>
+            <button onClick={save} disabled={saving || !form.name.trim()} className="px-4 py-2 text-sm font-semibold rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-50">
+              {saving ? "Saving…" : "Save changes"}
+            </button>
+          </div>
+        </div>
+      )}
+    </Modal>
   );
 }
 
@@ -1414,15 +1600,20 @@ function DesignationsSection({
 }
 
 function UserRow({
-  user, designations, onRoleChange, onDesignationChange, onToggleActive,
+  user, designations, canManage, canEditProfile,
+  onRoleChange, onDesignationChange, onToggleActive, onEdit, onDelete,
 }: {
   user: TeamUser;
   designations: DesignationRole[];
+  canManage: boolean;
+  canEditProfile: boolean;
   onRoleChange: (id: string, role: string) => void;
   onDesignationChange: (id: string, designationId: string) => void;
   onToggleActive: (id: string, isActive: boolean) => void;
+  onEdit: (user: TeamUser) => void;
+  onDelete: (user: TeamUser) => void;
 }) {
-  const badge = ROLE_LABELS[user.role] ?? ROLE_LABELS.TEAM;
+  const isOwner = user.role === "OWNER";
 
   return (
     <div className={`flex items-center gap-3 p-3 rounded-xl border transition-colors group ${
@@ -1439,39 +1630,76 @@ function UserRow({
         <p className="text-xs text-gray-400 truncate">{user.email}</p>
       </div>
 
-      {/* Designation select (v2 — job label, not permission) */}
+      {/* Designation select (v2 — job label, not permission). Privilege edit,
+          so only account managers; others see the label read-only. */}
       <div className="flex-shrink-0 hidden sm:block">
-        <div className="relative">
-          <Select
-            value={user.jobTitle?.id ?? ""}
-            onChange={(v) => onDesignationChange(user.id, v)}
-            options={[{ value: "", label: "No designation" }, ...designations.filter((d) => d.isActive).map((d) => ({ value: d.id, label: d.name }))]}
-            size="sm"
-            disabled={!user.isActive}
-          />
-        </div>
+        {canManage ? (
+          <div className="relative">
+            <Select
+              value={user.jobTitle?.id ?? ""}
+              onChange={(v) => onDesignationChange(user.id, v)}
+              options={[{ value: "", label: "No designation" }, ...designations.filter((d) => d.isActive).map((d) => ({ value: d.id, label: d.name }))]}
+              size="sm"
+              disabled={!user.isActive}
+            />
+          </div>
+        ) : (
+          <span className="text-xs text-gray-500">{user.jobTitle?.name ?? "—"}</span>
+        )}
       </div>
 
       {/* Role badge / select */}
       <div className="flex-shrink-0">
-        <div className="relative">
-          <Select
-            value={user.role}
-            onChange={(v) => onRoleChange(user.id, v)}
-            options={[...ASSIGNABLE_ROLES.map((r) => ({ value: r, label: String(ROLE_LABELS[r].label) }))]}
-            disabled={!user.isActive}
-          />
-        </div>
+        {canManage && !isOwner ? (
+          <div className="relative">
+            <Select
+              value={user.role}
+              onChange={(v) => onRoleChange(user.id, v)}
+              options={[...ASSIGNABLE_ROLES.map((r) => ({ value: r, label: String(ROLE_LABELS[r].label) }))]}
+              disabled={!user.isActive}
+            />
+          </div>
+        ) : (
+          <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-gray-100 text-gray-600">
+            {String((ROLE_LABELS[user.role] ?? ROLE_LABELS.TEAM).label)}
+          </span>
+        )}
       </div>
 
-      {/* Active toggle */}
-      <button
-        onClick={() => onToggleActive(user.id, user.isActive)}
-        className="flex-shrink-0 text-xs px-2.5 py-1 rounded-lg border transition-colors text-gray-500 border-gray-200 hover:border-gray-300 hover:bg-gray-100"
-        title={user.isActive ? "Deactivate user" : "Reactivate user"}
-      >
-        {user.isActive ? "Active" : "Inactive"}
-      </button>
+      {/* Edit details — admin or manager */}
+      {canEditProfile && (
+        <button
+          onClick={() => onEdit(user)}
+          className="flex-shrink-0 p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+          title="Edit details"
+          aria-label={`Edit ${user.name}`}
+        >
+          <Edit2 className="w-3.5 h-3.5" />
+        </button>
+      )}
+
+      {/* Active toggle — account managers only */}
+      {canManage && !isOwner && (
+        <button
+          onClick={() => onToggleActive(user.id, user.isActive)}
+          className="flex-shrink-0 text-xs px-2.5 py-1 rounded-lg border transition-colors text-gray-500 border-gray-200 hover:border-gray-300 hover:bg-gray-100"
+          title={user.isActive ? "Deactivate user" : "Reactivate user"}
+        >
+          {user.isActive ? "Active" : "Inactive"}
+        </button>
+      )}
+
+      {/* Permanent delete — only for an already-deactivated member */}
+      {canManage && !isOwner && !user.isActive && (
+        <button
+          onClick={() => onDelete(user)}
+          className="flex-shrink-0 p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+          title="Delete permanently"
+          aria-label={`Delete ${user.name} permanently`}
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      )}
     </div>
   );
 }

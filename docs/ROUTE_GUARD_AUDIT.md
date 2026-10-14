@@ -7,7 +7,7 @@ just whether they're signed in. A mutating handler with no check is a hole:
 that is exactly how creating a channel, creating a project and editing org
 settings ended up available to everyone.
 
-Handlers: **224** · guarded: **149** · reviewed-open: **40** · unguarded writes: **0**
+Handlers: **225** · guarded: **150** · reviewed-open: **40** · unguarded writes: **0**
 
 ## Reads open to any signed-in user
 

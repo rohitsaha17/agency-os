@@ -1057,6 +1057,10 @@ function UsersTab() {
   // route. The server enforces both; this only decides what to show.
   const canManage = can(me, "users.manage");
   const canEditProfile = canManage || can(me, "hr.manage");
+  // Adding a teammate is open to managers; granting ADMIN is not (that stays
+  // with admins/owners, mirroring assertMayGrant on the server).
+  const canInvite = can(me, "users.invite");
+  const grantableRoles = ASSIGNABLE_ROLES.filter((r) => r !== "ADMIN" || canManage);
   const [users, setUsers]     = useState<TeamUser[]>([]);
   const [designations, setDesignations] = useState<DesignationRole[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1192,17 +1196,19 @@ function UsersTab() {
       >
         <div className="flex flex-wrap items-center justify-between gap-y-2 mb-4">
           <p className="text-xs text-gray-500">{activeUsers.length} active member{activeUsers.length !== 1 ? "s" : ""}</p>
-          <button
-            onClick={() => setShowAdd((v) => !v)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-500 transition-colors"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Add Member
-          </button>
+          {canInvite && (
+            <button
+              onClick={() => setShowAdd((v) => !v)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-500 transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Add Member
+            </button>
+          )}
         </div>
 
         {/* Add form */}
-        {showAdd && (
+        {showAdd && canInvite && (
           <div className="mb-4 p-4 bg-indigo-50 border border-indigo-200 rounded-xl space-y-3">
             <p className="text-xs font-semibold text-indigo-800">Add New Team Member</p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -1221,7 +1227,7 @@ function UsersTab() {
                 <Select
                   value={newForm.role}
                   onChange={(v) => setNewForm((p) => ({ ...p, role: v }))}
-                  options={[...ASSIGNABLE_ROLES.map((r) => ({ value: r, label: String(ROLE_LABELS[r].label) }))]}
+                  options={[...grantableRoles.map((r) => ({ value: r, label: String(ROLE_LABELS[r].label) }))]}
                 />
               </div>
               <div className="relative">

@@ -32,6 +32,16 @@ export interface HasRole {
 
 export type Capability =
   | "users.manage"
+  /**
+   * Invite / create a new teammate.
+   *
+   * Narrower than users.manage, which also governs changing someone's role,
+   * deactivating and deleting. A manager runs the team and so may ADD people —
+   * in any role but ADMIN and OWNER — without being handed the account-admin
+   * powers that come with users.manage. Granting ADMIN stays with admins (see
+   * assertMayGrant in app/api/users), and OWNER is never assignable at all.
+   */
+  | "users.invite"
   | "settings.manage"
   | "clients.manage"
   | "projects.manage"
@@ -147,7 +157,7 @@ function normalizeRole(role: string | null | undefined): Exclude<Role, "MEMBER">
  */
 const MATRIX: Record<Exclude<Role, "MEMBER">, Record<Capability, boolean>> = {
   OWNER: {
-    "users.manage": true, "settings.manage": true, "clients.manage": true, "projects.manage": true,
+    "users.manage": true, "users.invite": true, "settings.manage": true, "clients.manage": true, "projects.manage": true,
     "projects.pricing": true, "projects.assignSmm": true, "activity.view": true,
     "content.plan": true,
     "tasks.assign": true, "tasks.review": true, "tasks.viewAll": true,
@@ -159,7 +169,7 @@ const MATRIX: Record<Exclude<Role, "MEMBER">, Record<Capability, boolean>> = {
     "attendance.exempt": true,
   },
   ADMIN: {
-    "users.manage": true, "settings.manage": true, "clients.manage": true, "projects.manage": true,
+    "users.manage": true, "users.invite": true, "settings.manage": true, "clients.manage": true, "projects.manage": true,
     "projects.pricing": true, "projects.assignSmm": true, "activity.view": true,
     "content.plan": true,
     "tasks.assign": true, "tasks.review": true, "tasks.viewAll": true,
@@ -172,6 +182,9 @@ const MATRIX: Record<Exclude<Role, "MEMBER">, Record<Capability, boolean>> = {
   },
   MANAGER: {
     "users.manage": false, // read-only on Settings ▸ Users
+    // A manager runs the team: they may invite new people (any role but ADMIN
+    // and OWNER), they just can't change roles or remove accounts.
+    "users.invite": true,
     // The org profile, letterhead and creative types are a manager's to run;
     // only granting access isn't.
     "settings.manage": true,
@@ -201,7 +214,7 @@ const MATRIX: Record<Exclude<Role, "MEMBER">, Record<Capability, boolean>> = {
     that is the distinction this row got wrong before.
   */
   SMM: {
-    "users.manage": false, "settings.manage": false, "clients.manage": false, "projects.manage": false,
+    "users.manage": false, "users.invite": false, "settings.manage": false, "clients.manage": false, "projects.manage": false,
     "projects.pricing": false, "projects.assignSmm": false,
     // An SMM plans the work; the audit trail of who changed what is not
     // theirs to read.
@@ -257,7 +270,7 @@ const MATRIX: Record<Exclude<Role, "MEMBER">, Record<Capability, boolean>> = {
     "attendance.exempt": false,
   },
   TEAM: {
-    "users.manage": false, "settings.manage": false, "clients.manage": false, "projects.manage": false,
+    "users.manage": false, "users.invite": false, "settings.manage": false, "clients.manage": false, "projects.manage": false,
     "projects.pricing": false, "projects.assignSmm": false, "activity.view": false,
     "content.plan": false,
     "tasks.assign": false, // self-reminders only — see assignScope()

@@ -19,6 +19,7 @@ import {
 /** Human wording for each capability, kept next to the matrix it labels. */
 const LABELS: Record<string, { label: string; group: string }> = {
   "users.manage":       { label: "Create & manage users",          group: "Administration" },
+  "users.invite":       { label: "Invite new members",             group: "Administration" },
   "settings.manage":    { label: "Edit workspace settings",        group: "Administration" },
   "clients.manage":     { label: "Create & edit clients",          group: "Administration" },
   "projects.manage":    { label: "Create & edit projects",         group: "Projects" },

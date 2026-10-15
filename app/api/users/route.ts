@@ -60,7 +60,10 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const user = await requireAuth(req);
-    requireCapability(user, "users.manage");
+    // Adding a teammate is users.invite — owner, admin and manager. Which
+    // ROLES they may hand out is bounded below: OWNER is never assignable and
+    // only an admin may create another admin (assertMayGrant).
+    requireCapability(user, "users.invite");
     const { name, email, role, designationId } = await req.json();
     if (!name?.trim()) throw new ApiError("Name is required", 400);
     if (!email?.trim()) throw new ApiError("Email is required", 400);

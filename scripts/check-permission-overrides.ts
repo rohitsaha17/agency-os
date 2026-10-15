@@ -156,6 +156,23 @@ check("and an admin, whatever is passed",
   isGranted("ADMIN", "users.manage", { MANAGER: { "users.manage": false } }), true);
 
 console.log("");
+console.log("— who may invite a new teammate —");
+/*
+  Adding people is a manager's job; it is deliberately NOT users.manage, which
+  also hands over role changes, deactivation and deletion. So a manager can
+  grow the team without being able to rewrite it. OWNER is never an assignable
+  role and only an admin may create another admin — both enforced in the route
+  (assertMayGrant), on top of this capability.
+*/
+check("an owner may invite", can(asUser("OWNER"), "users.invite"), true);
+check("an admin may invite", can(asUser("ADMIN"), "users.invite"), true);
+check("a manager may invite", can(asUser("MANAGER"), "users.invite"), true);
+check("an SMM may not", can(asUser("SMM"), "users.invite"), false);
+check("a junior may not", can(asUser("TEAM"), "users.invite"), false);
+check("inviting is narrower than managing — a manager invites but cannot manage",
+  can(asUser("MANAGER"), "users.invite") && !can(asUser("MANAGER"), "users.manage"), true);
+
+console.log("");
 console.log("— starting a project is not planning one —");
 /*
   Creating a project used to take content.plan, which an SMM holds. So the

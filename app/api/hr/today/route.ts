@@ -49,11 +49,11 @@ export async function GET(req: NextRequest) {
       an operational dashboard cannot afford.
 
       Their gates are the ones that already existed elsewhere, not new ones:
-      pending leave is the approver's inbox (hr.manage), and workload is a
+      pending leave is the approver's inbox (leave.manage), and workload is a
       planner's view of colleagues (content.plan) — the same rule
       /api/availability/day has always applied to it.
     */
-    const decides = can(user, "hr.manage");
+    const decides = can(user, "leave.manage");
     const seesLoad = can(user, "content.plan");
     const weekEnd = new Date(day);
     weekEnd.setUTCDate(weekEnd.getUTCDate() + 7);

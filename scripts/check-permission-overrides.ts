@@ -156,6 +156,22 @@ check("and an admin, whatever is passed",
   isGranted("ADMIN", "users.manage", { MANAGER: { "users.manage": false } }), true);
 
 console.log("");
+console.log("— who may manage leave —");
+/*
+  Approving, declining and recording leave is leave.manage: owner, admin and
+  manager only. It was split out of hr.manage precisely so that a workspace
+  granting an SMM hr.manage for something else does not also hand them the
+  leave inbox — the two are now independent capabilities.
+*/
+check("owner manages leave", can(asUser("OWNER"), "leave.manage"), true);
+check("admin manages leave", can(asUser("ADMIN"), "leave.manage"), true);
+check("manager manages leave", can(asUser("MANAGER"), "leave.manage"), true);
+check("an SMM does not", can(asUser("SMM"), "leave.manage"), false);
+check("a junior does not", can(asUser("TEAM"), "leave.manage"), false);
+check("an SMM given hr.manage still cannot manage leave",
+  can(asUser("SMM", { SMM: { "hr.manage": true } }), "leave.manage"), false);
+
+console.log("");
 console.log("— who may invite a new teammate —");
 /*
   Adding people is a manager's job; it is deliberately NOT users.manage, which

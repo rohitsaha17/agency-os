@@ -14,7 +14,7 @@ type Params = { params: Promise<{ id: string }> };
  *
  * Two different acts on one row, told apart by who is asking:
  *
- *   APPROVE / REJECT   hr.manage. Approving REQUIRES a kind — paid or
+ *   APPROVE / REJECT   leave.manage. Approving REQUIRES a kind — paid or
  *                      unpaid — because an approved leave with no kind is a
  *                      decision that hasn't actually been made, and it is
  *                      the payroll sheet that later has to answer for it.
@@ -50,7 +50,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     if (!row) throw new ApiError("Not found", 404);
 
     if (action === "CANCEL") {
-      const mayDecide = can(user, "hr.manage");
+      const mayDecide = can(user, "leave.manage");
       if (!canCancel(row.status, row.userId === user.id, mayDecide)) {
         throw new ApiError(
           row.status === "APPROVED"
@@ -78,7 +78,28 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       throw new ApiError("Action must be APPROVE, REJECT or CANCEL", 400);
     }
 
-    requireCapability(user, "hr.manage");
+    requireCapability(user, "leave.manage");
+
+    /*
+      You cannot approve or decline your OWN leave.
+
+      Deciding leave is a check on the person asking, so the decider being the
+      asker is no check at all — it is self-approval, which is exactly what we
+      do not want even from someone who may decide everybody else's. Another
+      manager or an admin has to sign it off.
+
+      The owner is the one exception: they sit at the top of the org with
+      nobody above them to approve their time off, so blocking them would
+      simply strand their requests. Everyone else — admin, manager, and any
+      role a workspace has handed leave.manage to — needs a second person.
+    */
+    if (row.userId === user.id && user.role !== "OWNER") {
+      throw new ApiError(
+        "You can't approve or decline your own leave — another manager or an admin has to.",
+        403,
+      );
+    }
+
     if (!canDecide(row.status)) {
       throw new ApiError(`That request is already ${row.status.toLowerCase()}.`, 409);
     }

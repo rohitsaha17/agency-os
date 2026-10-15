@@ -127,6 +127,16 @@ export type Capability =
   /** Staff records, and deciding leave. */
   | "hr.manage"
   /**
+   * Decide leave — approve, decline, revoke, and record it for someone else.
+   *
+   * Its own capability, split out of hr.manage, because approving time off is
+   * a line manager's job and should not ride along with every other HR power
+   * (or be reachable just because a workspace granted an SMM hr.manage for
+   * something unrelated). Owner, admin and manager by default; nobody else.
+   * On top of this, you can never decide your OWN leave — see the route.
+   */
+  | "leave.manage"
+  /**
    * Salary, the salary sheet, advances and loans.
    *
    * Deliberately NOT financials.view, which a Manager has. A manager seeing
@@ -165,7 +175,7 @@ const MATRIX: Record<Exclude<Role, "MEMBER">, Record<Capability, boolean>> = {
     "billing.flag": true, "financials.view": true, "expenses.create": true,
     "invoices.manage": true, "reports.all": true, "reports.delivery": true,
     "attendance.mark": true, "hr.today": true, "hr.records": true,
-    "hr.manage": true, "payroll.manage": true,
+    "hr.manage": true, "leave.manage": true, "payroll.manage": true,
     "attendance.exempt": true,
   },
   ADMIN: {
@@ -177,7 +187,7 @@ const MATRIX: Record<Exclude<Role, "MEMBER">, Record<Capability, boolean>> = {
     "billing.flag": true, "financials.view": true, "expenses.create": true,
     "invoices.manage": true, "reports.all": true, "reports.delivery": true,
     "attendance.mark": true, "hr.today": true, "hr.records": true,
-    "hr.manage": true, "payroll.manage": true,
+    "hr.manage": true, "leave.manage": true, "payroll.manage": true,
     "attendance.exempt": true,
   },
   MANAGER: {
@@ -198,7 +208,7 @@ const MATRIX: Record<Exclude<Role, "MEMBER">, Record<Capability, boolean>> = {
     "reports.all": false, // no org P&L / revenue / margin
     "reports.delivery": true,
     "attendance.mark": true, "hr.today": true, "hr.records": true,
-    "hr.manage": true, "payroll.manage": false,
+    "hr.manage": true, "leave.manage": true, "payroll.manage": false,
     "attendance.exempt": false,
   },
   /*
@@ -266,7 +276,7 @@ const MATRIX: Record<Exclude<Role, "MEMBER">, Record<Capability, boolean>> = {
       the server whatever the UI shows. Approved leave already appears there
       as a blocked day.
     */
-    "hr.today": true, "hr.records": false, "hr.manage": false, "payroll.manage": false,
+    "hr.today": true, "hr.records": false, "hr.manage": false, "leave.manage": false, "payroll.manage": false,
     "attendance.exempt": false,
   },
   TEAM: {
@@ -286,7 +296,7 @@ const MATRIX: Record<Exclude<Role, "MEMBER">, Record<Capability, boolean>> = {
     "invoices.manage": false,
     "reports.all": false, "reports.delivery": false, // own tasks only
     "attendance.mark": true, "hr.today": false, "hr.records": false,
-    "hr.manage": false, "payroll.manage": false,
+    "hr.manage": false, "leave.manage": false, "payroll.manage": false,
     "attendance.exempt": false,
   },
 };

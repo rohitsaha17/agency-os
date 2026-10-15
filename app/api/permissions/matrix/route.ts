@@ -43,7 +43,8 @@ const LABELS: Record<string, { label: string; group: string }> = {
   "attendance.exempt":  { label: "Not required to check in",        group: "People" },
   "hr.today":           { label: "See who is in today",             group: "People" },
   "hr.records":         { label: "Attendance history & staff records", group: "People" },
-  "hr.manage":          { label: "Edit staff records, decide leave", group: "People" },
+  "hr.manage":          { label: "Edit staff records",            group: "People" },
+  "leave.manage":       { label: "Approve & manage leave",        group: "People" },
   "payroll.manage":     { label: "Salaries, payroll & advances",    group: "People" },
 };
 

@@ -42,6 +42,16 @@ export type Capability =
    * assertMayGrant in app/api/users), and OWNER is never assignable at all.
    */
   | "users.invite"
+  /**
+   * Deactivate or permanently delete a member.
+   *
+   * Owner, admin and manager. Narrower in WHO it can touch than who holds it:
+   * a manager may remove only SMMs and team members, an admin may also remove
+   * managers, the owner can never be removed by anyone, and an ADMIN account
+   * can never be DELETED at all (only deactivated). Nobody removes themselves.
+   * The target rules live in app/api/users — this is just the door.
+   */
+  | "users.remove"
   | "settings.manage"
   | "clients.manage"
   | "projects.manage"
@@ -167,7 +177,7 @@ function normalizeRole(role: string | null | undefined): Exclude<Role, "MEMBER">
  */
 const MATRIX: Record<Exclude<Role, "MEMBER">, Record<Capability, boolean>> = {
   OWNER: {
-    "users.manage": true, "users.invite": true, "settings.manage": true, "clients.manage": true, "projects.manage": true,
+    "users.manage": true, "users.invite": true, "users.remove": true, "settings.manage": true, "clients.manage": true, "projects.manage": true,
     "projects.pricing": true, "projects.assignSmm": true, "activity.view": true,
     "content.plan": true,
     "tasks.assign": true, "tasks.review": true, "tasks.viewAll": true,
@@ -179,7 +189,7 @@ const MATRIX: Record<Exclude<Role, "MEMBER">, Record<Capability, boolean>> = {
     "attendance.exempt": true,
   },
   ADMIN: {
-    "users.manage": true, "users.invite": true, "settings.manage": true, "clients.manage": true, "projects.manage": true,
+    "users.manage": true, "users.invite": true, "users.remove": true, "settings.manage": true, "clients.manage": true, "projects.manage": true,
     "projects.pricing": true, "projects.assignSmm": true, "activity.view": true,
     "content.plan": true,
     "tasks.assign": true, "tasks.review": true, "tasks.viewAll": true,
@@ -195,6 +205,9 @@ const MATRIX: Record<Exclude<Role, "MEMBER">, Record<Capability, boolean>> = {
     // A manager runs the team: they may invite new people (any role but ADMIN
     // and OWNER), they just can't change roles or remove accounts.
     "users.invite": true,
+    // Managers may remove SMMs and team members (not managers, admins or
+    // the owner); the target rules are enforced in the route.
+    "users.remove": true,
     // The org profile, letterhead and creative types are a manager's to run;
     // only granting access isn't.
     "settings.manage": true,
@@ -224,7 +237,7 @@ const MATRIX: Record<Exclude<Role, "MEMBER">, Record<Capability, boolean>> = {
     that is the distinction this row got wrong before.
   */
   SMM: {
-    "users.manage": false, "users.invite": false, "settings.manage": false, "clients.manage": false, "projects.manage": false,
+    "users.manage": false, "users.invite": false, "users.remove": false, "settings.manage": false, "clients.manage": false, "projects.manage": false,
     "projects.pricing": false, "projects.assignSmm": false,
     // An SMM plans the work; the audit trail of who changed what is not
     // theirs to read.
@@ -280,7 +293,7 @@ const MATRIX: Record<Exclude<Role, "MEMBER">, Record<Capability, boolean>> = {
     "attendance.exempt": false,
   },
   TEAM: {
-    "users.manage": false, "users.invite": false, "settings.manage": false, "clients.manage": false, "projects.manage": false,
+    "users.manage": false, "users.invite": false, "users.remove": false, "settings.manage": false, "clients.manage": false, "projects.manage": false,
     "projects.pricing": false, "projects.assignSmm": false, "activity.view": false,
     "content.plan": false,
     "tasks.assign": false, // self-reminders only — see assignScope()

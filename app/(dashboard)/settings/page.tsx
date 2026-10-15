@@ -1077,6 +1077,11 @@ function UsersTab() {
   // route. The server enforces both; this only decides what to show.
   const canManage = can(me, "users.manage");
   const canEditProfile = canManage || can(me, "hr.manage");
+  // Deactivating/deleting is users.remove — owner, admin and manager. WHO each
+  // may touch is narrower (a manager only SMMs and team members; an admin is
+  // never deletable; nobody acts on themselves): decided per row in UserRow and
+  // enforced by assertMayRemove on the server.
+  const canRemove = can(me, "users.remove");
   // Adding a teammate is open to managers; granting ADMIN is not (that stays
   // with admins/owners, mirroring assertMayGrant on the server).
   const canInvite = can(me, "users.invite");
@@ -1177,20 +1182,55 @@ function UsersTab() {
     }
   };
 
-  // Hard delete — only reachable for an already-deactivated member (the button
-  // only shows in the Deactivated section) and only for users.manage holders.
+  // Hard delete — only reachable for an already-deactivated member whom this
+  // viewer may remove (the button only shows then). Deliberately a three-step
+  // act: confirm → download a backup → confirm again. You can't erase someone
+  // without first being told what goes, and without their data saved to hand.
   const handleDelete = async (user: TeamUser) => {
-    const ok = await confirm({
+    // Step 1 — explain exactly what a permanent delete does.
+    const proceed = await confirm({
       title: `Delete ${user.name} permanently?`,
       message:
         "This removes the member and their personal data — contact details, " +
         "attendance, leave, reminders, notifications — for good. Work they " +
         "created (projects, tasks, files, history) is kept but no longer shows " +
-        "their name. This cannot be undone.",
+        "their name. We'll download a backup of their data first. This cannot be undone.",
+      confirmLabel: "Download backup & continue",
+      variant: "danger",
+    });
+    if (!proceed) return;
+
+    // Step 2 — save a backup BEFORE anything is destroyed. If this fails we
+    // stop here: deleting without the backup in hand defeats the point.
+    try {
+      const res = await fetch(`/api/users/${user.id}/export`);
+      if (!res.ok) throw new Error("export failed");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const slug = user.name.replace(/[^a-z0-9]+/gi, "-").toLowerCase().replace(/^-+|-+$/g, "");
+      a.download = `backup-${slug || "member"}-${user.id}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error("Couldn't download a backup — deletion cancelled for safety.");
+      return;
+    }
+
+    // Step 3 — final confirmation, now that the backup is on their device.
+    const reallyDelete = await confirm({
+      title: `Permanently delete ${user.name}?`,
+      message:
+        "A backup was just downloaded to your device. This is the final step — " +
+        `${user.name}'s account and personal data will be erased and cannot be recovered.`,
       confirmLabel: "Delete permanently",
       variant: "danger",
     });
-    if (!ok) return;
+    if (!reallyDelete) return;
+
     const res = await fetch(`/api/users/${user.id}`, { method: "DELETE" });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -1198,7 +1238,7 @@ function UsersTab() {
       return;
     }
     setUsers((p) => p.filter((u) => u.id !== user.id));
-    toast.success(`${user.name} deleted`);
+    toast.success(`${user.name} deleted — a backup was saved to your device`);
   };
 
   const handleProfileSaved = (updated: TeamUser) => {
@@ -1318,6 +1358,8 @@ function UsersTab() {
                 user={user}
                 designations={designations}
                 canManage={canManage}
+                canRemove={canRemove}
+                meId={me?.id}
                 canEditProfile={canEditProfile}
                 onRoleChange={handleRoleChange}
                 onDesignationChange={handleDesignationChange}
@@ -1339,6 +1381,8 @@ function UsersTab() {
                 user={user}
                 designations={designations}
                 canManage={canManage}
+                canRemove={canRemove}
+                meId={me?.id}
                 canEditProfile={canEditProfile}
                 onRoleChange={handleRoleChange}
                 onDesignationChange={handleDesignationChange}
@@ -1655,12 +1699,14 @@ function DesignationsSection({
 }
 
 function UserRow({
-  user, designations, canManage, canEditProfile,
+  user, designations, canManage, canRemove, meId, canEditProfile,
   onRoleChange, onDesignationChange, onToggleActive, onEdit, onDelete,
 }: {
   user: TeamUser;
   designations: DesignationRole[];
   canManage: boolean;
+  canRemove: boolean;
+  meId: string | undefined;
   canEditProfile: boolean;
   onRoleChange: (id: string, role: string) => void;
   onDesignationChange: (id: string, designationId: string) => void;
@@ -1669,6 +1715,16 @@ function UserRow({
   onDelete: (user: TeamUser) => void;
 }) {
   const isOwner = user.role === "OWNER";
+  const isSelf = user.id === meId;
+
+  // Who this viewer may deactivate/reactivate: never the owner, never
+  // themselves; an account admin may act on anyone else, a manager only on
+  // SMMs and team members. Mirrors assertMayRemove on the server.
+  const mayToggle =
+    !isOwner && !isSelf &&
+    (canManage || (canRemove && (user.role === "SMM" || user.role === "TEAM")));
+  // Delete is narrower still: an admin can never be deleted, only deactivated.
+  const mayDelete = mayToggle && user.role !== "ADMIN";
 
   return (
     <div className={`flex items-center gap-3 p-3 rounded-xl border transition-colors group ${
@@ -1733,8 +1789,8 @@ function UserRow({
         </button>
       )}
 
-      {/* Active toggle — account managers only */}
-      {canManage && !isOwner && (
+      {/* Active toggle — admin/owner for anyone; manager for SMM & team */}
+      {mayToggle && (
         <button
           onClick={() => onToggleActive(user.id, user.isActive)}
           className="flex-shrink-0 text-xs px-2.5 py-1 rounded-lg border transition-colors text-gray-500 border-gray-200 hover:border-gray-300 hover:bg-gray-100"
@@ -1745,7 +1801,7 @@ function UserRow({
       )}
 
       {/* Permanent delete — only for an already-deactivated member */}
-      {canManage && !isOwner && !user.isActive && (
+      {mayDelete && !user.isActive && (
         <button
           onClick={() => onDelete(user)}
           className="flex-shrink-0 p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
@@ -2026,6 +2082,118 @@ function AssignmentApprovalCard() {
 /* ─────────────────────────────────────────────────────────────
    Account tab — change your login password
    ───────────────────────────────────────────────────────────── */
+/**
+ * My Account — your own basic details.
+ *
+ * Self-service for the things a person should be able to fix themselves —
+ * their name and contact details — without going to an admin. It cannot touch
+ * role, active status or email (the login identity), so it can't harm
+ * administration; the server enforces that through PATCH /api/users/me.
+ */
+function MyDetailsCard() {
+  const toast = useToast();
+  const [form, setForm] = useState({
+    name: "", phone: "", address: "", dateOfBirth: "", dateOfJoining: "",
+    emergencyName: "", emergencyPhone: "", notes: "",
+  });
+  const [email, setEmail] = useState("");
+  const [loaded, setLoaded] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/users/me")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((me) => {
+        if (!me?.id) { setLoaded(true); return null; }
+        setEmail(me.email ?? "");
+        return fetch(`/api/users/${me.id}`).then((r) => (r.ok ? r.json() : null));
+      })
+      .then((d) => {
+        if (!alive || !d) { setLoaded(true); return; }
+        const p = d.staffProfile ?? {};
+        setForm({
+          name: d.name ?? "",
+          phone: p.phone ?? "",
+          address: p.address ?? "",
+          dateOfBirth: p.dateOfBirth ? String(p.dateOfBirth).slice(0, 10) : "",
+          dateOfJoining: p.dateOfJoining ? String(p.dateOfJoining).slice(0, 10) : "",
+          emergencyName: p.emergencyName ?? "",
+          emergencyPhone: p.emergencyPhone ?? "",
+          notes: p.notes ?? "",
+        });
+        setLoaded(true);
+      })
+      .catch(() => setLoaded(true));
+    return () => { alive = false; };
+  }, []);
+
+  const set = (k: keyof typeof form, v: string) => setForm((p) => ({ ...p, [k]: v }));
+
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.name.trim()) { toast.error("Name can't be empty"); return; }
+    setSaving(true);
+    try {
+      const res = await fetch("/api/users/me", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: form.name.trim(),
+          staffProfile: {
+            phone: form.phone, address: form.address,
+            dateOfBirth: form.dateOfBirth || null, dateOfJoining: form.dateOfJoining || null,
+            emergencyName: form.emergencyName, emergencyPhone: form.emergencyPhone, notes: form.notes,
+          },
+        }),
+      });
+      if (!res.ok) { const d = await res.json().catch(() => ({})); toast.error(d?.error?.message ?? "Could not save"); return; }
+      toast.success("Your details were updated");
+    } finally { setSaving(false); }
+  };
+
+  const fld = "w-full px-3 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500";
+
+  return (
+    <SectionCard title="My Details" desc="Your name and contact details. Changing these never affects your access.">
+      {!loaded ? (
+        <p className="text-sm text-gray-500 py-4">Loading…</p>
+      ) : (
+        <form onSubmit={save} className="space-y-3 max-w-xl">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label className="block"><span className="block text-[11px] font-medium text-gray-500 mb-1">Full name</span>
+              <input value={form.name} onChange={(e) => set("name", e.target.value)} className={fld} /></label>
+            <label className="block"><span className="block text-[11px] font-medium text-gray-400 mb-1">Email (ask an admin to change)</span>
+              <input value={email} disabled className={`${fld} bg-gray-50 text-gray-400`} /></label>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label className="block"><span className="block text-[11px] font-medium text-gray-500 mb-1">Phone</span>
+              <input value={form.phone} onChange={(e) => set("phone", e.target.value)} placeholder="+91…" className={fld} /></label>
+            <label className="block"><span className="block text-[11px] font-medium text-gray-500 mb-1">Date of birth</span>
+              <input type="date" value={form.dateOfBirth} onChange={(e) => set("dateOfBirth", e.target.value)} className={fld} /></label>
+          </div>
+          <label className="block"><span className="block text-[11px] font-medium text-gray-500 mb-1">Address</span>
+            <input value={form.address} onChange={(e) => set("address", e.target.value)} className={fld} /></label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label className="block"><span className="block text-[11px] font-medium text-gray-500 mb-1">Emergency contact name</span>
+              <input value={form.emergencyName} onChange={(e) => set("emergencyName", e.target.value)} className={fld} /></label>
+            <label className="block"><span className="block text-[11px] font-medium text-gray-500 mb-1">Emergency contact phone</span>
+              <input value={form.emergencyPhone} onChange={(e) => set("emergencyPhone", e.target.value)} className={fld} /></label>
+          </div>
+          <label className="block"><span className="block text-[11px] font-medium text-gray-500 mb-1">Notes</span>
+            <textarea value={form.notes} onChange={(e) => set("notes", e.target.value)} rows={2} className={fld} /></label>
+          <div className="flex justify-end">
+            <button type="submit" disabled={saving || !form.name.trim()}
+              className="px-4 py-2 text-sm font-semibold rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-50">
+              {saving ? "Saving…" : "Save my details"}
+            </button>
+          </div>
+        </form>
+      )}
+    </SectionCard>
+  );
+}
+
 function AccountTab() {
   const toast = useToast();
   const [hasPassword, setHasPassword] = useState<boolean | null>(null);
@@ -2068,6 +2236,8 @@ function AccountTab() {
 
   return (
     <div className="space-y-6">
+      <MyDetailsCard />
+
       <SectionCard
         title={hasPassword === false ? "Set a Password" : "Change Password"}
         desc="Your password secures sign-in to this workspace. Minimum 8 characters."

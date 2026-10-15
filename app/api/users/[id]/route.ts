@@ -20,6 +20,48 @@ function assertMayGrant(caller: { role: string }, role: string | undefined) {
   }
 }
 
+type Actor = { id?: string; role?: string | null; organizationId?: string; organization?: { permissions?: unknown } | null };
+
+/**
+ * May `caller` deactivate or delete `target`?
+ *
+ * The capability (users.remove) is owner/admin/manager, but WHO each may touch
+ * is narrower, and a delete is narrower still than a deactivation:
+ *
+ *   OWNER   can never be deactivated or deleted — by anyone.
+ *   ADMIN   can never be DELETED — only deactivated, and only by an account
+ *           admin (admin/owner), never a manager.
+ *   MANAGER a manager may remove only SMMs and team members; an account admin
+ *           may also remove managers.
+ *   SELF    nobody deactivates or deletes their own account.
+ */
+function assertMayRemove(
+  caller: Actor,
+  target: { id: string; role: string },
+  action: "deactivate" | "delete",
+) {
+  requireCapability(caller as never, "users.remove");
+  const verb = action === "delete" ? "deleted" : "deactivated";
+
+  if (target.role === "OWNER") {
+    throw new ApiError(`The organization owner can't be ${verb}.`, 403);
+  }
+  if (caller.id === target.id) {
+    throw new ApiError(`You can't ${action} your own account.`, 400);
+  }
+  if (action === "delete" && target.role === "ADMIN") {
+    throw new ApiError("An admin account can't be deleted — deactivate it instead.", 403);
+  }
+
+  // An account admin (users.manage = admin/owner) may act on managers and
+  // below. A manager (users.remove but not users.manage) is held to SMMs and
+  // team members, so they can't remove a peer or anyone above them.
+  const isAccountAdmin = can(caller as never, "users.manage");
+  if (!isAccountAdmin && target.role !== "SMM" && target.role !== "TEAM") {
+    throw new ApiError("A manager can only deactivate or remove SMMs and team members.", 403);
+  }
+}
+
 const USER_FIELDS = {
   id: true, name: true, email: true, avatarUrl: true,
   role: true, isActive: true, createdAt: true,
@@ -96,12 +138,16 @@ export async function PATCH(
     const canManage = can(caller, "users.manage");           // admin / owner
     const canEditProfile = canManage || can(caller, "hr.manage") || isSelf; // + manager, + self
 
-    const touchesPrivilege = role !== undefined || isActive !== undefined || designationId !== undefined;
+    // Role and designation are privilege changes (admin/owner). Active status
+    // is a lifecycle change with its own, role-aware rule (admin or manager,
+    // bounded by who they may touch) — see assertMayRemove.
+    const touchesRoleOrDesignation = role !== undefined || designationId !== undefined;
     const touchesEmail = email !== undefined;
     const touchesProfile =
       name !== undefined || avatarUrl !== undefined || staffProfile !== undefined;
 
-    if (touchesPrivilege) requireCapability(caller, "users.manage");
+    if (touchesRoleOrDesignation) requireCapability(caller, "users.manage");
+    if (isActive !== undefined) assertMayRemove(caller, existing, "deactivate");
     if (touchesEmail && !canManage && !isSelf) {
       throw new ApiError("Only an account manager can change a member's email", 403);
     }
@@ -123,10 +169,6 @@ export async function PATCH(
       if (!ASSIGNABLE_ROLES.includes(role)) throw new ApiError("Invalid role", 400);
       assertMayGrant(caller, role);
     }
-    if (isActive === false && existing.role === "OWNER") {
-      throw new ApiError("The organization owner cannot be deactivated", 403);
-    }
-
     const normalizedEmail = email !== undefined ? String(email).trim().toLowerCase() : undefined;
     if (normalizedEmail) {
       const dup = await prisma.user.findFirst({
@@ -211,19 +253,16 @@ export async function DELETE(
   const { id } = await params;
   try {
     const caller = await requireAuth(req);
-    requireCapability(caller, "users.manage");
 
     const existing = await prisma.user.findFirst({
       where: { id, organizationId: caller.organizationId },
       select: { id: true, role: true, isActive: true, name: true },
     });
     if (!existing) throw new ApiError("User not found", 404);
-    if (existing.role === "OWNER") {
-      throw new ApiError("The organization owner cannot be deleted", 403);
-    }
-    if (caller.id === id) {
-      throw new ApiError("You cannot delete your own account", 400);
-    }
+
+    // Owner never, admin never (delete), manager only SMM/TEAM, not yourself.
+    assertMayRemove(caller, existing, "delete");
+
     if (existing.isActive) {
       throw new ApiError(
         "Deactivate this member before deleting them permanently.",

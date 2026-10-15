@@ -189,6 +189,35 @@ check("inviting is narrower than managing — a manager invites but cannot manag
   can(asUser("MANAGER"), "users.invite") && !can(asUser("MANAGER"), "users.manage"), true);
 
 console.log("");
+console.log("— who may deactivate or delete a member —");
+/*
+  Removing someone (deactivate or hard delete) is users.remove: owner, admin
+  and manager. Like users.invite it is deliberately narrower than users.manage
+  — a manager can retire an SMM or team member without being able to change
+  roles or touch the permission matrix. WHO each may remove, and the rule that
+  an admin is never deleted and the owner never touched, is enforced per target
+  by assertMayRemove in app/api/users/[id]/route.ts, not by this capability.
+*/
+check("an owner may remove", can(asUser("OWNER"), "users.remove"), true);
+check("an admin may remove", can(asUser("ADMIN"), "users.remove"), true);
+check("a manager may remove", can(asUser("MANAGER"), "users.remove"), true);
+check("an SMM may not", can(asUser("SMM"), "users.remove"), false);
+check("a junior may not", can(asUser("TEAM"), "users.remove"), false);
+check("removing is narrower than managing — a manager removes but cannot manage",
+  can(asUser("MANAGER"), "users.remove") && !can(asUser("MANAGER"), "users.manage"), true);
+// The target-level rules live in the route; assert they are actually written
+// there so this file fails if that guard is ever loosened or removed.
+const REMOVE_GUARD = readFileSync("app/api/users/[id]/route.ts", "utf8");
+check("the route forbids deleting an admin",
+  REMOVE_GUARD.includes("An admin account can't be deleted"), true);
+check("the route holds a manager to SMMs and team members",
+  REMOVE_GUARD.includes("A manager can only deactivate or remove SMMs and team members"), true);
+check("the route never lets the owner be removed",
+  REMOVE_GUARD.includes("organization owner can't be"), true);
+check("the route blocks removing your own account",
+  REMOVE_GUARD.includes("your own account"), true);
+
+console.log("");
 console.log("— starting a project is not planning one —");
 /*
   Creating a project used to take content.plan, which an SMM holds. So the

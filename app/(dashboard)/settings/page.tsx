@@ -29,6 +29,26 @@ function initials(name: string) {
   return name.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase();
 }
 
+/**
+ * A readable, strong password to hand a new member.
+ *
+ * Mirrors lib/password's server generator: an alphabet without look-alike
+ * characters (no O/0, I/l/1), three groups of four with dashes, so it can be
+ * read aloud or typed without a support call. crypto.getRandomValues because
+ * it is briefly the only thing guarding the account.
+ */
+function makePassword(): string {
+  const ALPHA = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+  const bytes = new Uint32Array(12);
+  crypto.getRandomValues(bytes);
+  let out = "";
+  for (let i = 0; i < 12; i++) {
+    if (i > 0 && i % 4 === 0) out += "-";
+    out += ALPHA[bytes[i] % ALPHA.length];
+  }
+  return out;
+}
+
 // v3: four permission tiers (docs/V3_CONTEXT.md §2). MEMBER is the retired
 // v2 tier, kept here so any un-migrated row still renders a sensible badge.
 const ROLE_LABELS: Record<string, { label: string; color: string; desc: string }> = {
@@ -1066,7 +1086,7 @@ function UsersTab() {
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [editUser, setEditUser] = useState<TeamUser | null>(null);
-  const [newForm, setNewForm] = useState({ name: "", email: "", role: "TEAM", designationId: "" });
+  const [newForm, setNewForm] = useState({ name: "", email: "", role: "TEAM", designationId: "", password: "" });
   const [saving, setSaving]   = useState(false);
   const [error, setError]     = useState("");
 
@@ -1085,6 +1105,7 @@ function UsersTab() {
 
   const handleAdd = async () => {
     if (!newForm.name.trim() || !newForm.email.trim()) { setError("Name and email are required"); return; }
+    if (newForm.password.trim().length < 8) { setError("Set a password of at least 8 characters to share with them"); return; }
     setSaving(true); setError("");
     try {
       const res = await fetch("/api/users", {
@@ -1095,9 +1116,10 @@ function UsersTab() {
       const data = await res.json();
       if (!res.ok) { setError(data.error?.message ?? "Failed"); return; }
       setUsers((p) => [...p, data]);
-      setNewForm({ name: "", email: "", role: "TEAM", designationId: "" });
+      const email = newForm.email.trim();
+      setNewForm({ name: "", email: "", role: "TEAM", designationId: "", password: "" });
       setShowAdd(false);
-      toast.success(`${data.name} added to team`);
+      toast.success(`${data.name} created — they can sign in now with ${email}`);
     } finally { setSaving(false); }
   };
 
@@ -1238,6 +1260,33 @@ function UsersTab() {
                 />
               </div>
             </div>
+
+            {/* Password — the account is created ready to use with these
+                credentials; there is no separate invite step. Shown as text
+                because whoever creates it has to read it out to the member. */}
+            <div>
+              <label className="block text-[11px] font-medium text-indigo-800 mb-1">Password to share</label>
+              <div className="flex gap-2">
+                <Input
+                  value={newForm.password}
+                  onChange={(e) => setNewForm((p) => ({ ...p, password: e.target.value }))}
+                  placeholder="At least 8 characters"
+                  type="text"
+                  autoComplete="off"
+                />
+                <button
+                  type="button"
+                  onClick={() => setNewForm((p) => ({ ...p, password: makePassword() }))}
+                  className="px-3 py-1.5 text-xs font-medium text-indigo-700 border border-indigo-300 rounded-lg hover:bg-indigo-100 whitespace-nowrap transition-colors"
+                >
+                  Generate
+                </button>
+              </div>
+              <p className="text-[11px] text-indigo-700/70 mt-1">
+                They sign in straight away with this email and password. Share it securely; they can change it in their own settings.
+              </p>
+            </div>
+
             {error && <p className="text-xs text-red-600">{error}</p>}
             <div className="flex gap-2">
               <button

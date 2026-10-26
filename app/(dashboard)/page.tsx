@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useCurrentUser } from "@/lib/useCurrentUser";
-import { can, type Capability } from "@/lib/permissions";
+import { can, isLimitedAccess, limitedAccessAllows, type Capability } from "@/lib/permissions";
 import { RoleBlocks } from "@/components/dashboard/RoleBlocks";
 import { MyTasksCard } from "@/components/dashboard/MyTasksCard";
 import { CheckInCard } from "@/components/hr/CheckInCard";
@@ -402,7 +402,11 @@ function QuickActions() {
     { label: "My Calendar",    href: "/my-calendar",    icon: <Calendar className="w-5 h-5" />,    accent: "bg-pink-50 text-pink-600 hover:bg-pink-100 border-pink-200 dark:border-pink-500/30", need: null },
     { label: "Contracts",      href: "/contracts",      icon: <FileText className="w-5 h-5" />,    accent: "bg-orange-50 text-orange-600 hover:bg-orange-100 border-orange-200 dark:border-orange-500/30", need: "financials.view" },
     { label: "Expenses",       href: "/expenses",       icon: <BarChart3 className="w-5 h-5" />,   accent: "bg-teal-50 text-teal-600 hover:bg-teal-100 border-teal-200 dark:border-teal-500/30", need: "expenses.create" },
-  ] as Action[]).filter((a) => a.need === null || can(user, a.need));
+  ] as Action[])
+    .filter((a) => a.need === null || can(user, a.need))
+    // Shoot crew only get shortcuts to modules they actually have — otherwise a
+    // tile like "Upload Files" or "Expenses" just bounces them to Tasks.
+    .filter((a) => !isLimitedAccess(user) || limitedAccessAllows(a.href));
 
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">

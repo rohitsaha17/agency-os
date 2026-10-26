@@ -225,7 +225,6 @@ function NavContent({
   const visibleNavItems = navItems
     .map((section) => {
       let links = section.links.filter((l) => l.need === null || can(appUser, l.need));
-      if (limited) links = links.filter((l) => limitedAccessAllows(l.href));
       if (!seesMoney) {
         if (section.group === "Finance") links = [];
         if (section.group === "Work" && can(appUser, "expenses.create")) {
@@ -235,6 +234,9 @@ function NavContent({
           links = [...links, expenses];
         }
       }
+      // Last, so it also strips the Expenses link the money logic just moved into
+      // Work — a limited user keeps only the allowlist, whatever route it took.
+      if (limited) links = links.filter((l) => limitedAccessAllows(l.href));
       return { ...section, links };
     })
     .filter((section) => section.links.length > 0);

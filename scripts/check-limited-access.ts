@@ -34,6 +34,7 @@ console.log("\n— nav and guard both go through limitedAccessAllows (no drift) 
 const sidebar = safeRead("components/layout/Sidebar.tsx");
 const guard = safeRead("components/layout/LimitedAccessGuard.tsx");
 const layout = safeRead("app/(dashboard)/layout.tsx");
+const dashboard = safeRead("app/(dashboard)/page.tsx");
 check("Sidebar filters nav with limitedAccessAllows", sidebar.includes("limitedAccessAllows"),
   "the rail must hide links through the shared allowlist, not a private copy.");
 check("Sidebar bottom nav is limited-aware", sidebar.includes("isLimitedAccess(appUser)"),
@@ -42,6 +43,8 @@ check("Guard uses the shared allowlist", guard.includes("limitedAccessAllows") &
   "the page guard must turn users away through the same function the nav uses.");
 check("Guard is mounted in the dashboard layout", layout.includes("<LimitedAccessGuard"),
   "a guard that is never mounted guards nothing.");
+check("Dashboard Quick Actions respect the allowlist", dashboard.includes("limitedAccessAllows"),
+  "the dashboard shortcut grid must drop tiles for modules a limited user can't open.");
 
 function safeRead(p: string): string {
   try { return readFileSync(p, "utf8"); } catch { return ""; }

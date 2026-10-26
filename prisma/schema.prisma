@@ -490,6 +490,21 @@ model DesignationRole {
   /// describes the people under them.
   isDesign          Boolean  @default(false)
 
+  /// Does this job see a cut-down app?
+  ///
+  /// Shoot crew — photographers, videographers — do not run the agency; they
+  /// come in for their tasks, their calendar and their shoot diary and nothing
+  /// else. When this is on, the people with this title get a limited nav
+  /// (Dashboard, Tasks, My Calendar, Team Calendar, People) and are turned away
+  /// from the other modules, so the app is not a wall of tabs that mean nothing
+  /// to them.
+  ///
+  /// A flag per job title, not a hardcoded "photographer", for the same reason
+  /// as the others: an agency may call them DOP, Camera, or Shoot Crew. It is
+  /// NOT a permission — the API's own role checks still decide what data a
+  /// request may touch; this only decides which modules are offered and opened.
+  limitedAccess     Boolean  @default(false)
+
   sortOrder         Int      @default(0)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt

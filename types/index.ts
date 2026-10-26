@@ -87,6 +87,8 @@ export interface DesignationRole {
   blocksOwnDays: boolean;
   /** Whether the Head of Design leads people with this job title. */
   isDesign: boolean;
+  /** Shoot crew: a cut-down app (nav + page access limited to a few modules). */
+  limitedAccess: boolean;
   sortOrder: number;
   _count?: { users: number };
 }

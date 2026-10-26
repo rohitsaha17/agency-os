@@ -8,6 +8,7 @@ import { DateInputAutoOpen } from "@/components/ui/DateInputAutoOpen";
 import { AppTour } from "@/components/onboarding/AppTour";
 import { PushProvider } from "@/components/providers/PushProvider";
 import { CurrentUserSeed } from "@/components/layout/CurrentUserSeed";
+import { LimitedAccessGuard } from "@/components/layout/LimitedAccessGuard";
 import type { CurrentUser } from "@/lib/useCurrentUser";
 import { CheckInGate } from "@/components/hr/CheckInGate";
 import { attendanceDay, dayString } from "@/lib/hr";
@@ -69,7 +70,7 @@ export default async function DashboardLayout({
         // Seeded to the client too — the availability page asks whether this
         // person blocks their own days on first render, before any fetch.
         jobTitle: {
-          select: { id: true, name: true, slug: true, blocksOwnDays: true, canBeAssignedWork: true },
+          select: { id: true, name: true, slug: true, blocksOwnDays: true, canBeAssignedWork: true, limitedAccess: true },
         },
         isActive: true,
         passwordHash: true,
@@ -171,6 +172,9 @@ export default async function DashboardLayout({
             below it paints. See components/layout/WorkspaceTheme. */}
         <WorkspaceThemeClass theme={theme} />
         <CurrentUserSeed user={seed} />
+        {/* Shoot crew (limitedAccess) only reach their few modules — this bounces
+            them off any other page they land on directly. */}
+        <LimitedAccessGuard />
         {needsCheckIn && <CheckInGate name={seed?.name ?? ""} />}
         <DateInputAutoOpen />
         <div className="min-h-screen bg-gray-50">

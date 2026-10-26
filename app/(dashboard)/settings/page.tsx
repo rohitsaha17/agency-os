@@ -1436,6 +1436,7 @@ function DesignationsSection({
                   {!d.canBeAssignedWork && " · not assignable"}
                   {d.blocksOwnDays && " · blocks own days"}
                   {d.isDesign && " · led by the Head of Design"}
+                  {d.limitedAccess && " · limited app access"}
                 </p>
               </div>
               <button
@@ -1473,6 +1474,22 @@ function DesignationsSection({
                     : "text-gray-500 border-gray-200 hover:bg-gray-100"
                 }`}>
                 {d.isDesign ? "Design" : "Not design"}
+              </button>
+              {/*
+                Shoot crew (photographers, videographers) run a cut-down app —
+                Tasks, their calendars and People, nothing else. This decides
+                which titles get that limited view; it is not a permission, the
+                role still governs what their requests may touch.
+              */}
+              <button
+                onClick={() => patch(d.id, { limitedAccess: !d.limitedAccess })}
+                title="Give people with this job title a cut-down app: Dashboard, Tasks, calendars and People only."
+                className={`text-xs px-2.5 py-1 rounded-lg border transition-colors ${
+                  d.limitedAccess
+                    ? "text-amber-600 border-amber-200 bg-amber-50 hover:bg-amber-100"
+                    : "text-gray-500 border-gray-200 hover:bg-gray-100"
+                }`}>
+                {d.limitedAccess ? "Limited app" : "Full app"}
               </button>
               <button
                 onClick={() => patch(d.id, { isActive: !d.isActive })}

@@ -18,6 +18,8 @@ export interface CurrentUser {
     slug: string;
     blocksOwnDays: boolean;
     canBeAssignedWork: boolean;
+    /** Shoot-crew cut-down app: nav + page access limited to a few modules. */
+    limitedAccess: boolean;
   } | null;
   organization?: {
     id: string;

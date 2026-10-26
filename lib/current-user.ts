@@ -54,7 +54,7 @@ export async function getCurrentUser(_req?: Request) {
       // this person may block their own diary, and it is asked on the
       // availability page and in the API that backs it.
       jobTitle: {
-        select: { id: true, name: true, slug: true, blocksOwnDays: true, canBeAssignedWork: true },
+        select: { id: true, name: true, slug: true, blocksOwnDays: true, canBeAssignedWork: true, limitedAccess: true },
       },
       organization: {
         select: {

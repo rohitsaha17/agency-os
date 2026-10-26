@@ -25,6 +25,7 @@ export type AuthUser = {
     slug: string;
     blocksOwnDays: boolean;
     canBeAssignedWork: boolean;
+    limitedAccess: boolean;
   } | null;
   /** Whether a password is set — never the hash itself. */
   hasPassword?: boolean;

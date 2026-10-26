@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
     const user = await requireAuth(req);
     requireCapability(user, "users.manage");
 
-    const { name, canBeAssignedWork, blocksOwnDays } = await req.json();
+    const { name, canBeAssignedWork, blocksOwnDays, limitedAccess } = await req.json();
     if (!name?.trim()) throw new ApiError("Name is required", 400);
 
     const slug = slugify(name);
@@ -82,6 +82,7 @@ export async function POST(req: NextRequest) {
         slug,
         canBeAssignedWork: canBeAssignedWork !== false,
         blocksOwnDays: blocksOwnDays === true,
+        limitedAccess: limitedAccess === true,
         sortOrder: (last?.sortOrder ?? -1) + 1,
       },
     });

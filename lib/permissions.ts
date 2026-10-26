@@ -395,6 +395,51 @@ export function isGranted(
   return typeof chosen === "boolean" ? chosen : MATRIX[role][capability];
 }
 
+/* ------------------------------------------------------------------ *
+ * Limited-access job titles (shoot crew).
+ *
+ * A separate axis from the role matrix above. Role decides what a request may
+ * DO; this decides, for a job title flagged limitedAccess, which MODULES of the
+ * app are even offered and openable. A photographer comes in for their tasks,
+ * their calendars and their shoot diary — everything else is noise to them.
+ *
+ * This is UI scoping, not a security boundary: the data each page shows is
+ * already scoped by the role rules. So the allowlist lives here as one pure
+ * list, used by BOTH the nav (which links to hide) and the page guard (which
+ * paths to turn away), so the two can never drift — hiding a link while leaving
+ * the page reachable is exactly the "it is a secret" trap this avoids.
+ * ------------------------------------------------------------------ */
+
+/** The only top-level areas a limited-access user is offered and may open. */
+export const LIMITED_ACCESS_PREFIXES = [
+  "/tasks",        // the task sheet / module
+  "/my-calendar",  // their own calendar
+  "/calendar",     // the team calendar
+  "/hr",           // People — team availability, shoots, leave, check-in
+  "/notifications",// where their task/shoot alerts land
+  "/settings",     // only reaches "My Account" for them; needed for password etc.
+] as const;
+
+/** Does this user get the cut-down app? */
+export function isLimitedAccess(
+  user: { jobTitle?: { limitedAccess?: boolean | null } | null } | null | undefined,
+): boolean {
+  return !!user?.jobTitle?.limitedAccess;
+}
+
+/**
+ * May a limited-access user see/open this path? The Dashboard ("/") is always
+ * in, since it is where login lands them. Everything else must match one of the
+ * allowed prefixes exactly or as a parent (so /tasks/abc counts, /tasksfoo does
+ * not). Used for nav hrefs and for the live pathname alike.
+ */
+export function limitedAccessAllows(pathname: string): boolean {
+  if (pathname === "/") return true;
+  return LIMITED_ACCESS_PREFIXES.some(
+    (p) => pathname === p || pathname.startsWith(`${p}/`),
+  );
+}
+
 /**
  * The delta after one change, with anything back at its default removed.
  *

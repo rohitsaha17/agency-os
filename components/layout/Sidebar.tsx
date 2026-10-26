@@ -17,7 +17,7 @@ import { BrandLogo } from "@/components/ui/BrandLogo";
 import { useTheme } from "@/components/providers/ThemeProvider";
 import { GlobalSearch } from "@/components/ui/GlobalSearch";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
-import { can, type Capability } from "@/lib/permissions";
+import { can, isLimitedAccess, limitedAccessAllows, type Capability } from "@/lib/permissions";
 
 
 /**
@@ -197,7 +197,7 @@ function NavContent({
 }: {
   pathname: string;
   onClose?: () => void;
-  appUser?: { name: string; email: string; role?: string } | null;
+  appUser?: { name: string; email: string; role?: string; jobTitle?: { limitedAccess?: boolean | null } | null } | null;
   unreadCount: number;
   collapsed?: boolean;
 }) {
@@ -218,9 +218,14 @@ function NavContent({
   const managesOrg = can(appUser, "settings.manage");
   const settingsHref = managesOrg ? "/settings" : "/settings?tab=account";
   const settingsLabel = managesOrg ? "Settings" : "My Account";
+  // Shoot crew (limitedAccess job titles) get a cut-down rail — Dashboard,
+  // Tasks, both calendars and People, nothing else. The page guard enforces the
+  // same list, so this is honest scoping, not a hidden door.
+  const limited = isLimitedAccess(appUser);
   const visibleNavItems = navItems
     .map((section) => {
       let links = section.links.filter((l) => l.need === null || can(appUser, l.need));
+      if (limited) links = links.filter((l) => limitedAccessAllows(l.href));
       if (!seesMoney) {
         if (section.group === "Finance") links = [];
         if (section.group === "Work" && can(appUser, "expenses.create")) {
@@ -559,6 +564,24 @@ export function Sidebar() {
     }
   }, [open]);
 
+  // Mobile bottom nav. Shoot crew don't have Projects or Chat, so swap in the
+  // modules they do have rather than show them dead-ends. Same allowlist as the
+  // rail and the page guard.
+  const limited = isLimitedAccess(appUser);
+  const bottomNav = limited
+    ? [
+        { href: "/",            label: "Home",     icon: LayoutDashboard, badge: 0 },
+        { href: "/tasks",       label: "Tasks",    icon: CheckSquare,     badge: 0 },
+        { href: "/calendar",    label: "Calendar", icon: Calendar,        badge: 0 },
+        { href: "/hr",          label: "People",   icon: UserCog,         badge: 0 },
+      ]
+    : [
+        { href: "/",         label: "Home",     icon: LayoutDashboard, badge: 0 },
+        { href: "/projects", label: "Projects", icon: FolderKanban,    badge: 0 },
+        { href: "/tasks",    label: "Tasks",    icon: CheckSquare,     badge: 0 },
+        { href: "/messages", label: "Chat",     icon: MessageSquare,   badge: unreadCount },
+      ];
+
   return (
     <>
       {/* ── Desktop sidebar (lg+) ─────────────────────────────── */}
@@ -669,12 +692,7 @@ export function Sidebar() {
         aria-label="Primary"
       >
         <div className="bottomnav-bar pointer-events-auto flex items-center justify-between gap-1 w-full max-w-md px-2 py-2 rounded-full bg-slate-900/95 backdrop-blur border border-white/10 shadow-lg shadow-black/40">
-          {[
-            { href: "/",         label: "Home",     icon: LayoutDashboard, badge: 0 },
-            { href: "/projects", label: "Projects", icon: FolderKanban,    badge: 0 },
-            { href: "/tasks",    label: "Tasks",    icon: CheckSquare,     badge: 0 },
-            { href: "/messages", label: "Chat",     icon: MessageSquare,   badge: unreadCount },
-          ].map(({ href, label, icon: Icon, badge }) => {
+          {bottomNav.map(({ href, label, icon: Icon, badge }) => {
             const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
             return (
               <Link

@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { ApiError } from "@/lib/api-errors";
 import { dayKey, blockedOn, blockedMessage } from "@/lib/availability";
+import { timeRangeLabel } from "@/lib/shoots";
 import { canAssignToUser } from "@/lib/permissions";
 import type { AuthUser } from "@/lib/auth";
 
@@ -85,4 +86,60 @@ export async function assertAssignable(
 
   // 409, not 400: the request is well formed, the world just says no.
   throw new ApiError(blockedMessage(hits, day), 409);
+}
+
+/**
+ * Refuse an assignment that lands on a day somebody is out on a shoot.
+ *
+ * The shoot diary (People ▸ Shoots) is the self-service way a team member says
+ * "I'm out for a shoot on the 4th, 9–1". This is the enforcement behind it: the
+ * same way a blocked day refuses work, a shoot day does too, so an SMM can't
+ * promise a client work from someone who is already on a set.
+ *
+ * Kept SEPARATE from assertAssignable's unavailability check on purpose — the
+ * two read different tables and say different things in the refusal — but the
+ * callers run both, so from a door's point of view "can I assign this" is one
+ * question. Dateless work is never blocked, for the same reason as there.
+ */
+export async function assertNotOnShoot(
+  organizationId: string,
+  userIds: string[],
+  dueDate: Date | string | null | undefined,
+): Promise<void> {
+  if (!dueDate || userIds.length === 0) return;
+
+  const day = dayKey(dueDate);
+  const shoots = await prisma.shoot.findMany({
+    where: {
+      organizationId,
+      date: day,
+      participants: { some: { userId: { in: userIds } } },
+    },
+    select: {
+      title: true, startMinute: true, endMinute: true,
+      participants: {
+        where: { userId: { in: userIds } },
+        select: { user: { select: { id: true, name: true } } },
+      },
+    },
+    orderBy: { startMinute: "asc" },
+  });
+  if (shoots.length === 0) return;
+
+  const when = day.toLocaleDateString("en-US", {
+    day: "numeric", month: "short", year: "numeric", timeZone: "UTC",
+  });
+  // "Harsh (Nykaa shoot, 9 AM – 1 PM)" — enough for the planner to act on.
+  const who = shoots
+    .flatMap((s) =>
+      s.participants.map(
+        (p) => `${p.user.name} (${s.title}, ${timeRangeLabel(s.startMinute, s.endMinute)})`,
+      ),
+    )
+    .join("; ");
+
+  throw new ApiError(
+    `${who} ${shoots.flatMap((s) => s.participants).length === 1 ? "is" : "are"} on a shoot on ${when}. Pick another day or another person.`,
+    409,
+  );
 }

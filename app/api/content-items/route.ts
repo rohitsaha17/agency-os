@@ -9,7 +9,7 @@ import { cycleForDate } from "@/lib/cycles";
 import { quotaCheck } from "@/lib/cycle-quota";
 import { createContentWorkTask, syncPlanningTask } from "@/lib/auto-tasks";
 import { assertInOrg } from "@/lib/assert-in-org";
-import { assertCanAssign, assertAssignable } from "@/lib/assignment-guard";
+import { assertCanAssign, assertAssignable, assertNotOnShoot } from "@/lib/assignment-guard";
 
 const ITEM_INCLUDE = {
   // Only id/name/color/icon are read anywhere in the app; the full row
@@ -127,6 +127,7 @@ export async function POST(req: NextRequest) {
     await assertCanAssign(user, [assigneeId], user.organizationId);
     if (assigneeId && taskDueAt) {
       await assertAssignable(user.organizationId, [assigneeId], new Date(taskDueAt));
+      await assertNotOnShoot(user.organizationId, [assigneeId], new Date(taskDueAt));
     }
 
     // v3: work out which cycle this date falls into, then check the quota.

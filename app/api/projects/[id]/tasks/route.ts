@@ -9,7 +9,7 @@ import { handleApiError, ApiError } from "@/lib/api-errors";
 import { notifyMany } from "@/lib/notify";
 import { logStatus } from "@/lib/audit";
 import { assertInOrg } from "@/lib/assert-in-org";
-import { assertCanAssign, assertAssignable } from "@/lib/assignment-guard";
+import { assertCanAssign, assertAssignable, assertNotOnShoot } from "@/lib/assignment-guard";
 import { resolveRouting, notifyHeads, assignmentRequiresApproval } from "@/lib/task-routing";
 import type { Task } from "@/types";
 
@@ -212,6 +212,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     // And nobody is handed dated work on a day they've blocked (parity with the
     // other doors).
     await assertAssignable(user.organizationId, routing.assigneeIds, dueDate);
+    await assertNotOnShoot(user.organizationId, routing.assigneeIds, dueDate);
 
     const lastSibling = await prisma.task.findFirst({
       where: { projectId, parentId: parentId ?? null, deletedAt: null },

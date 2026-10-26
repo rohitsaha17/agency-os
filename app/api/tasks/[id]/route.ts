@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { assertAssignable } from "@/lib/assignment-guard";
+import { assertAssignable, assertNotOnShoot } from "@/lib/assignment-guard";
 import { newAssignment } from "@/lib/task-acceptance";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
@@ -202,6 +202,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         : existing.assignees.map((a) => a.userId);
       const nextDue = dueDate !== undefined ? dueDate : existing.dueDate;
       await assertAssignable(user.organizationId, nextAssignees, nextDue);
+      await assertNotOnShoot(user.organizationId, nextAssignees, nextDue);
     }
 
     if (estimatedHours !== undefined && estimatedHours !== null && estimatedHours !== "") {

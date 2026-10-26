@@ -28,7 +28,7 @@
 import { useState, useEffect, useCallback, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import {
-  Users, CalendarCheck, CalendarRange, Plane, Wallet, HandCoins, Cake, CalendarOff,
+  Users, CalendarCheck, CalendarRange, Plane, Wallet, HandCoins, Cake, CalendarOff, Camera,
 } from "lucide-react";
 import { useCurrentUser } from "@/lib/useCurrentUser";
 import { can, type Capability } from "@/lib/permissions";
@@ -42,8 +42,9 @@ import { PayrollTab } from "@/components/hr/PayrollTab";
 import { AdvancesTab } from "@/components/hr/AdvancesTab";
 import { CelebrationsTab } from "@/components/hr/CelebrationsTab";
 import { TeamAvailabilityTab } from "@/components/hr/TeamAvailabilityTab";
+import { ShootsTab } from "@/components/hr/ShootsTab";
 
-type TabId = "today" | "attendance" | "staff" | "leave" | "celebrations" | "availability" | "payroll" | "advances";
+type TabId = "today" | "attendance" | "staff" | "leave" | "celebrations" | "availability" | "shoots" | "payroll" | "advances";
 
 const TABS: { id: TabId; label: string; icon: typeof Users; need: Capability | null }[] = [
   { id: "today", label: "Today", icon: CalendarCheck, need: "hr.today" },
@@ -66,6 +67,10 @@ const TABS: { id: TabId; label: string; icon: typeof Users; need: Capability | n
   // Was its own top-level page; now a tab here. Open to everyone who can see
   // People, the same as it was as a standalone page.
   { id: "availability", label: "Team availability", icon: CalendarOff, need: null },
+  // Shoots: self-service "I'm out on a shoot" diary, with time of day and more
+  // than one person per booking. Open to everyone, like leave and availability —
+  // booking a shoot is something anyone on the crew does for themselves.
+  { id: "shoots", label: "Shoots", icon: Camera, need: null },
   { id: "payroll", label: "Payroll", icon: Wallet, need: "payroll.manage" },
   { id: "advances", label: "Advances", icon: HandCoins, need: "payroll.manage" },
 ];
@@ -183,6 +188,7 @@ function HRPageBody() {
           <TeamAvailabilityTab />
         </div>
       )}
+      {tab === "shoots" && <ShootsTab />}
       {tab === "payroll" && (
         <PayrollTab
           currency={currency} query={query}

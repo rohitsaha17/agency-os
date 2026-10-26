@@ -363,6 +363,8 @@ model User {
   assignmentsMade      TaskAssignee[]  @relation("AssignmentsMade")
   unavailability       Unavailability[] @relation("UserUnavailability")
   unavailabilityLogged Unavailability[] @relation("UnavailabilityRecorded")
+  shoots               ShootParticipant[] @relation("UserShoots")
+  shootsCreated        Shoot[]          @relation("ShootCreatedBy")
 
   @@unique([organizationId, email])
   @@index([organizationId])
@@ -992,6 +994,72 @@ model Unavailability {
   @@index([organizationId, date])
   @@index([leaveRequestId])
   @@map("unavailability")
+}
+
+/// A booked shoot: a named outing (a photo/video shoot) a team member goes on,
+/// for a window of a day, usually with one or more colleagues.
+///
+/// Deliberately SEPARATE from Unavailability, which is the day-level "cannot be
+/// given work" store that leave and the shoot-crew diary write to. The two
+/// answer different questions and must not be conflated:
+///
+///   Unavailability — one row per person per DAY, a hard block. No time of day,
+///                    one per day (@@unique[userId, date]), one person at a time.
+///   Shoot          — a TIME-OF-DAY window (startMinute..endMinute), with a name
+///                    and MANY participants on the one shoot. Two shoots a day is
+///                    normal; a morning and an afternoon shoot are two rows.
+///
+/// Reusing Unavailability for this would have fought all three of its shape
+/// decisions, so this is its own model. The assignment guard still consults it
+/// (a person on a shoot that day is not assignable — see lib/assignment-guard),
+/// but nothing here writes Unavailability rows, so leave/availability are
+/// untouched.
+model Shoot {
+  id             String   @id @default(cuid())
+  organizationId String
+  /// What the shoot is — e.g. "Nykaa product shoot". Required: a nameless entry
+  /// on the team's calendar tells nobody what the person is out for.
+  title          String
+  /// The calendar day of the shoot, midnight UTC — the SAME day key the rest of
+  /// availability uses (see lib/availability.ts dayKey), so a shoot on the 4th
+  /// means the 4th in the agency's calendar whatever timezone the server is in.
+  date           DateTime
+  /// Start/end as MINUTES from local midnight (0..1439). Stored as a plain
+  /// number, not a timestamp, for the same reason the day is a day key: a
+  /// wall-clock "9:00–13:00" must not drift across a UTC boundary. The grid and
+  /// the forms work in these minutes; lib/shoots.ts converts to/from "HH:MM".
+  startMinute    Int
+  endMinute      Int
+  /// Where the shoot is, optional — handy context for whoever is planning.
+  location       String?
+  /// Who recorded it. Usually one of the participants; kept so the UI can show
+  /// "added by" and so cancelling can be limited to the person who created it.
+  createdById    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User?              @relation("ShootCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  participants ShootParticipant[]
+
+  @@index([organizationId, date])
+  @@map("shoots")
+}
+
+/// Who is on a shoot. Many people to one shoot; the same person may be on many
+/// shoots. A person is added once per shoot (@@unique), and removing the last
+/// participant cancels the shoot (handled in the API, not a DB rule).
+model ShootParticipant {
+  id      String @id @default(cuid())
+  shootId String
+  userId  String
+
+  shoot Shoot @relation(fields: [shootId], references: [id], onDelete: Cascade)
+  user  User  @relation("UserShoots", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([shootId, userId])
+  @@index([userId])
+  @@map("shoot_participants")
 }
 
 model TaskAssignee {
@@ -1654,6 +1722,7 @@ model Organization {
   notifications Notification[]
   pushSubscriptions PushSubscription[]
   unavailability Unavailability[]
+  shoots        Shoot[]
   creativeTypes CreativeType[]
   contentItems  ContentItem[]
   events        CalendarEvent[]

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { newAssignment } from "@/lib/task-acceptance";
-import { assertAssignable, assertCanAssign } from "@/lib/assignment-guard";
+import { assertAssignable, assertCanAssign, assertNotOnShoot } from "@/lib/assignment-guard";
 import { can } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
@@ -198,6 +198,8 @@ export async function POST(req: NextRequest) {
 
     // Somebody who has blocked that day cannot be handed work on it.
     await assertAssignable(user.organizationId, routing.assigneeIds, dueDate);
+    // Nor can somebody who is out on a shoot that day.
+    await assertNotOnShoot(user.organizationId, routing.assigneeIds, dueDate);
 
     const task = await prisma.task.create({
       data: {

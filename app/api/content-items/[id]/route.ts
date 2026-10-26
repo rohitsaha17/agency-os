@@ -8,7 +8,7 @@ import { can } from "@/lib/permissions";
 import { isSettled, settledReason } from "@/lib/content-status";
 import { createContentWorkTask, syncPlanningTask } from "@/lib/auto-tasks";
 import { assertInOrg } from "@/lib/assert-in-org";
-import { assertCanAssign, assertAssignable } from "@/lib/assignment-guard";
+import { assertCanAssign, assertAssignable, assertNotOnShoot } from "@/lib/assignment-guard";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -114,6 +114,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     await assertCanAssign(user, [assigneeId], user.organizationId);
     if (assigneeId && taskDueAt) {
       await assertAssignable(user.organizationId, [assigneeId], new Date(taskDueAt));
+      await assertNotOnShoot(user.organizationId, [assigneeId], new Date(taskDueAt));
     }
 
     const updated = await prisma.contentItem.update({

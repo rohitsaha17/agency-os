@@ -141,7 +141,40 @@ export function TaskModal({
   const set = <K extends keyof TaskFormData>(field: K, value: TaskFormData[K]) =>
     setForm((prev) => ({ ...prev, [field]: value }));
 
+  /**
+   * Can this person hand work to anyone BUT themselves?
+   *
+   * A junior cannot — their assignable list is just them — so for them a task
+   * is always theirs and the picker is pointless. Anyone who can reach another
+   * name gets the real picker.
+   */
+  const canAssignOthers = useMemo(
+    () => assignableUsers.some((u) => u.id !== me?.id),
+    [assignableUsers, me?.id],
+  );
+  const selfOnly = users.length > 0 && !!me?.id && !canAssignOthers;
+
+  /*
+    Default a new task to the creator, once we know who they are.
+
+    A task created with nobody on it submits fine and then vanishes — it is on
+    nobody's list, because a list shows the work that is yours. Pre-selecting
+    the creator means the common case (adding your own to-do) needs no extra
+    click, and the validation below means the uncommon case can't slip through
+    empty. Runs once; it never fights a choice the user has already made, and
+    it leaves an edit — or a prefilled assignee — alone.
+  */
+  const prefilled = useRef(false);
+  useEffect(() => {
+    if (isEdit || prefilled.current || !me?.id) return;
+    prefilled.current = true;
+    if (form.assigneeIds.length === 0) set("assigneeIds", [me.id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [me?.id, isEdit]);
+
   const toggleAssignee = (userId: string) => {
+    // A self-only user can't unassign themselves — the work is theirs.
+    if (selfOnly) return;
     set("assigneeIds", form.assigneeIds.includes(userId)
       ? form.assigneeIds.filter((id) => id !== userId)
       : [...form.assigneeIds, userId]);
@@ -171,11 +204,28 @@ export function TaskModal({
     e.preventDefault();
     const title = form.title.trim() || form.topic?.trim() || "";
     if (!title) { setError("A title or topic is required"); return; }
+
+    /*
+      Every new task needs someone on it, or it is created onto nobody's list
+      and disappears. A self-only user is resolved to themselves here as a
+      safety net (they can't open the picker); everyone else is told to pick.
+    */
+    let assigneeIds = form.assigneeIds;
+    if (!isEdit && assigneeIds.length === 0) {
+      if (selfOnly && me?.id) {
+        assigneeIds = [me.id];
+      } else {
+        setError("Add at least one assignee — tap your name, or a teammate, under Assignees.");
+        return;
+      }
+    }
+
     setSaving(true);
     setError(null);
     try {
       const payload = {
         ...form,
+        assigneeIds,
         title,
         clientId: form.clientId || null,
         preferredAssigneeId: form.preferredAssigneeId || null,
@@ -428,21 +478,38 @@ export function TaskModal({
           {/* Assignees */}
           {users.length > 0 && (
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1.5">Assignees</label>
-              <div className="flex flex-wrap gap-1.5">
-                {assignableUsers.map((u) => (
-                  <button
-                    key={u.id} type="button" onClick={() => toggleAssignee(u.id)}
-                    className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
-                      form.assigneeIds.includes(u.id)
-                        ? "bg-indigo-100 border-indigo-300 text-indigo-700 font-medium"
-                        : "bg-white border-gray-200 text-gray-600 hover:border-gray-300"
-                    }`}
-                  >
-                    {u.name}
-                  </button>
-                ))}
-              </div>
+              <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                Assignees {!isEdit && <span className="text-red-500">*</span>}
+              </label>
+              {selfOnly ? (
+                // A junior's work is theirs; no picker, just the fact.
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-full bg-indigo-100 border border-indigo-300 text-indigo-700 font-medium">
+                  {me?.name ?? "You"}
+                  <span className="text-indigo-400">· assigned to you</span>
+                </div>
+              ) : (
+                <>
+                  <div className="flex flex-wrap gap-1.5">
+                    {assignableUsers.map((u) => (
+                      <button
+                        key={u.id} type="button" onClick={() => toggleAssignee(u.id)}
+                        className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
+                          form.assigneeIds.includes(u.id)
+                            ? "bg-indigo-100 border-indigo-300 text-indigo-700 font-medium"
+                            : "bg-white border-gray-200 text-gray-600 hover:border-gray-300"
+                        }`}
+                      >
+                        {u.name}{u.id === me?.id ? " (you)" : ""}
+                      </button>
+                    ))}
+                  </div>
+                  {!isEdit && (
+                    <p className="text-[11px] text-gray-400 mt-1.5">
+                      Defaults to you — tap to add or remove. A task must have at least one assignee.
+                    </p>
+                  )}
+                </>
+              )}
             </div>
           )}
 

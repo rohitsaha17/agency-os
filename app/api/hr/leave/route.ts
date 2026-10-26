@@ -37,7 +37,7 @@ function serialize(r: {
  * GET /api/hr/leave[?scope=mine|all][&status=PENDING]
  *
  * Your own requests need no capability — they are yours. `scope=all` is the
- * approver's inbox and takes hr.manage.
+ * approver's inbox and takes leave.manage.
  */
 export async function GET(req: NextRequest) {
   try {
@@ -46,7 +46,7 @@ export async function GET(req: NextRequest) {
     const wantsAll = sp.get("scope") === "all";
     const status = sp.get("status");
 
-    if (wantsAll) requireCapability(user, "hr.manage");
+    if (wantsAll) requireCapability(user, "leave.manage");
 
     const rows = await prisma.leaveRequest.findMany({
       where: {
@@ -60,7 +60,7 @@ export async function GET(req: NextRequest) {
     });
 
     return NextResponse.json({
-      canDecide: can(user, "hr.manage"),
+      canDecide: can(user, "leave.manage"),
       requests: rows.map(serialize),
     });
   } catch (error) {
@@ -78,7 +78,7 @@ export async function GET(req: NextRequest) {
  *                it would turn every approval into a negotiation about the
  *                label rather than the days.
  *
- *   SOMEBODY ELSE  hr.manage, and it lands APPROVED with the days already
+ *   SOMEBODY ELSE  leave.manage, and it lands APPROVED with the days already
  *                blocked. An admin entering leave for a person who phoned in
  *                is not making a request of themselves — routing it through
  *                pending, so they can then approve their own entry, is a form
@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
     const kind = body.kind ? String(body.kind).toUpperCase() : null;
 
     if (onBehalf) {
-      requireCapability(user, "hr.manage");
+      requireCapability(user, "leave.manage");
       if (kind !== "PAID" && kind !== "UNPAID") {
         throw new ApiError("Say whether this is paid or unpaid leave.", 400);
       }

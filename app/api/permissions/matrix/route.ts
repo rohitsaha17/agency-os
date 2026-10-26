@@ -19,6 +19,8 @@ import {
 /** Human wording for each capability, kept next to the matrix it labels. */
 const LABELS: Record<string, { label: string; group: string }> = {
   "users.manage":       { label: "Create & manage users",          group: "Administration" },
+  "users.invite":       { label: "Invite new members",             group: "Administration" },
+  "users.remove":       { label: "Deactivate & delete members",    group: "Administration" },
   "settings.manage":    { label: "Edit workspace settings",        group: "Administration" },
   "clients.manage":     { label: "Create & edit clients",          group: "Administration" },
   "projects.manage":    { label: "Create & edit projects",         group: "Projects" },
@@ -41,7 +43,8 @@ const LABELS: Record<string, { label: string; group: string }> = {
   "attendance.exempt":  { label: "Not required to check in",        group: "People" },
   "hr.today":           { label: "See who is in today",             group: "People" },
   "hr.records":         { label: "Attendance history & staff records", group: "People" },
-  "hr.manage":          { label: "Edit staff records, decide leave", group: "People" },
+  "hr.manage":          { label: "Edit staff records",            group: "People" },
+  "leave.manage":       { label: "Approve & manage leave",        group: "People" },
   "payroll.manage":     { label: "Salaries, payroll & advances",    group: "People" },
 };
 

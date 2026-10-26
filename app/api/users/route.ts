@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { requireCapability } from "@/lib/api-permissions";
 import { handleApiError, ApiError } from "@/lib/api-errors";
-import { mintSetupToken } from "@/lib/setup-token";
+import { hashPassword, validatePassword } from "@/lib/password";
 
 // Roles that can be granted to invited teammates. OWNER is never
 // assignable — it belongs to the account created at tenant setup.
@@ -61,14 +61,34 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const user = await requireAuth(req);
-    requireCapability(user, "users.manage");
-    const { name, email, role, designationId } = await req.json();
+    // Adding a teammate is users.invite — owner, admin and manager. Which
+    // ROLES they may hand out is bounded below: OWNER is never assignable and
+    // only an admin may create another admin (assertMayGrant).
+    requireCapability(user, "users.invite");
+    const { name, email, role, designationId, password } = await req.json();
     if (!name?.trim()) throw new ApiError("Name is required", 400);
     if (!email?.trim()) throw new ApiError("Email is required", 400);
     if (role !== undefined && !ASSIGNABLE_ROLES.includes(role)) {
       throw new ApiError("Invalid role", 400);
     }
     assertMayGrant(user, role);
+
+    /*
+      A password set here creates a ready-to-use account — the member signs in
+      with the credentials they were given, no invite step. It is optional so
+      the older "they set their own on first sign-in" path still works for any
+      caller that omits it, but the UI always sends one.
+
+      It also closes a hole: an account created WITHOUT a password can be
+      claimed by anyone who knows the email (set-password has no token). A
+      member created with a password is never in that state.
+    */
+    let passwordHash: string | undefined;
+    if (password !== undefined && password !== "") {
+      const pwError = validatePassword(password);
+      if (pwError) throw new ApiError(pwError, 400);
+      passwordHash = hashPassword(String(password));
+    }
     if (designationId) {
       const ok = await prisma.designationRole.findFirst({
         where: { id: designationId, organizationId: user.organizationId },
@@ -86,11 +106,6 @@ export async function POST(req: NextRequest) {
     });
     if (existing) throw new ApiError("A user with this email already exists", 409);
 
-    // QA-001: mint a single-use setup token so the invitee can set their first
-    // password by proving they hold this link — not by email alone. Only the
-    // hash is stored; the raw token is returned to the admin ONCE below.
-    const setup = mintSetupToken();
-
     const created = await prisma.user.create({
       data: {
         organizationId: user.organizationId,
@@ -98,25 +113,12 @@ export async function POST(req: NextRequest) {
         email: normalizedEmail,
         role:  role ?? "TEAM",
         designationId: designationId ?? null,
-        setupTokenHash: setup.hash,
-        setupTokenExpiresAt: setup.expiresAt,
+        ...(passwordHash && { passwordHash, passwordSetAt: new Date() }),
       },
       select: USER_FIELDS,
     });
 
-    // The raw token leaves the server exactly here, to the admin who created
-    // the invite (they hold users.manage). It is never stored in plaintext,
-    // never logged, and has no read-back endpoint. The admin shares this link
-    // with the invitee out of band.
-    return NextResponse.json(
-      {
-        ...created,
-        setupToken: setup.token,
-        setupPath: `/set-password?token=${encodeURIComponent(setup.token)}`,
-        setupTokenExpiresAt: setup.expiresAt,
-      },
-      { status: 201 },
-    );
+    return NextResponse.json(created, { status: 201 });
   } catch (error) {
     return handleApiError(error, "POST /api/users");
   }

@@ -111,6 +111,9 @@ function HRPageBody() {
   const clearFocus = useCallback(() => setFocus(null), []);
   const currency = user?.organization?.currency ?? "INR";
   const canManageHr = can(user, "hr.manage");
+  // Deciding leave is its own capability now — admin/manager by default,
+  // never SMM, even where a workspace granted SMM hr.manage.
+  const canDecideLeave = can(user, "leave.manage");
   const seesPay = can(user, "payroll.manage");
 
   return (
@@ -175,7 +178,7 @@ function HRPageBody() {
       )}
       {tab === "leave" && (
         <LeaveTab
-          canDecide={canManageHr} query={query}
+          canDecide={canDecideLeave} query={query}
           focusUserId={focus} onFocusHandled={clearFocus}
         />
       )}

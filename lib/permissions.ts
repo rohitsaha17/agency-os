@@ -32,6 +32,26 @@ export interface HasRole {
 
 export type Capability =
   | "users.manage"
+  /**
+   * Invite / create a new teammate.
+   *
+   * Narrower than users.manage, which also governs changing someone's role,
+   * deactivating and deleting. A manager runs the team and so may ADD people —
+   * in any role but ADMIN and OWNER — without being handed the account-admin
+   * powers that come with users.manage. Granting ADMIN stays with admins (see
+   * assertMayGrant in app/api/users), and OWNER is never assignable at all.
+   */
+  | "users.invite"
+  /**
+   * Deactivate or permanently delete a member.
+   *
+   * Owner, admin and manager. Narrower in WHO it can touch than who holds it:
+   * a manager may remove only SMMs and team members, an admin may also remove
+   * managers, the owner can never be removed by anyone, and an ADMIN account
+   * can never be DELETED at all (only deactivated). Nobody removes themselves.
+   * The target rules live in app/api/users — this is just the door.
+   */
+  | "users.remove"
   | "settings.manage"
   | "clients.manage"
   | "projects.manage"
@@ -116,6 +136,16 @@ export type Capability =
   /** Staff records, and deciding leave. */
   | "hr.manage"
   /**
+   * Decide leave — approve, decline, revoke, and record it for someone else.
+   *
+   * Its own capability, split out of hr.manage, because approving time off is
+   * a line manager's job and should not ride along with every other HR power
+   * (or be reachable just because a workspace granted an SMM hr.manage for
+   * something unrelated). Owner, admin and manager by default; nobody else.
+   * On top of this, you can never decide your OWN leave — see the route.
+   */
+  | "leave.manage"
+  /**
    * Salary, the salary sheet, advances and loans.
    *
    * Deliberately NOT financials.view, which a Manager has. A manager seeing
@@ -146,7 +176,7 @@ function normalizeRole(role: string | null | undefined): Exclude<Role, "MEMBER">
  */
 const MATRIX: Record<Exclude<Role, "MEMBER">, Record<Capability, boolean>> = {
   OWNER: {
-    "users.manage": true, "settings.manage": true, "clients.manage": true, "projects.manage": true,
+    "users.manage": true, "users.invite": true, "users.remove": true, "settings.manage": true, "clients.manage": true, "projects.manage": true,
     "projects.pricing": true, "projects.assignSmm": true, "activity.view": true,
     "content.plan": true,
     "tasks.assign": true, "tasks.review": true, "tasks.viewAll": true,
@@ -154,11 +184,11 @@ const MATRIX: Record<Exclude<Role, "MEMBER">, Record<Capability, boolean>> = {
     "billing.flag": true, "financials.view": true, "expenses.create": true,
     "invoices.manage": true, "reports.all": true, "reports.delivery": true,
     "attendance.mark": true, "hr.today": true, "hr.records": true,
-    "hr.manage": true, "payroll.manage": true,
+    "hr.manage": true, "leave.manage": true, "payroll.manage": true,
     "attendance.exempt": true,
   },
   ADMIN: {
-    "users.manage": true, "settings.manage": true, "clients.manage": true, "projects.manage": true,
+    "users.manage": true, "users.invite": true, "users.remove": true, "settings.manage": true, "clients.manage": true, "projects.manage": true,
     "projects.pricing": true, "projects.assignSmm": true, "activity.view": true,
     "content.plan": true,
     "tasks.assign": true, "tasks.review": true, "tasks.viewAll": true,
@@ -166,11 +196,17 @@ const MATRIX: Record<Exclude<Role, "MEMBER">, Record<Capability, boolean>> = {
     "billing.flag": true, "financials.view": true, "expenses.create": true,
     "invoices.manage": true, "reports.all": true, "reports.delivery": true,
     "attendance.mark": true, "hr.today": true, "hr.records": true,
-    "hr.manage": true, "payroll.manage": true,
+    "hr.manage": true, "leave.manage": true, "payroll.manage": true,
     "attendance.exempt": true,
   },
   MANAGER: {
     "users.manage": false, // read-only on Settings ▸ Users
+    // A manager runs the team: they may invite new people (any role but ADMIN
+    // and OWNER), they just can't change roles or remove accounts.
+    "users.invite": true,
+    // Managers may remove SMMs and team members (not managers, admins or
+    // the owner); the target rules are enforced in the route.
+    "users.remove": true,
     // The org profile, letterhead and creative types are a manager's to run;
     // only granting access isn't.
     "settings.manage": true,
@@ -184,7 +220,7 @@ const MATRIX: Record<Exclude<Role, "MEMBER">, Record<Capability, boolean>> = {
     "reports.all": false, // no org P&L / revenue / margin
     "reports.delivery": true,
     "attendance.mark": true, "hr.today": true, "hr.records": true,
-    "hr.manage": true, "payroll.manage": false,
+    "hr.manage": true, "leave.manage": true, "payroll.manage": false,
     "attendance.exempt": false,
   },
   /*
@@ -200,7 +236,7 @@ const MATRIX: Record<Exclude<Role, "MEMBER">, Record<Capability, boolean>> = {
     that is the distinction this row got wrong before.
   */
   SMM: {
-    "users.manage": false, "settings.manage": false, "clients.manage": false, "projects.manage": false,
+    "users.manage": false, "users.invite": false, "users.remove": false, "settings.manage": false, "clients.manage": false, "projects.manage": false,
     "projects.pricing": false, "projects.assignSmm": false,
     // An SMM plans the work; the audit trail of who changed what is not
     // theirs to read.
@@ -249,11 +285,11 @@ const MATRIX: Record<Exclude<Role, "MEMBER">, Record<Capability, boolean>> = {
       the server whatever the UI shows. Approved leave already appears there
       as a blocked day.
     */
-    "hr.today": true, "hr.records": false, "hr.manage": false, "payroll.manage": false,
+    "hr.today": true, "hr.records": false, "hr.manage": false, "leave.manage": false, "payroll.manage": false,
     "attendance.exempt": false,
   },
   TEAM: {
-    "users.manage": false, "settings.manage": false, "clients.manage": false, "projects.manage": false,
+    "users.manage": false, "users.invite": false, "users.remove": false, "settings.manage": false, "clients.manage": false, "projects.manage": false,
     "projects.pricing": false, "projects.assignSmm": false, "activity.view": false,
     "content.plan": false,
     "tasks.assign": false, // self-reminders only — see assignScope()
@@ -268,7 +304,7 @@ const MATRIX: Record<Exclude<Role, "MEMBER">, Record<Capability, boolean>> = {
     "invoices.manage": false,
     "reports.all": false, "reports.delivery": false, // own tasks only
     "attendance.mark": true, "hr.today": false, "hr.records": false,
-    "hr.manage": false, "payroll.manage": false,
+    "hr.manage": false, "leave.manage": false, "payroll.manage": false,
     "attendance.exempt": false,
   },
 };

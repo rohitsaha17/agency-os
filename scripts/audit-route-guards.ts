@@ -54,6 +54,7 @@ const REVIEWED_OPEN: Record<string, string> = {
   "auth/logout/route.ts:POST": "ending your own session",
   "auth/me/route.ts:GET": "reading your own identity",
   "auth/change-password/route.ts:POST": "changing your own password",
+  "users/me/route.ts:PATCH": "editing your own name and contact details; cannot touch role, status or email",
   "auth/set-password/route.ts:POST": "first-run password set, token-scoped",
   "notifications/route.ts:GET": "your own notifications",
   "notifications/route.ts:PATCH": "marking your own notifications read",

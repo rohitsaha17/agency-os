@@ -148,6 +148,68 @@ check("and an admin, whatever is passed",
   isGranted("ADMIN", "users.manage", { MANAGER: { "users.manage": false } }), true);
 
 console.log("");
+console.log("— who may manage leave —");
+/*
+  Approving, declining and recording leave is leave.manage: owner, admin and
+  manager only. It was split out of hr.manage precisely so that a workspace
+  granting an SMM hr.manage for something else does not also hand them the
+  leave inbox — the two are now independent capabilities.
+*/
+check("owner manages leave", can(asUser("OWNER"), "leave.manage"), true);
+check("admin manages leave", can(asUser("ADMIN"), "leave.manage"), true);
+check("manager manages leave", can(asUser("MANAGER"), "leave.manage"), true);
+check("an SMM does not", can(asUser("SMM"), "leave.manage"), false);
+check("a junior does not", can(asUser("TEAM"), "leave.manage"), false);
+check("an SMM given hr.manage still cannot manage leave",
+  can(asUser("SMM", { SMM: { "hr.manage": true } }), "leave.manage"), false);
+
+console.log("");
+console.log("— who may invite a new teammate —");
+/*
+  Adding people is a manager's job; it is deliberately NOT users.manage, which
+  also hands over role changes, deactivation and deletion. So a manager can
+  grow the team without being able to rewrite it. OWNER is never an assignable
+  role and only an admin may create another admin — both enforced in the route
+  (assertMayGrant), on top of this capability.
+*/
+check("an owner may invite", can(asUser("OWNER"), "users.invite"), true);
+check("an admin may invite", can(asUser("ADMIN"), "users.invite"), true);
+check("a manager may invite", can(asUser("MANAGER"), "users.invite"), true);
+check("an SMM may not", can(asUser("SMM"), "users.invite"), false);
+check("a junior may not", can(asUser("TEAM"), "users.invite"), false);
+check("inviting is narrower than managing — a manager invites but cannot manage",
+  can(asUser("MANAGER"), "users.invite") && !can(asUser("MANAGER"), "users.manage"), true);
+
+console.log("");
+console.log("— who may deactivate or delete a member —");
+/*
+  Removing someone (deactivate or hard delete) is users.remove: owner, admin
+  and manager. Like users.invite it is deliberately narrower than users.manage
+  — a manager can retire an SMM or team member without being able to change
+  roles or touch the permission matrix. WHO each may remove, and the rule that
+  an admin is never deleted and the owner never touched, is enforced per target
+  by assertMayRemove in app/api/users/[id]/route.ts, not by this capability.
+*/
+check("an owner may remove", can(asUser("OWNER"), "users.remove"), true);
+check("an admin may remove", can(asUser("ADMIN"), "users.remove"), true);
+check("a manager may remove", can(asUser("MANAGER"), "users.remove"), true);
+check("an SMM may not", can(asUser("SMM"), "users.remove"), false);
+check("a junior may not", can(asUser("TEAM"), "users.remove"), false);
+check("removing is narrower than managing — a manager removes but cannot manage",
+  can(asUser("MANAGER"), "users.remove") && !can(asUser("MANAGER"), "users.manage"), true);
+// The target-level rules live in the route; assert they are actually written
+// there so this file fails if that guard is ever loosened or removed.
+const REMOVE_GUARD = readFileSync("app/api/users/[id]/route.ts", "utf8");
+check("the route forbids deleting an admin",
+  REMOVE_GUARD.includes("An admin account can't be deleted"), true);
+check("the route holds a manager to SMMs and team members",
+  REMOVE_GUARD.includes("A manager can only deactivate or remove SMMs and team members"), true);
+check("the route never lets the owner be removed",
+  REMOVE_GUARD.includes("organization owner can't be"), true);
+check("the route blocks removing your own account",
+  REMOVE_GUARD.includes("your own account"), true);
+
+console.log("");
 console.log("— starting a project is not planning one —");
 /*
   Creating a project used to take content.plan, which an SMM holds. So the

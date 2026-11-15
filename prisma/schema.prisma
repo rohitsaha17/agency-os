@@ -289,7 +289,14 @@ model User {
   organizationId String
   email          String
   name           String
+  /// What the UI renders as the person's photo. A route URL (/api/users/<id>/
+  /// avatar?v=…) once they upload one, so it goes through the same authenticated,
+  /// org-scoped serving the Files feature uses — never a public bucket link.
   avatarUrl      String?
+  /// The storage object key behind avatarUrl, so the serving route knows which
+  /// object to stream and an old photo can be deleted when replaced. Null until
+  /// a photo is uploaded; avatarUrl without a key is a legacy/external value.
+  avatarKey      String?
   role           UserRole  @default(TEAM)
   // v2 enum, deprecated — read only for rows created before v3
   designation    Designation?
@@ -2131,6 +2138,9 @@ model StaffProfile {
   address        String?
   emergencyName  String?
   emergencyPhone String?
+  /// e.g. "O+". A short free-ish text kept simple on purpose; the UI offers the
+  /// eight common groups. Personal detail the employee maintains themselves.
+  bloodGroup     String?
   employmentType EmploymentType  @default(FULL_TIME)
   /// Monthly, in the organization's currency. payroll.manage only — never
   /// returned by any endpoint a colleague can call.

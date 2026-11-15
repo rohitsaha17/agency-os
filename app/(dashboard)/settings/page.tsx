@@ -10,6 +10,7 @@ import {
 import type { CompanySettings, TeamUser, DesignationRole } from "@/types";
 import { useToast } from "@/components/ui/Toast";
 import { useCurrentUser } from "@/lib/useCurrentUser";
+import { broadcastChange } from "@/lib/live";
 import { can } from "@/lib/permissions";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { Modal } from "@/components/ui/Modal";
@@ -2145,15 +2146,26 @@ function AssignmentApprovalCard() {
  * role, active status or email (the login identity), so it can't harm
  * administration; the server enforces that through PATCH /api/users/me.
  */
+/** The eight common blood groups, plus a blank. Kept as a short list rather
+ *  than free text so it stays tidy and searchable. */
+const BLOOD_GROUPS = ["", "A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
+
 function MyDetailsCard() {
   const toast = useToast();
   const [form, setForm] = useState({
-    name: "", phone: "", address: "", dateOfBirth: "", dateOfJoining: "",
-    emergencyName: "", emergencyPhone: "", notes: "",
+    name: "", phone: "", address: "", dateOfBirth: "",
+    emergencyName: "", emergencyPhone: "", bloodGroup: "", notes: "",
   });
   const [email, setEmail] = useState("");
+  // Date of joining is the admin's record, not the employee's to set. We show
+  // it read-only here so the person can see it, but it is never in `form`.
+  const [dateOfJoining, setDateOfJoining] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let alive = true;
@@ -2161,7 +2173,7 @@ function MyDetailsCard() {
       .then((r) => (r.ok ? r.json() : null))
       .then((me) => {
         if (!me?.id) { setLoaded(true); return null; }
-        setEmail(me.email ?? "");
+        if (alive) { setEmail(me.email ?? ""); setUserId(me.id); setAvatarUrl(me.avatarUrl ?? null); }
         return fetch(`/api/users/${me.id}`).then((r) => (r.ok ? r.json() : null));
       })
       .then((d) => {
@@ -2172,11 +2184,13 @@ function MyDetailsCard() {
           phone: p.phone ?? "",
           address: p.address ?? "",
           dateOfBirth: p.dateOfBirth ? String(p.dateOfBirth).slice(0, 10) : "",
-          dateOfJoining: p.dateOfJoining ? String(p.dateOfJoining).slice(0, 10) : "",
           emergencyName: p.emergencyName ?? "",
           emergencyPhone: p.emergencyPhone ?? "",
+          bloodGroup: p.bloodGroup ?? "",
           notes: p.notes ?? "",
         });
+        setDateOfJoining(p.dateOfJoining ? String(p.dateOfJoining).slice(0, 10) : null);
+        if (d.avatarUrl) setAvatarUrl(d.avatarUrl);
         setLoaded(true);
       })
       .catch(() => setLoaded(true));
@@ -2184,6 +2198,36 @@ function MyDetailsCard() {
   }, []);
 
   const set = (k: keyof typeof form, v: string) => setForm((p) => ({ ...p, [k]: v }));
+
+  async function uploadPhoto(file: File) {
+    if (!file.type.startsWith("image/")) { toast.error("Choose an image file"); return; }
+    if (file.size > 5 * 1024 * 1024) { toast.error("Keep the photo under 5 MB"); return; }
+    setPhotoBusy(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/users/me/avatar", { method: "POST", body: fd });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) { toast.error(d?.error?.message ?? "Could not upload that"); return; }
+      setAvatarUrl(d.avatarUrl ?? null);
+      toast.success("Profile photo updated");
+      broadcastChange("staff"); // let an open People ▸ Staff view refresh
+    } finally {
+      setPhotoBusy(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  }
+
+  async function removePhoto() {
+    setPhotoBusy(true);
+    try {
+      const res = await fetch("/api/users/me/avatar", { method: "DELETE" });
+      if (!res.ok) { const d = await res.json().catch(() => ({})); toast.error(d?.error?.message ?? "Could not remove it"); return; }
+      setAvatarUrl(null);
+      toast.success("Profile photo removed");
+      broadcastChange("staff");
+    } finally { setPhotoBusy(false); }
+  }
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -2197,24 +2241,61 @@ function MyDetailsCard() {
           name: form.name.trim(),
           staffProfile: {
             phone: form.phone, address: form.address,
-            dateOfBirth: form.dateOfBirth || null, dateOfJoining: form.dateOfJoining || null,
-            emergencyName: form.emergencyName, emergencyPhone: form.emergencyPhone, notes: form.notes,
+            dateOfBirth: form.dateOfBirth || null,
+            emergencyName: form.emergencyName, emergencyPhone: form.emergencyPhone,
+            bloodGroup: form.bloodGroup || null, notes: form.notes,
+            // dateOfJoining is intentionally omitted — the server ignores it
+            // from this route; only an admin can set it.
           },
         }),
       });
       if (!res.ok) { const d = await res.json().catch(() => ({})); toast.error(d?.error?.message ?? "Could not save"); return; }
       toast.success("Your details were updated");
+      broadcastChange("staff"); // admin's People ▸ Staff reflects it on refresh
     } finally { setSaving(false); }
   };
 
   const fld = "w-full px-3 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500";
+  const photoInitials = form.name.trim()
+    ? form.name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase()
+    : "·";
 
   return (
-    <SectionCard title="My Details" desc="Your name and contact details. Changing these never affects your access.">
+    <SectionCard title="My Details" desc="Your photo and personal details. You can keep these up to date yourself — changing them never affects your access.">
       {!loaded ? (
         <p className="text-sm text-gray-500 py-4">Loading…</p>
       ) : (
-        <form onSubmit={save} className="space-y-3 max-w-xl">
+        <form onSubmit={save} className="space-y-4 max-w-xl">
+          {/* Profile photo */}
+          <div className="flex items-center gap-4">
+            <div className="w-16 h-16 rounded-full overflow-hidden bg-gradient-to-br from-indigo-400 to-indigo-600 flex items-center justify-center text-white text-lg font-bold flex-shrink-0">
+              {avatarUrl
+                // eslint-disable-next-line @next/next/no-img-element
+                ? <img src={avatarUrl} alt="Your profile photo" className="w-full h-full object-cover" />
+                : <span>{photoInitials}</span>}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPhoto(f); }}
+              />
+              <button type="button" disabled={photoBusy} onClick={() => fileRef.current?.click()}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+                <Upload className="w-3.5 h-3.5" /> {photoBusy ? "Working…" : (avatarUrl ? "Change photo" : "Upload photo")}
+              </button>
+              {avatarUrl && (
+                <button type="button" disabled={photoBusy} onClick={removePhoto}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg text-gray-500 hover:text-red-500 hover:bg-gray-50 disabled:opacity-50">
+                  <Trash2 className="w-3.5 h-3.5" /> Remove
+                </button>
+              )}
+              <span className="block w-full text-[11px] text-gray-400">JPG, PNG, WebP or GIF, up to 5 MB.</span>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <label className="block"><span className="block text-[11px] font-medium text-gray-500 mb-1">Full name</span>
               <input value={form.name} onChange={(e) => set("name", e.target.value)} className={fld} /></label>
@@ -2222,17 +2303,25 @@ function MyDetailsCard() {
               <input value={email} disabled className={`${fld} bg-gray-50 text-gray-400`} /></label>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <label className="block"><span className="block text-[11px] font-medium text-gray-500 mb-1">Phone</span>
+            <label className="block"><span className="block text-[11px] font-medium text-gray-500 mb-1">Contact number</span>
               <input value={form.phone} onChange={(e) => set("phone", e.target.value)} placeholder="+91…" className={fld} /></label>
             <label className="block"><span className="block text-[11px] font-medium text-gray-500 mb-1">Date of birth</span>
               <input type="date" value={form.dateOfBirth} onChange={(e) => set("dateOfBirth", e.target.value)} className={fld} /></label>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label className="block"><span className="block text-[11px] font-medium text-gray-500 mb-1">Blood group</span>
+              <select value={form.bloodGroup} onChange={(e) => set("bloodGroup", e.target.value)} className={fld}>
+                {BLOOD_GROUPS.map((g) => <option key={g} value={g}>{g || "— select —"}</option>)}
+              </select></label>
+            <label className="block"><span className="block text-[11px] font-medium text-gray-400 mb-1">Date of joining (set by your admin)</span>
+              <input value={dateOfJoining ?? "Not set yet"} disabled className={`${fld} bg-gray-50 text-gray-400`} /></label>
           </div>
           <label className="block"><span className="block text-[11px] font-medium text-gray-500 mb-1">Address</span>
             <input value={form.address} onChange={(e) => set("address", e.target.value)} className={fld} /></label>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <label className="block"><span className="block text-[11px] font-medium text-gray-500 mb-1">Emergency contact name</span>
               <input value={form.emergencyName} onChange={(e) => set("emergencyName", e.target.value)} className={fld} /></label>
-            <label className="block"><span className="block text-[11px] font-medium text-gray-500 mb-1">Emergency contact phone</span>
+            <label className="block"><span className="block text-[11px] font-medium text-gray-500 mb-1">Emergency contact number</span>
               <input value={form.emergencyPhone} onChange={(e) => set("emergencyPhone", e.target.value)} className={fld} /></label>
           </div>
           <label className="block"><span className="block text-[11px] font-medium text-gray-500 mb-1">Notes</span>

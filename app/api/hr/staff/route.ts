@@ -21,7 +21,7 @@ import { can } from "@/lib/permissions";
 
 const BASE_PROFILE = {
   phone: true, dateOfBirth: true, dateOfJoining: true, address: true,
-  emergencyName: true, emergencyPhone: true, employmentType: true, notes: true,
+  emergencyName: true, emergencyPhone: true, bloodGroup: true, employmentType: true, notes: true,
 } as const;
 
 export async function GET(req: NextRequest) {
@@ -81,6 +81,7 @@ export async function GET(req: NextRequest) {
           address: prof?.address ?? null,
           emergencyName: prof?.emergencyName ?? null,
           emergencyPhone: prof?.emergencyPhone ?? null,
+          bloodGroup: prof?.bloodGroup ?? null,
           employmentType: prof?.employmentType ?? "FULL_TIME",
           notes: prof?.notes ?? null,
           ...(seesPay
@@ -135,6 +136,7 @@ export async function PATCH(req: NextRequest) {
       address: str(body.address, 500),
       emergencyName: str(body.emergencyName, 120),
       emergencyPhone: str(body.emergencyPhone, 40),
+      bloodGroup: str(body.bloodGroup, 8),
       notes: str(body.notes, 1000),
     };
     if (["FULL_TIME", "PART_TIME", "CONTRACT", "INTERN"].includes(String(body.employmentType))) {

@@ -71,7 +71,7 @@ const USER_FIELDS = {
 /** The contact details editable from Settings ▸ Team. Salary stays in Payroll. */
 const PROFILE_FIELDS = {
   phone: true, address: true, dateOfBirth: true, dateOfJoining: true,
-  emergencyName: true, emergencyPhone: true, notes: true,
+  emergencyName: true, emergencyPhone: true, bloodGroup: true, notes: true,
 } as const;
 
 function parseDate(value: unknown): Date | null {

@@ -28,6 +28,7 @@ import { Select } from "@/components/ui/Select";
 import { LoadError } from "@/components/ui/LoadError";
 import { useToast } from "@/components/ui/Toast";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { useLiveRefresh } from "@/lib/live";
 import { Drawer, DrawerLine, DrawerSection } from "@/components/people/Drawer";
 import {
   PersonAvatar, PersonCell, StatusBadge, SummaryCard, SummaryStrip,
@@ -43,6 +44,7 @@ interface Staff {
   role: string; isActive: boolean; craft: string | null; jobTitleId: string | null;
   phone: string | null; dateOfBirth: string | null; dateOfJoining: string | null;
   address: string | null; emergencyName: string | null; emergencyPhone: string | null;
+  bloodGroup: string | null;
   employmentType: string; notes: string | null;
   monthlySalary?: number | null;
   advanceOutstanding?: number;
@@ -97,6 +99,10 @@ export function StaffTab({
   }, []);
 
   useEffect(() => { load(); }, [load]);
+  // When someone edits their own details in My Account, reflect it here — on
+  // the same browser it's instant (BroadcastChannel), and an admin on another
+  // device picks it up when the tab regains focus (useLiveRefresh refetches).
+  useLiveRefresh(["staff"], load);
 
   const crafts = useMemo(
     () => [...new Set((staff ?? []).map((s) => s.craft).filter(Boolean) as string[])].sort(),
@@ -371,6 +377,7 @@ export function StaffTab({
               <DrawerLine label="Email" value={opened.email} />
               <DrawerLine label="Phone" value={opened.phone ?? "—"} />
               <DrawerLine label="Date of birth" value={longDate(opened.dateOfBirth)} />
+              <DrawerLine label="Blood group" value={opened.bloodGroup ?? "—"} />
               <DrawerLine label="Address" value={opened.address ?? "—"} />
               <DrawerLine
                 label="Emergency"
@@ -473,6 +480,7 @@ function EditStaff({
     address: staff.address ?? "",
     emergencyName: staff.emergencyName ?? "",
     emergencyPhone: staff.emergencyPhone ?? "",
+    bloodGroup: staff.bloodGroup ?? "",
     employmentType: staff.employmentType,
     monthlySalary: staff.monthlySalary != null ? String(staff.monthlySalary) : "",
     notes: staff.notes ?? "",
@@ -541,6 +549,13 @@ function EditStaff({
         </Field>
         <Field label="Emergency phone">
           <input className={input} value={form.emergencyPhone} onChange={(e) => set("emergencyPhone", e.target.value)} />
+        </Field>
+        <Field label="Blood group">
+          <select className={input} value={form.bloodGroup} onChange={(e) => set("bloodGroup", e.target.value)}>
+            {["", "A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"].map((g) => (
+              <option key={g} value={g}>{g || "—"}</option>
+            ))}
+          </select>
         </Field>
         <div className="col-span-2">
           <Field label="Address"><input className={input} value={form.address} onChange={(e) => set("address", e.target.value)} /></Field>

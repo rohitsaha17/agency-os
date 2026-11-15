@@ -59,14 +59,18 @@ export async function PATCH(req: NextRequest) {
         throw new ApiError("staffProfile must be an object", 400);
       }
       const p = staffProfile as Record<string, unknown>;
+      // Deliberately NOT here: dateOfJoining, employmentType, monthlySalary and
+      // notes — those are the admin's record of the person, not the person's own
+      // details. Date of joining especially is an HR fact the employee must not
+      // be able to set or change (People ▸ Staff is where an admin enters it).
+      // Anything the client omits is left untouched; a key sent here is ignored.
       const profile = {
         ...(p.phone !== undefined && { phone: p.phone ? String(p.phone).trim() : null }),
         ...(p.address !== undefined && { address: p.address ? String(p.address).trim() : null }),
         ...(p.emergencyName !== undefined && { emergencyName: p.emergencyName ? String(p.emergencyName).trim() : null }),
         ...(p.emergencyPhone !== undefined && { emergencyPhone: p.emergencyPhone ? String(p.emergencyPhone).trim() : null }),
-        ...(p.notes !== undefined && { notes: p.notes ? String(p.notes).trim() : null }),
+        ...(p.bloodGroup !== undefined && { bloodGroup: p.bloodGroup ? String(p.bloodGroup).trim().slice(0, 8) : null }),
         ...(p.dateOfBirth !== undefined && { dateOfBirth: parseDate(p.dateOfBirth) }),
-        ...(p.dateOfJoining !== undefined && { dateOfJoining: parseDate(p.dateOfJoining) }),
       };
       await prisma.staffProfile.upsert({
         where: { userId: user.id },
@@ -86,7 +90,7 @@ export async function PATCH(req: NextRequest) {
         staffProfile: {
           select: {
             phone: true, address: true, dateOfBirth: true, dateOfJoining: true,
-            emergencyName: true, emergencyPhone: true, notes: true,
+            emergencyName: true, emergencyPhone: true, bloodGroup: true, notes: true,
           },
         },
       },

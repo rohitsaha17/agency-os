@@ -77,7 +77,10 @@ export function StaffTab({
   const [importing, setImporting] = useState(false);
   const [craft, setCraft] = useState("");
   const [type, setType] = useState("");
-  const [status, setStatus] = useState("");
+  // Active people vs those who have left (terminated / deactivated). Kept as two
+  // distinct views rather than one list with a status column, so a past employee
+  // never clutters the working roster — their record is retained, just elsewhere.
+  const [view, setView] = useState<"active" | "past">("active");
 
   const load = useCallback(async () => {
     setError(null);
@@ -113,11 +116,10 @@ export function StaffTab({
     if (!matchesQuery(s, query)) return false;
     if (craft && s.craft !== craft) return false;
     if (type && s.employmentType !== type) return false;
-    if (status === "inactive" ? s.isActive : status === "active" ? !s.isActive : false) return false;
-    // Default view is the people who actually work here.
-    if (!status && !s.isActive) return false;
+    // The Active view shows who works here; Past employees shows who has left.
+    if (view === "past" ? s.isActive : !s.isActive) return false;
     return true;
-  }), [staff, query, craft, type, status]);
+  }), [staff, query, craft, type, view]);
 
   /**
    * Reset somebody's password.
@@ -146,13 +148,37 @@ export function StaffTab({
     }
   }
 
-  const filtersOn = !!(craft || type || status);
+  const filtersOn = !!(craft || type);
   const opened = (staff ?? []).find((s) => s.id === open) ?? null;
   const active = (staff ?? []).filter((s) => s.isActive);
+  const past = (staff ?? []).filter((s) => !s.isActive);
 
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
+        {/* Active people vs those who have left — the primary split, so a
+            terminated employee's record is kept but never clutters the roster. */}
+        <div className="flex items-center rounded-lg border border-gray-200 dark:border-white/[0.1] overflow-hidden bg-white dark:bg-slate-900">
+          {([
+            { id: "active", label: "Active", count: active.length },
+            { id: "past", label: "Past employees", count: past.length },
+          ] as const).map((v) => (
+            <button
+              key={v.id}
+              type="button"
+              onClick={() => setView(v.id)}
+              aria-pressed={view === v.id}
+              className={`px-3 py-1.5 text-[12px] font-medium transition-colors ${
+                view === v.id
+                  ? "bg-indigo-600 text-white"
+                  : "text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-white/[0.06]"
+              }`}
+            >
+              {v.label}
+              <span className={`ml-1.5 ${view === v.id ? "text-white/80" : "text-gray-400"}`}>{v.count}</span>
+            </button>
+          ))}
+        </div>
         <Select
           value={craft} onChange={setCraft} allowEmpty placeholder="All roles" size="sm"
           options={crafts.map((c) => ({ value: c, label: c }))} className="min-w-[8.5rem]"
@@ -162,12 +188,7 @@ export function StaffTab({
           options={EMPLOYMENT.map((t) => ({ value: t, label: EMPLOYMENT_LABEL[t] }))}
           className="min-w-[10rem]"
         />
-        <Select
-          value={status} onChange={setStatus} allowEmpty placeholder="Active only" size="sm"
-          options={[{ value: "active", label: "Active only" }, { value: "inactive", label: "Inactive only" }]}
-          className="min-w-[8.5rem]"
-        />
-        {filtersOn && <ClearFilters onClear={() => { setCraft(""); setType(""); setStatus(""); }} />}
+        {filtersOn && <ClearFilters onClear={() => { setCraft(""); setType(""); }} />}
         {canInvite && (
           <div className="ml-auto flex items-center gap-2">
             <Button size="sm" variant="secondary" icon={<Upload className="w-3.5 h-3.5" />} onClick={() => setImporting(true)}>
@@ -194,6 +215,7 @@ export function StaffTab({
         <div className="space-y-3"><CardsSkeleton count={3} /><TableSkeleton rows={6} /></div>
       ) : (
         <>
+          {view === "active" && (
           <SummaryStrip>
             <SummaryCard label="On the team" value={active.length} />
             <SummaryCard
@@ -217,16 +239,23 @@ export function StaffTab({
               />
             )}
           </SummaryStrip>
+          )}
 
           {rows.length === 0 ? (
             <EmptyState
-              title={query || filtersOn ? "Nobody matches that" : "Nobody on the team yet"}
+              title={
+                query || filtersOn ? "Nobody matches that"
+                  : view === "past" ? "No past employees"
+                  : "Nobody on the team yet"
+              }
               hint={
                 query || filtersOn
                   ? "Clear the search or the filters to see everyone."
+                  : view === "past"
+                  ? "When someone is terminated or deactivated, their record moves here — kept, but out of the active roster."
                   : "Add the people who work here and their records appear across the module."
               }
-              action={canInvite && !query && !filtersOn ? (
+              action={canInvite && !query && !filtersOn && view === "active" ? (
                 <Button size="sm" icon={<UserPlus className="w-3.5 h-3.5" />} onClick={() => setAdding(true)}>
                   Add person
                 </Button>
@@ -235,13 +264,14 @@ export function StaffTab({
           ) : (
             <>
               <div className="hidden sm:block">
-                <Table minWidth={seesPay ? 980 : 820}>
+                <Table minWidth={seesPay ? 1100 : 940}>
                   <thead>
                     <tr>
                       <Th>Employee</Th>
                       <Th>Role</Th>
                       <Th>Employment</Th>
                       <Th>Phone</Th>
+                      <Th>Date of birth</Th>
                       <Th>Joined</Th>
                       {seesPay && <Th align="right">Salary</Th>}
                       {seesPay && <Th align="right">Owes</Th>}
@@ -263,6 +293,7 @@ export function StaffTab({
                           {EMPLOYMENT_LABEL[s.employmentType] ?? "—"}
                         </Td>
                         <Td className="text-gray-600 dark:text-slate-300">{s.phone ?? "—"}</Td>
+                        <Td nowrap className="text-gray-600 dark:text-slate-300">{longDate(s.dateOfBirth)}</Td>
                         <Td nowrap className="text-gray-600 dark:text-slate-300">{longDate(s.dateOfJoining)}</Td>
                         {seesPay && (
                           <Td align="right" className="text-gray-900 dark:text-slate-100">
@@ -326,6 +357,9 @@ export function StaffTab({
                         <p className="text-[11px] text-gray-500 dark:text-slate-400 truncate">
                           {s.craft ?? humanise(s.role)} · {EMPLOYMENT_LABEL[s.employmentType] ?? "—"}
                         </p>
+                        {s.dateOfBirth && (
+                          <p className="text-[11px] text-gray-400 truncate">DOB {longDate(s.dateOfBirth)}</p>
+                        )}
                       </div>
                       <StatusBadge tone={s.isActive ? "green" : "grey"}>
                         {s.isActive ? "Active" : "Inactive"}
